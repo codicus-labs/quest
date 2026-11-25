@@ -81,6 +81,14 @@ def main():
         sys.exit(0 if any(title in (e.get("text") or "") for e in tree["elements"]) else 1)
     if question == "key":
         sys.exit(0 if any(e.get("key") == title for e in tree["elements"]) else 1)
+    if question == "focused":
+        sys.exit(0 if any(e.get("key") == title and e.get("focused") and not e.get("exiting") for e in tree["elements"]) else 1)
+    if question == "text-of":
+        for element in tree["elements"]:
+            if element.get("key") == title and not element.get("exiting"):
+                print(element.get("text", ""))
+                return
+        sys.exit(1)
     if question == "no-live-key":
         sys.exit(1 if any(e.get("key") == title and not e.get("exiting") for e in tree["elements"]) else 0)
     if question == "below":

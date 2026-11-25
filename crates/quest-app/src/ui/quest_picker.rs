@@ -7,7 +7,64 @@ use rune::{Color, Cursor, Cx, El, Key, KeyEvent, Tx, col, el, icon, row, text, t
 use rune_kit::{Placement, popover};
 
 use crate::icons;
-use crate::state::quest_picker::{Pick, PickFor, PickRow};
+use crate::state::quest_picker::{Pick, PickFor, PickRow, QuestPicker};
+
+pub trait QuestHost: Sized + 'static {
+    fn picker(&self) -> Option<&QuestPicker>;
+    fn picker_mut(&mut self) -> &mut Option<QuestPicker>;
+    fn picker_search(&mut self) -> &mut rune::TextEdit;
+    fn picker_hosted(&self, target: &PickFor) -> bool;
+    fn toggle_picker(&mut self, target: PickFor);
+    fn picker_rows(&self) -> Vec<PickRow>;
+    fn picked(&self, target: &PickFor) -> Option<Pick>;
+    fn choose_quest(&mut self, pick: Pick);
+
+    fn picker_active(&self, rows: &[PickRow]) -> Option<usize> {
+        if rows.is_empty() {
+            return None;
+        }
+        let highlight = self.picker().and_then(|picker| picker.highlight.as_ref());
+        Some(highlight.and_then(|pick| rows.iter().position(|row| &row.pick == pick)).unwrap_or(0))
+    }
+
+    fn move_highlight(&mut self, step: isize) -> Option<String> {
+        let rows = self.picker_rows();
+        let active = self.picker_active(&rows)?;
+        let next = (active as isize + step).rem_euclid(rows.len() as isize) as usize;
+        let pick = rows[next].pick.clone();
+        let key = pick.key();
+        self.picker_mut().as_mut()?.highlight = Some(pick);
+        Some(key)
+    }
+}
+
+impl QuestHost for State {
+    fn picker(&self) -> Option<&QuestPicker> {
+        self.quest_picker.as_ref()
+    }
+    fn picker_mut(&mut self) -> &mut Option<QuestPicker> {
+        &mut self.quest_picker
+    }
+    fn picker_search(&mut self) -> &mut rune::TextEdit {
+        self.quest_picker_search()
+    }
+    fn picker_hosted(&self, target: &PickFor) -> bool {
+        hosted(self, target)
+    }
+    fn toggle_picker(&mut self, target: PickFor) {
+        self.toggle_quest_picker(target);
+    }
+    fn picker_rows(&self) -> Vec<PickRow> {
+        self.quest_picker_rows()
+    }
+    fn picked(&self, target: &PickFor) -> Option<Pick> {
+        self.current_pick(target)
+    }
+    fn choose_quest(&mut self, pick: Pick) {
+        State::choose_quest(self, pick);
+    }
+}
+
 use crate::state::{CaptureStep, Overlay, State, View};
 use crate::theme::{Pal, quest_color, ty};
 use crate::ui::parts;
@@ -60,8 +117,8 @@ pub(super) fn fit(chip: [f32; 4], bounds: [f32; 4]) -> Fit {
 }
 
 /// Makes `chip` the picker's trigger for `target`: a button named `label` that opens and closes it.
-pub fn trigger(chip: El, target: PickFor, label: impl Into<String>, s: &State, p: &Pal) -> El {
-    let open = s.quest_picker.as_ref().is_some_and(|picker| picker.target == target);
+pub fn trigger<S: QuestHost>(chip: El, target: PickFor, label: impl Into<String>, s: &S, p: &Pal) -> El {
+    let open = s.picker().is_some_and(|picker| picker.target == target);
     chip.key(target.trigger_key())
         .role("combobox")
         .label(label)
@@ -69,9 +126,9 @@ pub fn trigger(chip: El, target: PickFor, label: impl Into<String>, s: &State, p
         .focusable(true)
         .cursor(Cursor::Pointer)
         .hover(p.hover)
-        .on_press_tx(move |s: &mut State, tx: &mut Tx| {
-            s.toggle_quest_picker(target.clone());
-            if s.quest_picker.is_some() {
+        .on_press_tx(move |s: &mut S, tx: &mut Tx| {
+            s.toggle_picker(target.clone());
+            if s.picker().is_some() {
                 tx.focus_when_shown("quest-picker-search", false);
             }
         })
@@ -79,9 +136,9 @@ pub fn trigger(chip: El, target: PickFor, label: impl Into<String>, s: &State, p
 
 /// The open picker, if its chip shows, kept inside the dialog it opens in (where both were laid
 /// out the frame before).
-pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
-    let Some(picker) = &s.quest_picker else { return };
-    if !hosted(s, &picker.target) {
+pub fn layer<S: QuestHost>(s: &S, p: &Pal, cx: &Cx<S>, layer: &mut Vec<El>) {
+    let Some(picker) = s.picker() else { return };
+    if !s.picker_hosted(&picker.target) {
         return;
     }
     let anchor = picker.target.trigger_key();
@@ -89,9 +146,9 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
         (Some(chip), Some(bounds)) => fit(chip, bounds),
         _ => Fit::DEFAULT,
     };
-    let rows = s.quest_picker_rows();
-    let active = s.quest_picker_active(&rows);
-    let current = s.current_pick(&picker.target);
+    let rows = s.picker_rows();
+    let active = s.picker_active(&rows);
+    let current = s.picked(&picker.target);
     let search = text_input(&picker.search, ty::BODY)
         .key("quest-picker-search")
         .label("Search quests")
@@ -100,10 +157,14 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
         .min_w(0.0)
         .color(p.text)
         .placeholder("Search quests…", p.faint)
-        .on_edit(|s: &mut State| s.quest_picker_search())
-        .on_input_change(|s: &mut State, _: &mut Tx| s.quest_search_changed())
-        .on_input_key(keys)
-        .on_submit(|s: &mut State, tx: &mut Tx| choose(s, None, tx));
+        .on_edit(|s: &mut S| s.picker_search())
+        .on_input_change(|s: &mut S, _: &mut Tx| {
+            if let Some(picker) = s.picker_mut() {
+                picker.highlight = None;
+            }
+        })
+        .on_input_key(keys::<S>)
+        .on_submit(|s: &mut S, tx: &mut Tx| choose(s, None, tx));
     let header = row()
         .w_full()
         .h(40.0)
@@ -121,7 +182,7 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
     } else {
         let mut list = col().key("quest-picker-list").role("listbox").label("Quests").w_full().padding(4.0).gap(1.0);
         for (i, row) in rows.iter().enumerate() {
-            list = list.child(option(row, Some(i) == active, current.as_ref() == Some(&row.pick), p));
+            list = list.child(option::<S>(row, Some(i) == active, current.as_ref() == Some(&row.pick), p));
         }
         popover::fit_scroll(list).max_h(fit.list_max_h)
     };
@@ -136,12 +197,14 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
         .child(el().w_full().h(1.0).fill(p.border).a11y_hidden())
         .child(list)
         .focus_return(return_key(&picker.target))
-        .modal(true, |s: &mut State| s.quest_picker = None);
+        .modal(true, |s: &mut S| {
+            s.picker_mut().take();
+        });
     let surface = popover::raised(&p.kit, surface, 10.0).clip_rounded(10.0);
     layer.push(popover::anchored(&p.kit, surface, &anchor, fit.placement, GAP));
 }
 
-fn option(row_data: &PickRow, active: bool, current: bool, p: &Pal) -> El {
+fn option<S: QuestHost>(row_data: &PickRow, active: bool, current: bool, p: &Pal) -> El {
     let pick = row_data.pick.clone();
     let dot = row_data.color.map_or(p.faint, quest_color);
     let mut line = row()
@@ -164,16 +227,16 @@ fn option(row_data: &PickRow, active: bool, current: bool, p: &Pal) -> El {
     if current {
         line = line.child(icon(&icons::CHECK, 14.0).color(p.muted));
     }
-    line.on_press_tx(move |s: &mut State, tx: &mut Tx| choose(s, Some(pick.clone()), tx))
+    line.on_press_tx(move |s: &mut S, tx: &mut Tx| choose(s, Some(pick.clone()), tx))
 }
 
 /// ↑/↓ move the highlight, Escape closes without a change.
-fn keys(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+fn keys<S: QuestHost>(s: &mut S, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let step = match ev.key {
         Key::Down => 1,
         Key::Up => -1,
         Key::Escape => {
-            let anchor = s.quest_picker.take().map(|picker| return_key(&picker.target));
+            let anchor = s.picker_mut().take().map(|picker| return_key(&picker.target));
             if let Some(anchor) = anchor {
                 tx.focus(anchor, true);
             }
@@ -181,18 +244,25 @@ fn keys(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         _ => return false,
     };
-    if let Some(key) = s.move_quest_highlight(step) {
+    if let Some(key) = s.move_highlight(step) {
         tx.scroll_into_view(key);
     }
     true
 }
 
 /// Takes `pick` (the highlighted row without one), closes and focuses the chip again.
-fn choose(s: &mut State, pick: Option<Pick>, tx: &mut Tx) {
-    let Some(anchor) = s.quest_picker.as_ref().map(|picker| return_key(&picker.target)) else { return };
+fn choose<S: QuestHost>(s: &mut S, pick: Option<Pick>, tx: &mut Tx) {
+    let Some(anchor) = s.picker().map(|picker| return_key(&picker.target)) else { return };
     match pick {
         Some(pick) => s.choose_quest(pick),
-        None => s.choose_highlighted_quest(),
+        None => {
+            let rows = s.picker_rows();
+            if let Some(index) = s.picker_active(&rows) {
+                s.choose_quest(rows[index].pick.clone());
+            } else {
+                s.picker_mut().take();
+            }
+        }
     }
     tx.focus(anchor, tx.focus_visible());
 }

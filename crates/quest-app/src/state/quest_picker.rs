@@ -106,41 +106,10 @@ impl State {
         self.pick_rows(&picker.target).into_iter().filter(|row| quest_picker::matches(&row.title, query)).collect()
     }
 
-    /// Where the highlight is among `rows`: the chosen row, else the first.
-    pub fn quest_picker_active(&self, rows: &[PickRow]) -> Option<usize> {
-        if rows.is_empty() {
-            return None;
-        }
-        let highlight = self.quest_picker.as_ref().and_then(|picker| picker.highlight.as_ref());
-        Some(highlight.and_then(|pick| rows.iter().position(|row| &row.pick == pick)).unwrap_or(0))
-    }
-
     /// The search changed: the first row the search keeps is highlighted.
     pub fn quest_search_changed(&mut self) {
         if let Some(picker) = &mut self.quest_picker {
             picker.highlight = None;
-        }
-    }
-
-    /// Moves the highlight `step` rows on, round the ends; returns the row's key.
-    pub fn move_quest_highlight(&mut self, step: isize) -> Option<String> {
-        let rows = self.quest_picker_rows();
-        let active = self.quest_picker_active(&rows)?;
-        let next = (active as isize + step).rem_euclid(rows.len() as isize) as usize;
-        let pick = rows[next].pick.clone();
-        let key = pick.key();
-        if let Some(picker) = &mut self.quest_picker {
-            picker.highlight = Some(pick);
-        }
-        Some(key)
-    }
-
-    /// Takes the highlighted row; with no row it only closes.
-    pub fn choose_highlighted_quest(&mut self) {
-        let rows = self.quest_picker_rows();
-        match self.quest_picker_active(&rows) {
-            Some(i) => self.choose_quest(rows[i].pick.clone()),
-            None => self.quest_picker = None,
         }
     }
 
@@ -203,14 +172,7 @@ impl State {
     /// Every row for `target`: the active quests, most recently used first; then a capture's
     /// proposed quests; then "No quest" where a choice may have none.
     fn pick_rows(&self, target: &PickFor) -> Vec<PickRow> {
-        let quest_row = |q: &quest_domain::Quest| PickRow {
-            pick: Pick::Quest(q.id),
-            title: q.title.clone(),
-            label: q.title.clone(),
-            color: Some(q.color),
-        };
-        let mut rows: Vec<PickRow> =
-            quest_picker::recent_quests(&self.snap, self.now).into_iter().map(quest_row).collect();
+        let mut rows: Vec<_> = existing_rows(&self.snap, self.now).collect();
         if let (PickFor::CaptureTask(_), CaptureStep::Review(review)) = (target, &self.capture.step) {
             let colors = review.draft.new_quest_colors(&self.snap);
             for quest in review.draft.proposal.quests.iter().filter(|q| review.draft.is_selected(&q.key)) {
@@ -223,7 +185,23 @@ impl State {
                 });
             }
         }
-        rows.push(PickRow { pick: Pick::NoQuest, title: "No quest".into(), label: "No quest".into(), color: None });
+        rows.push(no_quest_row());
         rows
     }
+}
+
+pub fn existing_rows(
+    snapshot: &quest_domain::Snapshot,
+    now: chrono::DateTime<chrono::Utc>,
+) -> impl Iterator<Item = PickRow> {
+    quest_picker::recent_quests(snapshot, now).into_iter().map(|q| PickRow {
+        pick: Pick::Quest(q.id),
+        title: q.title.clone(),
+        label: q.title.clone(),
+        color: Some(q.color),
+    })
+}
+
+pub fn no_quest_row() -> PickRow {
+    PickRow { pick: Pick::NoQuest, title: "No quest".into(), label: "No quest".into(), color: None }
 }

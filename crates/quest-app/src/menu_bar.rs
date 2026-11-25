@@ -24,6 +24,8 @@ pub fn install(app: App<State>) -> App<State> {
         .menu_item(item("Previous Review Week", |s, tx| crate::ui::review::browse(s, -1, tx), Some("[")))
         .menu_item(item("Next Review Week", |s, tx| crate::ui::review::browse(s, 1, tx), Some("]")))
         .menu_item(MenuItem::separator().menu("View"))
+        .menu_item(item("Global Quick Add…", crate::desktop::quick_add, Some(crate::desktop::SHORTCUT)))
+        .menu_item(item("Show Timer Widget", crate::desktop::show_widget, None))
         .menu_item(item("Recurring Tasks…", crate::ui::recurrence::open_overview, None))
         .menu_item(item("Tracked Time", |s, _| keys::toggle_tracked(s), Some("alt+cmd+i")))
         .menu_item(item("Command Bar", open_palette, Some("cmd+k")))

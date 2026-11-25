@@ -283,6 +283,9 @@ impl State {
         self.go(View::Home);
         self.overlay = overlay;
         let old = std::mem::replace(&mut self.store, Arc::new(store));
+        if let Some(windows) = &self.desktop {
+            windows.publish(&self.store, self.dark, self.auth.locks_edits());
+        }
         std::thread::spawn(move || drop(old));
         self.undo = crate::undo::UndoState::default();
         self.capture_undo = None;

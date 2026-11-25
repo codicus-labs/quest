@@ -23,7 +23,7 @@ pub mod parts;
 pub(crate) mod plan;
 mod quest_detail;
 mod quest_editor;
-mod quest_picker;
+pub(crate) mod quest_picker;
 mod quests;
 pub(crate) mod recurrence;
 pub(crate) mod review;
@@ -142,6 +142,9 @@ fn shell(s: &State, p: &Pal, cx: &mut Cx<State>) -> El {
         .children((s.view != View::Review).then(|| right_column_toggle(s, p)));
     let mut main =
         col().key("main").grow(1.0).min_w(0.0).h_full().fill(p.bg).child(band).child(page.grow(1.0).min_h(0.0));
+    if let Some(notice) = &s.hotkey_notice {
+        main = main.child(notice_bar(notice, p).key("hotkey-notice"));
+    }
     if let Some(notice) = &s.notice {
         main = main.child(notice_bar(notice, p));
     }

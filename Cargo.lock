@@ -4223,6 +4223,7 @@ dependencies = [
  "chrono-tz",
  "pulldown-cmark",
  "quest-domain",
+ "serde",
  "uuid",
 ]
 

@@ -40,6 +40,10 @@ pub fn icon_button(
     p: &Pal,
     on_press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
+    icon_control(key, label, glyph, ink, p).on_press_tx(on_press)
+}
+
+pub fn icon_control(key: impl Into<String>, label: &str, glyph: &'static Icon, ink: Color, p: &Pal) -> El {
     el().key(key.into())
         .role("button")
         .label(label)
@@ -50,7 +54,6 @@ pub fn icon_button(
         .cursor(Cursor::Pointer)
         .hover(p.hover)
         .child(icon(glyph, 16.0).color(ink))
-        .on_press_tx(on_press)
 }
 
 /// A bordered button with an optional leading icon.
@@ -61,6 +64,10 @@ pub fn button(
     p: &Pal,
     on_press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
+    button_control(key, label, glyph, p).on_press_tx(on_press)
+}
+
+pub fn button_control(key: impl Into<String>, label: &str, glyph: Option<&'static Icon>, p: &Pal) -> El {
     let mut b = row()
         .key(key.into())
         .role("button")
@@ -78,7 +85,7 @@ pub fn button(
     if let Some(glyph) = glyph {
         b = b.child(icon(glyph, 15.0).color(p.text));
     }
-    b.child(text(label).font(ty::BODY_MEDIUM).color(p.text)).on_press_tx(on_press)
+    b.child(text(label).font(ty::BODY_MEDIUM).color(p.text))
 }
 
 /// A single-line field. `edit` picks the `TextEdit` it binds; `submit` runs on Return.

@@ -27,4 +27,5 @@ pub mod review;
 pub mod row_meta;
 pub mod tracked;
 pub mod undo;
+pub mod widget;
 pub mod workspaces;

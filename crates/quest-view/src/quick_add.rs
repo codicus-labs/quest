@@ -103,6 +103,37 @@ pub fn parse(input: &str, defaults: Fields, today: NaiveDate, quests: &[&Quest])
     Draft { title: title.join(" "), fields }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Landing<'a> {
+    Today,
+    Plan(NaiveDate),
+    Quest(&'a Quest),
+    Inbox,
+}
+
+pub fn landing<'a>(task: &quest_domain::Task, snapshot: &'a Snapshot, today: NaiveDate) -> Landing<'a> {
+    if quest_domain::is_today(task, today) {
+        Landing::Today
+    } else if let Some(day) = task.planned_on {
+        Landing::Plan(day)
+    } else if let Some(quest) = task.quest_id.and_then(|id| snapshot.quest(id)) {
+        Landing::Quest(quest)
+    } else {
+        Landing::Inbox
+    }
+}
+
+impl Landing<'_> {
+    pub fn label(&self) -> String {
+        match self {
+            Self::Today => "Today".into(),
+            Self::Plan(day) => format!("Plan · {}", day.format("%a %-d")),
+            Self::Quest(quest) => quest.title.clone(),
+            Self::Inbox => "Inbox".into(),
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "quick_add_tests.rs"]
 mod tests;

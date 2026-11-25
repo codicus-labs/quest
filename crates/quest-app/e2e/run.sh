@@ -311,6 +311,44 @@ else
   fail "r5b Organizing blocks before/running/after: $before/$running/$after"
 fi
 
+for stage in panel calendar picker-closed panel-closed hotkey-closed focus-closed saved; do
+  run anna "$root/r6-panel" r6-panel "r6-panel-$stage" --window quick-add --now "$r2c_time" --at "mark:$stage" \
+    || fail "r6 quick-add $stage script (see $out/r6-panel-$stage.log)"
+done
+check r6-panel-panel "r6 virtual global shortcut focuses Quick Add" focused quick-add
+check r6-panel-calendar "r6 Cmd+Shift+P opens the shared calendar" key task-calendar
+check r6-panel-picker-closed "r6 Escape closes only the picker" no-live-key task-calendar
+check r6-panel-picker-closed "r6 Escape restores text focus" focused quick-add
+for stage in panel-closed hotkey-closed focus-closed saved; do
+  check "r6-panel-$stage" "r6 panel closes: $stage" no-live-key quick-add
+done
+check r6-panel-saved "r6 feedback says Today" shows Today
+run anna "$root/r6-panel" r2c-inspect r6-today --now "$r2c_time" --scene today
+check r6-today "r6 panel task persisted to Today" has "Book dentist"
+
+for stage in running paused resumed stopped; do
+  run anna "$root/r6-widget-$stage" r6-widget "r6-widget-$stage" --window timer-widget --demo --now "$r2c_time" --at "mark:$stage" \
+    || fail "r6 widget $stage script (see $out/r6-widget-$stage.log)"
+done
+check r6-widget-running "r6 running task can pause" key widget-pause
+check r6-widget-paused "r6 pause keeps widget with Resume" key widget-resume
+elapsed=$(tree "$out/r6-widget-running.json" text-of widget-time)
+check r6-widget-paused "r6 paused time remains frozen" keytext widget-time "$elapsed"
+check r6-widget-resumed "r6 Resume starts a new entry" keytext widget-time "00:00"
+check r6-widget-resumed "r6 Resume starts the same task" shows "Design the next chapter"
+check r6-widget-stopped "r6 Stop clears widget" no-live-key timer-widget
+
+for stage in organizing back; do
+  dir="$root/r6-organizing-$stage"
+  run anna "$dir" r2c-inspect "r6-seed-$stage" --demo --now "$r2c_time" --scene organizing \
+    || fail "r6 Organizing seed (see $out/r6-seed-$stage.log)"
+  run anna "$dir" r6-widget-back "r6-$stage" --window timer-widget --now "$r2c_time" --at "mark:$stage" \
+    || fail "r6 organizing $stage script (see $out/r6-$stage.log)"
+done
+check r6-organizing "r6 Organizing offers Back to Task" key widget-back
+check r6-back "r6 Back to Task runs the original task" shows "Design the next chapter"
+check r6-back "r6 Back to Task removes the Back button" no-live-key widget-back
+
 echo "$summary"
 echo "PNGs: $out"
 if [ "$failures" -gt 0 ]; then

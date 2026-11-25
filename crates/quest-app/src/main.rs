@@ -7,6 +7,7 @@ mod browser;
 mod cli;
 mod clock;
 mod demo;
+mod desktop;
 mod dnd;
 mod icons;
 mod keys;
@@ -491,22 +492,31 @@ fn main() {
     let app = menu_bar::install(
         App::new(spec)
             .titlebar(Titlebar::new(ui::sidebar::TITLEBAR))
+            .keep_running()
             .on_focus(|s: &mut State, focused, tx| {
+                if let Some(windows) = &s.desktop {
+                    windows.set_main_focused(focused);
+                }
                 if !focused {
                     s.close_note(tx);
                 }
             })
-            .on_close(|s: &mut State, _: &mut rune::Tx| {
-                s.finish_note();
-                s.cancel_capture();
-            }),
+            .on_visibility(|s: &mut State, visible, _| {
+                if !visible && let Some(windows) = &s.desktop {
+                    windows.set_main_focused(false);
+                }
+            })
+            .on_close(finish_window)
+            .on_quit(finish_window),
     );
-    let handle = app.handle();
-    // Opening the database happens once at launch, before the event loop draws anything;
-    // afterwards all disk and network work is on the store's worker thread and the account
-    // flows' threads.
+    let waker = Arc::new(std::sync::OnceLock::<Box<dyn Fn() + Send + Sync>>::new());
+    let store_waker = Arc::downgrade(&waker);
     let config = ProfilesConfig { data_dir: options.data_dir.clone(), vault: token_vault(&options) };
-    let (profiles, store) = match Profiles::open(config, move || handle.wake()) {
+    let (profiles, store) = match Profiles::open(config, move || {
+        if let Some(wake) = store_waker.upgrade().as_deref().and_then(|slot| slot.get()) {
+            wake();
+        }
+    }) {
         Ok((profiles, store)) => (profiles, Arc::new(store)),
         Err(error) => {
             eprintln!("quest: {error}");
@@ -525,26 +535,40 @@ fn main() {
             }
         },
     };
-    let wake = app.handle();
     if options.demo
         && let Err(error) = seed_demo(&store, clock)
     {
         eprintln!("quest: seeding the demo failed: {error}");
     }
-    app.init(move || {
-        let mut state = State::new(store, profiles, clock);
-        state.repeat_zone = repeat_zone;
-        state.language = language;
-        state.capture.source = capture_source;
-        state.auth.browser = browser;
-        let auth_wake = wake.clone();
-        state.auth.set_waker(Arc::new(move || auth_wake.wake()));
-        let connections_wake = wake.clone();
-        state.capture.set_waker(std::sync::Arc::new(move || wake.wake()));
-        state.ai_connections.set_waker(std::sync::Arc::new(move || connections_wake.wake()));
-        state
-    })
-    .run();
+    let (preferences, preference_worker) = desktop::PreferenceWriter::open(&options.data_dir);
+    let register_waker = waker.clone();
+    rune::run_windows(move |displays| {
+        let wake = app.handle();
+        let (app, windows, wake_all) = desktop::MainWindows::install(app, store.clone(), clock, displays, preferences);
+        let _ = register_waker.set(Box::new(wake_all));
+        let app = app.init(move || {
+            let mut state = State::new(store, profiles, clock);
+            state.desktop = Some(windows);
+            state.repeat_zone = repeat_zone;
+            state.language = language;
+            state.capture.source = capture_source;
+            state.auth.browser = browser;
+            let auth_wake = wake.clone();
+            state.auth.set_waker(Arc::new(move || auth_wake.wake()));
+            let connections_wake = wake.clone();
+            state.capture.set_waker(Arc::new(move || wake.wake()));
+            state.ai_connections.set_waker(Arc::new(move || connections_wake.wake()));
+            state
+        });
+        [rune::WindowSpec::from_app("main", app)]
+    });
+    drop(waker);
+    let _ = preference_worker.join();
+}
+
+fn finish_window(s: &mut State, _: &mut rune::Tx) {
+    s.finish_note();
+    s.cancel_capture();
 }
 
 /// Where sign-in tokens are kept: the macOS keychain, or for development and E2E runs the file

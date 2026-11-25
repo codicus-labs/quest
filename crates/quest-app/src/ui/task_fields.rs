@@ -15,6 +15,111 @@ use crate::state::task_edits::field_key;
 use crate::state::{Overlay, State};
 use crate::theme::{Pal, quest_color, ty};
 
+pub trait CalendarHost: 'static {
+    fn today(&self) -> chrono::NaiveDate;
+    fn calendar(&self) -> Option<crate::state::task_edits::Calendar>;
+    fn calendar_mut(&mut self) -> &mut Option<crate::state::task_edits::Calendar>;
+    fn field_dates(&self, task: Option<EntityId>) -> Option<quest_domain::TaskDates>;
+    fn close_calendar(&mut self, tx: &mut Tx);
+    fn choose_calendar(&mut self, day: Option<chrono::NaiveDate>, tx: &mut Tx);
+}
+
+pub trait QuickHost: CalendarHost + quest_picker::QuestHost {
+    fn snapshot(&self) -> &quest_domain::Snapshot;
+    fn now(&self) -> chrono::DateTime<chrono::Utc>;
+    fn input(&self) -> &rune::TextEdit;
+    fn input_mut(&mut self) -> &mut rune::TextEdit;
+    fn has_fields(&self) -> bool;
+    fn quick_base(&self) -> quick_add::Fields;
+    fn set_fields(&mut self, fields: quick_add::Fields);
+    fn choice(&self) -> usize;
+    fn set_choice(&mut self, choice: usize);
+    fn open_field(&mut self, task: Option<EntityId>, picker: Picker, tx: &mut Tx);
+    fn escape_quick(&mut self, tx: &mut Tx);
+    fn submit(&mut self, tx: &mut Tx);
+
+    fn draft(&self) -> quick_add::Draft {
+        quick_add::parse(
+            &self.input().text,
+            self.quick_base(),
+            self.today(),
+            &quest_view::quest_picker::recent_quests(self.snapshot(), self.now()),
+        )
+    }
+
+    fn commit_quick_tokens(&mut self) -> quick_add::Fields {
+        let draft = self.draft();
+        if draft.title != self.input().text.trim() {
+            *self.input_mut() = rune::TextEdit::new(draft.title);
+        }
+        draft.fields
+    }
+}
+
+impl CalendarHost for State {
+    fn today(&self) -> chrono::NaiveDate {
+        State::today(self)
+    }
+    fn calendar(&self) -> Option<crate::state::task_edits::Calendar> {
+        self.task_calendar.filter(|_| self.overlay == Overlay::None)
+    }
+    fn calendar_mut(&mut self) -> &mut Option<crate::state::task_edits::Calendar> {
+        &mut self.task_calendar
+    }
+    fn field_dates(&self, task: Option<EntityId>) -> Option<quest_domain::TaskDates> {
+        State::field_dates(self, task)
+    }
+    fn close_calendar(&mut self, tx: &mut Tx) {
+        State::close_calendar(self, tx);
+    }
+    fn choose_calendar(&mut self, day: Option<chrono::NaiveDate>, tx: &mut Tx) {
+        State::choose_calendar(self, day, tx);
+    }
+}
+
+impl QuickHost for State {
+    fn snapshot(&self) -> &quest_domain::Snapshot {
+        &self.snap
+    }
+    fn now(&self) -> chrono::DateTime<chrono::Utc> {
+        self.now
+    }
+    fn input(&self) -> &rune::TextEdit {
+        &self.quick_add
+    }
+    fn input_mut(&mut self) -> &mut rune::TextEdit {
+        &mut self.quick_add
+    }
+    fn has_fields(&self) -> bool {
+        self.quick_fields.is_some()
+    }
+    fn quick_base(&self) -> quick_add::Fields {
+        State::quick_base(self)
+    }
+    fn set_fields(&mut self, fields: quick_add::Fields) {
+        self.quick_fields = Some(fields);
+    }
+    fn choice(&self) -> usize {
+        self.quick_choice
+    }
+    fn set_choice(&mut self, choice: usize) {
+        self.quick_choice = choice;
+    }
+    fn open_field(&mut self, task: Option<EntityId>, picker: Picker, tx: &mut Tx) {
+        open(self, task, picker, tx);
+    }
+    fn escape_quick(&mut self, tx: &mut Tx) {
+        if self.quick_add.text.trim().is_empty() {
+            self.reset_quick_add();
+        }
+        tx.blur();
+    }
+    fn submit(&mut self, tx: &mut Tx) {
+        self.save_quick_add();
+        tx.focus_when_shown("quick-add", true);
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Picker {
     Quest,
@@ -62,8 +167,21 @@ pub fn fields(s: &State, task: Option<&Task>, p: &Pal, compact: bool) -> El {
             (fields.quest, fields.dates)
         }
     };
-    let quest = quest.and_then(|id| s.snap.quest(id));
-    let target = if task.is_some() { PickFor::TaskModal } else { PickFor::QuickAdd };
+    let postponed = id.map_or_else(lists::Postponed::default, |id| lists::postponed(&s.snap, id));
+    field_line(s, id, quest, dates, postponed, p, compact)
+}
+
+fn field_line<S: QuickHost>(
+    s: &S,
+    id: Option<EntityId>,
+    quest: Option<EntityId>,
+    dates: quest_domain::TaskDates,
+    postponed: lists::Postponed,
+    p: &Pal,
+    compact: bool,
+) -> El {
+    let quest = quest.and_then(|id| s.snapshot().quest(id));
+    let target = if id.is_some() { PickFor::TaskModal } else { PickFor::QuickAdd };
     let button = field_chip(p)
         .max_w(if compact { 140.0 } else { 220.0 })
         .child(parts::dot(quest.map_or(p.border_strong, |q| quest_color(q.color)), 7.0))
@@ -76,18 +194,17 @@ pub fn fields(s: &State, task: Option<&Task>, p: &Pal, compact: bool) -> El {
         )
         .child(icon(&icons::CHEVRON_DOWN, 12.0).color(p.faint));
     let quest = quest_picker::trigger(button, target, quest.map_or("Quest", |q| &q.title), s, p);
-    let postponed = id.map_or_else(lists::Postponed::default, |id| lists::postponed(&s.snap, id));
     let mut line = if compact { col().items_start() } else { row().center_y() };
     line = line
         .key(if id.is_none() { "quick-add-fields" } else { "task-fields" })
         .gap(7.0)
-        .on_key(move |s: &mut State, ev, tx| {
+        .on_key(move |s: &mut S, ev, tx| {
             let Key::Text(letter) = &ev.key else { return false };
             if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
                 return false;
             }
             let Some(picker) = letter.chars().next().and_then(Picker::from_letter) else { return false };
-            open(s, id, picker, tx);
+            s.open_field(id, picker, tx);
             true
         })
         .child(quest);
@@ -113,7 +230,7 @@ pub fn fields(s: &State, task: Option<&Task>, p: &Pal, compact: bool) -> El {
             .cursor(Cursor::Pointer)
             .child(text(glyph).font(ty::SMALL).color(glyph_ink))
             .child(text(value).font(ty::SMALL).color(ink).single_line())
-            .on_press_tx(move |s: &mut State, tx: &mut Tx| open(s, id, Picker::Date(field), tx));
+            .on_press_tx(move |s: &mut S, tx: &mut Tx| s.open_field(id, Picker::Date(field), tx));
         line = line.child(
             row()
                 .gap(4.0)
@@ -130,9 +247,13 @@ fn field_chip(p: &Pal) -> El {
 }
 
 pub fn quick_add(s: &State, p: &Pal, placeholder: &str) -> El {
-    let active = s.quick_add.focused;
-    let shown = active || !s.quick_add.text.is_empty() || s.quick_fields.is_some();
-    let input = text_input(&s.quick_add, ty::BODY)
+    quick_add_form(s, p, placeholder, false)
+}
+
+pub fn quick_add_form<S: QuickHost>(s: &S, p: &Pal, placeholder: &str, global: bool) -> El {
+    let active = s.input().focused;
+    let shown = active || !s.input().text.is_empty() || s.has_fields();
+    let input = text_input(s.input(), ty::BODY)
         .key("quick-add")
         .label(placeholder)
         .single_line()
@@ -140,28 +261,43 @@ pub fn quick_add(s: &State, p: &Pal, placeholder: &str) -> El {
         .min_w(0.0)
         .color(p.text)
         .placeholder(placeholder, p.muted)
-        .on_edit(|s: &mut State| &mut s.quick_add)
-        .on_input_change(|s: &mut State, _: &mut Tx| {
-            s.quick_fields = Some(s.quick_base());
-            s.quick_choice = 0;
+        .on_edit(|s: &mut S| s.input_mut())
+        .on_input_change(|s: &mut S, _: &mut Tx| {
+            s.set_fields(s.quick_base());
+            s.set_choice(0);
         })
-        .on_input_key(quick_key)
-        .on_submit(|s: &mut State, tx: &mut Tx| {
-            s.save_quick_add();
-            tx.focus_when_shown("quick-add", true);
+        .on_input_key(quick_key::<S>)
+        .on_submit(|s: &mut S, tx: &mut Tx| {
+            s.submit(tx);
         });
     let mut box_ = col()
         .key("quick-add-box")
         .w_full()
-        .mt(18.0)
+        .mt(if global { 0.0 } else { 18.0 })
         .px(12.0)
         .radius(10.0)
         .border(1.0, p.border_strong)
-        .border_dash(4.0, 3.0)
-        .child(row().w_full().h(42.0).gap(10.0).center_y().child(icon(&icons::ADD, 18.0).color(p.accent)).child(input));
+        .child(
+            row()
+                .w_full()
+                .h(42.0)
+                .gap(10.0)
+                .center_y()
+                .child(if global {
+                    icon(&icons::QUEST_MARK, 22.0).color(p.accent)
+                } else {
+                    icon(&icons::ADD, 18.0).color(p.accent)
+                })
+                .child(input),
+        );
+    if global {
+        box_ = box_.fill(p.card);
+    } else {
+        box_ = box_.border_dash(4.0, 3.0);
+    }
     if active
-        && s.quest_picker.is_none()
-        && s.task_calendar.is_none()
+        && s.picker().is_none()
+        && s.calendar().is_none()
         && let Some((range, suggestions)) = suggestions(s)
     {
         for (i, q) in suggestions.into_iter().take(6).enumerate() {
@@ -174,36 +310,38 @@ pub fn quick_add(s: &State, p: &Pal, placeholder: &str) -> El {
                     .px(8.0)
                     .center_y()
                     .radius(6.0)
-                    .fill(if i == s.quick_choice { p.selected } else { rune::Color::TRANSPARENT })
+                    .fill(if i == s.choice() { p.selected } else { rune::Color::TRANSPARENT })
                     .hover(p.hover)
                     .cursor(Cursor::Pointer)
                     .child(text(q.title.clone()).font(ty::SMALL).color(p.text))
-                    .on_press_tx(move |s: &mut State, tx| accept_suggestion(s, range.clone(), id, tx)),
+                    .on_press_tx(move |s: &mut S, tx| accept_suggestion(s, range.clone(), id, tx)),
             );
         }
     }
-    if shown {
-        box_ = box_.child(fields(s, None, p, false)).pb(8.0);
+    if shown || global {
+        let fields = s.draft().fields;
+        box_ =
+            box_.child(field_line(s, None, fields.quest, fields.dates, lists::Postponed::default(), p, false)).pb(8.0);
     }
     box_
 }
 
-fn suggestions(s: &State) -> Option<(Range<usize>, Vec<&quest_domain::Quest>)> {
-    let (range, query) = quick_add::quest_token(&s.quick_add.text, s.quick_add.focus)?;
-    Some((range, quick_add::quest_suggestions(&s.snap, s.now, query)))
+pub(crate) fn suggestions<S: QuickHost>(s: &S) -> Option<(Range<usize>, Vec<&quest_domain::Quest>)> {
+    let (range, query) = quick_add::quest_token(&s.input().text, s.input().focus)?;
+    Some((range, quick_add::quest_suggestions(s.snapshot(), s.now(), query)))
 }
 
-fn accept_suggestion(s: &mut State, range: Range<usize>, id: EntityId, tx: &mut Tx) {
-    s.quick_add.set_selection(range.start, range.end);
-    s.quick_add.insert("");
-    s.quick_choice = 0;
+fn accept_suggestion<S: QuickHost>(s: &mut S, range: Range<usize>, id: EntityId, tx: &mut Tx) {
+    s.input_mut().set_selection(range.start, range.end);
+    s.input_mut().insert("");
+    s.set_choice(0);
     let mut fields = s.commit_quick_tokens();
     fields.quest = Some(id);
-    s.quick_fields = Some(fields);
+    s.set_fields(fields);
     tx.focus_when_shown("quick-add", true);
 }
 
-fn quick_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+fn quick_key<S: QuickHost>(s: &mut S, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.mods.cmd
         && ev.mods.shift
         && !ev.mods.alt
@@ -211,14 +349,11 @@ fn quick_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         && let Key::Command(key) = ev.key
         && let Some(picker) = Picker::from_letter(key)
     {
-        open(s, None, picker, tx);
+        s.open_field(None, picker, tx);
         return true;
     }
     if ev.key == Key::Escape {
-        if s.quick_add.text.trim().is_empty() {
-            s.reset_quick_add();
-        }
-        tx.blur();
+        s.escape_quick(tx);
         return true;
     }
     let Some((range, options)) = suggestions(s) else { return false };
@@ -227,10 +362,10 @@ fn quick_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return false;
     }
     match ev.key {
-        Key::Down => s.quick_choice = (s.quick_choice + 1) % count,
-        Key::Up => s.quick_choice = (s.quick_choice + count - 1) % count,
+        Key::Down => s.set_choice((s.choice() + 1) % count),
+        Key::Up => s.set_choice((s.choice() + count - 1) % count),
         Key::Tab | Key::Enter => {
-            let id = options[s.quick_choice.min(count - 1)].id;
+            let id = options[s.choice().min(count - 1)].id;
             accept_suggestion(s, range, id, tx);
         }
         _ => return false,
@@ -238,24 +373,25 @@ fn quick_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
-    let Some(open) = s.task_calendar.filter(|_| s.overlay == Overlay::None) else { return };
+pub fn layer<S: CalendarHost>(s: &S, p: &Pal, cx: &Cx<S>, layer: &mut Vec<El>) {
+    let Some(open) = s.calendar() else { return };
     let Some(dates) = s.field_dates(open.task) else { return };
     let today = s.today();
     let anchor = open.anchor();
     let button = |key: &str, label: &str, date| {
-        parts::button(key, label, None, p, move |s: &mut State, tx| s.choose_calendar(date, tx)).h(29.0)
+        parts::button_control(key, label, None, p).on_press_tx(move |s: &mut S, tx| s.choose_calendar(date, tx)).h(29.0)
     };
     let mut quick = row().w_full().gap(3.0);
     for choice in QuickDate::ALL {
         quick = quick.child(button(&format!("calendar-{choice:?}"), choice.label(), choice.date(today)));
     }
     let nav = |label, glyph, forward| {
-        parts::icon_button(label, label, glyph, p.muted, p, move |s: &mut State, tx| {
-            move_cursor(s, Step::Month, forward);
-            tx.focus("task-calendar", true);
-        })
-        .disabled(calendar::shift(open.cursor, Step::Month, forward, today).month() == open.cursor.month())
+        parts::icon_control(label, label, glyph, p.muted, p)
+            .on_press_tx(move |s: &mut S, tx| {
+                move_cursor(s, Step::Month, forward);
+                tx.focus("task-calendar", true);
+            })
+            .disabled(calendar::shift(open.cursor, Step::Month, forward, today).month() == open.cursor.month())
     };
     let mut panel = col()
         .key("task-calendar")
@@ -266,8 +402,8 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
         .padding(10.0)
         .gap(4.0)
         .focus_return(if open.task.is_none() { "quick-add".into() } else { anchor.clone() })
-        .modal_tx(true, |s: &mut State, tx| s.close_calendar(tx))
-        .on_key(calendar_keys)
+        .modal_tx(true, |s: &mut S, tx| s.close_calendar(tx))
+        .on_key(calendar_keys::<S>)
         .child(quick)
         .child(
             row()
@@ -320,7 +456,7 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
                     .focusable(true)
                     .hover(p.hover)
                     .cursor(Cursor::Pointer)
-                    .on_press_tx(move |s: &mut State, tx| s.choose_calendar(Some(date), tx));
+                    .on_press_tx(move |s: &mut S, tx| s.choose_calendar(Some(date), tx));
             }
             line = line.child(cell);
         }
@@ -342,18 +478,18 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
     layer.push(popover::anchored(&p.kit, popover::raised(&p.kit, panel, 10.0), &anchor, placement, 4.0));
 }
 
-fn move_cursor(s: &mut State, step: Step, forward: bool) {
+fn move_cursor<S: CalendarHost>(s: &mut S, step: Step, forward: bool) {
     let today = s.today();
-    if let Some(open) = &mut s.task_calendar {
+    if let Some(open) = s.calendar_mut().as_mut() {
         open.cursor = calendar::shift(open.cursor, step, forward, today);
     }
 }
 
-fn calendar_keys(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+fn calendar_keys<S: CalendarHost>(s: &mut S, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;
     }
-    let Some(open) = s.task_calendar else { return false };
+    let Some(open) = s.calendar() else { return false };
     let step = match &ev.key {
         Key::Left => (Step::Day, false),
         Key::Right => (Step::Day, true),

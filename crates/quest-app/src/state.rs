@@ -95,6 +95,8 @@ pub struct AccountForm {
 
 pub struct State {
     pub store: Arc<Store>,
+    pub desktop: Option<crate::desktop::MainWindows>,
+    pub hotkey_notice: Option<String>,
     pub snap: Arc<Snapshot>,
     pub sync: SyncStatus,
     /// The store's account; `None` for the guest.
@@ -183,6 +185,8 @@ impl State {
         let now = clock.now();
         let monday = week_start(clock::local_day(now));
         State {
+            desktop: None,
+            hotkey_notice: None,
             snap: store.snapshot(),
             sync: store.status(),
             account: store.account(),
@@ -460,6 +464,9 @@ impl State {
         changed |= self.refresh_task_fields(previous, tx);
         changed |= self.refresh_note(tx);
         changed |= self.take_auth_events();
+        if let Some(windows) = &self.desktop {
+            windows.publish(&self.store, self.dark, self.auth.locks_edits());
+        }
         changed |= self.take_capture_answer();
         changed |= self.refresh_ai_connections();
         if let Some(until) = self.capture_undo.as_ref().and_then(|u| u.until) {

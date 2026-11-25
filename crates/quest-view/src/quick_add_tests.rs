@@ -45,3 +45,34 @@ fn known_quest_tokens_strip_and_keep_recent_order_for_prefix_matches() {
     assert_eq!(result.fields.quest, Some(recent.id));
     assert_eq!(result.fields.dates.planned_on, today().succ_opt());
 }
+
+#[test]
+fn landing_uses_today_then_plan_then_quest_and_keeps_future_deadline_only_in_inbox() {
+    use quest_domain::{FieldStore, HlcClock, NodeId, QuestColor, plan};
+    let quest = EntityId::new();
+    let mut store = FieldStore::default();
+    let mut clock = HlcClock::new(NodeId(1));
+    let mut snap = Snapshot::default();
+    let mut apply = |command| {
+        for write in plan(&command, &snap).unwrap() {
+            store.apply(&write.stamp(clock.now(1)));
+        }
+        snap = Snapshot::from_store(&store, EntityId::DEFAULT_WORKSPACE);
+        snap.clone()
+    };
+    let quests = apply(Command::CreateQuest { id: quest, title: "Writing".into(), color: QuestColor::Blue });
+    let quests = quests.active_quests().collect::<Vec<_>>();
+    for (input, label) in [
+        ("Book dentist @tod", "Today"),
+        ("Draft #Writing @fri", "Plan · Fri 27"),
+        ("Draft #Writing !tod", "Today"),
+        ("Draft #Writing", "Writing"),
+        ("Book dentist !fri", "Inbox"),
+        ("Book dentist", "Inbox"),
+    ] {
+        let id = EntityId::new();
+        let draft = parse(input, Fields::default(), today(), &quests);
+        let snapshot = apply(draft.command(id, Position::Bottom).unwrap());
+        assert_eq!(landing(snapshot.task(id).unwrap(), &snapshot, today()).label(), label, "{input}");
+    }
+}

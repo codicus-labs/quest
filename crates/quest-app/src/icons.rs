@@ -12,6 +12,11 @@ icon!(
     SEARCH,
     r#"<circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M10.4 10.4L14 14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>"#
 );
+icon!(
+    QUEST_MARK,
+    r#"<path d="M12 8a4 4 0 1 1-1-2.6M6.3 8.6 8 10.3l5-5.1" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"/>"#
+);
+icon!(PAUSE, r#"<path d="M6 4v8m4-8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>"#);
 icon!(PLAY, r#"<path d="M5 3.2L12.5 8L5 12.8Z" fill="currentColor"/>"#);
 icon!(
     CHECK,
