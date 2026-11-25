@@ -50,6 +50,7 @@ fn quest_time_is_clipped_to_the_window_and_runs_until_now() {
         id: id(n),
         kind: EntryKind::Task,
         origin_task_id: None,
+        rebooked_from: None,
         task_id: None,
         quest_id: Some(id(1)),
         started_at: at(start),

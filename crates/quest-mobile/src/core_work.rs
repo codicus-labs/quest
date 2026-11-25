@@ -36,7 +36,7 @@ impl QuestCore {
             let since = chrono::DateTime::from_timestamp_millis(since_ms)
                 .ok_or(MobileError::InvalidMoment { epoch_ms: since_ms })?;
             let entry_id = EntityId::new();
-            self.dispatch(Command::RebookAsOrganizing { entry_id, since, now: now.at })?;
+            self.dispatch(Command::RebookAsOrganizing { expected_task_entry: None, entry_id, since, now: now.at })?;
             Ok(entry_id.to_string())
         })
     }

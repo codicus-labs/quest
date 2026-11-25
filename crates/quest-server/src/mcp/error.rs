@@ -95,6 +95,7 @@ impl From<CommandError> for ToolError {
             CommandError::NothingToRebook | CommandError::RebookOutsideEntry => {
                 ToolError::new(ToolCode::InvalidTimeRange, error.to_string())
             }
+            CommandError::RebookChanged => ToolError::new(ToolCode::InvalidInput, error.to_string()),
             CommandError::NotInTrash { kind, id } => ToolError::new(
                 ToolCode::NotInArchive,
                 format!("No archived {} with id {id}; search with include_archived to find it", kind_name(kind)),

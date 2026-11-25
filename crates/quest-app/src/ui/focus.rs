@@ -1,13 +1,11 @@
-//! Focus: one task (the running one, else the one started or picked last) with its quest chip,
-//! editable title, a big timer, RUNNING/PAUSED, Pause/Resume and Complete, and its editable
-//! description. With no such task, a list of today's to start one.
-
+use chrono::Local;
+use quest_view::tracked;
 use rune::{Align, Color, Cursor, El, Tx, col, el, icon, row, spacer, text, text_input};
 
 use crate::format;
 use crate::icons;
 use crate::state::quest_picker::PickFor;
-use crate::state::{FocusTarget, State, View};
+use crate::state::{FocusTarget, State};
 use crate::theme::{Pal, quest_color, ty};
 use crate::ui::chrome;
 use crate::ui::workspaces;
@@ -16,36 +14,31 @@ use crate::ui::{parts, quest_picker};
 /// `leading`: what the window's controls take at the left; the top row starts past them, like the
 /// top bar the other views have.
 pub fn view(s: &State, p: &Pal, leading: f32) -> El {
-    let Some(draft) = &s.focus_draft else { return pick(s, p, leading) };
-    let (task, running) = match s.focus_target() {
-        FocusTarget::Running { task, .. } => (task, true),
-        FocusTarget::Paused { task } => (task, false),
-        FocusTarget::Nothing => return pick(s, p, leading),
+    let (FocusTarget::Running { task }, Some(entry), Some(draft)) =
+        (s.focus_target(), s.snap.running_entry(), &s.focus_draft)
+    else {
+        return pick(s, p, leading);
     };
     let quest = parts::quest_of(s, task);
     let color = parts::accent_of(quest, p);
     let id = task.id;
-    let label = quest.map_or("Focus".to_owned(), |q| format!("Focus · {}", q.title));
     let top = row()
         .w_full()
-        .h(64.0)
+        .h(60.0)
         .pl(chrome::leading_pad(leading))
         .pr(26.0)
         .center_y()
         .gap(10.0)
-        .child(back_button(p))
-        .children(workspaces::timer_note(s, p))
+        .child(parts::caps("Focus", p).key("focus-heading"))
         .child(spacer())
-        .child(parts::dot(p.accent.alpha(if running { 1.0 } else { 0.35 }), 8.0))
-        .child(parts::caps(label, p));
+        .child(
+            parts::icon_button("focus-close", "Leave focus", &icons::CLOSE, p.muted, p, State::leave_focus)
+                .help("Back to lists  Esc"),
+        );
     let chip = row()
-        .h(30.0)
-        .px(14.0)
         .gap(8.0)
         .center_y()
-        .radius(15.0)
-        .border(1.0, color.alpha(0.5))
-        .child(parts::dot(color, 8.0))
+        .child(parts::dot(color, 7.0))
         .child(text(quest.map_or("No quest".to_owned(), |q| q.title.clone())).font(ty::BODY).color(p.muted));
     let chip = quest_picker::trigger(chip, PickFor::Focus(id), "Change quest", s, p);
     let title = text_input(&draft.title, ty::FOCUS_TITLE)
@@ -67,35 +60,44 @@ pub fn view(s: &State, p: &Pal, leading: f32) -> El {
         .border(1.0, p.border)
         .child(notes)
         .child(super::checklist::focus(s, task, p));
-    let tracked = s.snap.task_tracked_ms(id, s.now);
-    let toggle = if running {
-        parts::button("focus-toggle", "Pause", Some(&icons::PAUSE), p, |s: &mut State, _: &mut Tx| s.stop_focus())
-    } else {
-        parts::button("focus-toggle", "Resume", Some(&icons::PLAY), p, move |s: &mut State, _: &mut Tx| {
-            s.start_focus(id)
-        })
-    };
-    let complete =
-        parts::button("focus-complete", "Complete", Some(&icons::CHECK), p, move |s: &mut State, tx: &mut Tx| {
-            s.complete_focus(id, tx)
-        });
+    let today = tracked::task_today_ms(&s.snap, id, s.today(), &Local, s.now);
+    let mut summary = format!("{} today", quest_view::entry_editor::duration_label(today));
+    if let Some(quest) = quest {
+        let week = tracked::week_balance(&s.snap, s.today(), &Local, s.now);
+        summary.push_str(&format!(" · {} this week", format::hours(week.quest_ms_of(quest.id))));
+    }
+    let stop = parts::button("focus-toggle", "Stop", Some(&icons::STOP), p, |s: &mut State, _| s.stop_focus())
+        .help("Stop  Space");
+    let done = row()
+        .key("focus-complete")
+        .role("button")
+        .label("Done")
+        .focusable(true)
+        .h(36.0)
+        .px(16.0)
+        .gap(8.0)
+        .center_y()
+        .radius(7.0)
+        .cursor(Cursor::Pointer)
+        .fill(p.accent_fill)
+        .child(icon(&icons::CHECK, 15.0).color(crate::theme::on_accent_fill()))
+        .child(text("Done").font(ty::BODY_MEDIUM).color(crate::theme::on_accent_fill()))
+        .help("Done  X")
+        .on_press_tx(move |s: &mut State, tx: &mut Tx| s.complete_focus(id, tx));
+    let organize = parts::button("focus-organize", "Organize", None, p, |s: &mut State, tx| {
+        s.organize(tx);
+    })
+    .help("Organize  O");
     let center = col()
-        .grow(1.0)
         .w_full()
         .center()
-        .gap(0.0)
         .child(chip)
-        .child(title.mt(26.0))
-        .child(text(format::timer(tracked)).key("focus-timer").font(ty::TIMER).color(p.text).mt(24.0))
-        .child(
-            text(if running { "RUNNING" } else { "PAUSED" })
-                .key("focus-state")
-                .font(ty::CAPS)
-                .color(if running { p.muted } else { p.accent })
-                .mt(10.0),
-        )
-        .child(row().gap(14.0).mt(40.0).child(toggle.h(44.0).px(20.0)).child(complete.h(44.0).px(20.0)))
-        .child(description.mt(36.0));
+        .child(title.mt(14.0))
+        .child(text(format::timer(entry.tracked_ms(s.now))).key("focus-timer").font(ty::TIMER).color(p.text).mt(12.0))
+        .child(text(summary).key("focus-summary").font(ty::SMALL).color(p.muted).mt(4.0))
+        .child(description.mt(24.0))
+        .child(row().gap(10.0).mt(20.0).child(stop).child(done))
+        .child(row().gap(10.0).mt(10.0).child(back_button(p)).child(organize));
     col().key("focus").w_full().h_full().fill(p.bg).child(top).child(
         col()
             .key("focus-scroll")
@@ -108,9 +110,8 @@ pub fn view(s: &State, p: &Pal, leading: f32) -> El {
 }
 
 fn back_button(p: &Pal) -> El {
-    parts::icon_button("focus-back", "Back to Home", &icons::ARROW_LEFT, p.muted, p, |s: &mut State, tx: &mut Tx| {
-        s.go_with(View::Home, tx)
-    })
+    parts::button("focus-back", "Back to lists", Some(&icons::ARROW_LEFT), p, State::leave_focus)
+        .help("The timer keeps running  Esc")
 }
 
 /// No session: choose a task to start one.

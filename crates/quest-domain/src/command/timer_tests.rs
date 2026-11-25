@@ -46,21 +46,45 @@ fn rebooking_splits_the_running_task_session_at_since() {
     let focus = EntityId::new();
     r.run(Command::StartFocus { entry_id: focus, task_id: task, at: at(9, 0) });
     let organizing = EntityId::new();
-    for since in [at(9, 0), at(8, 0), at(10, 1)] {
-        let rebook = Command::RebookAsOrganizing { entry_id: organizing, since, now: at(10, 0) };
+    for since in [at(8, 0), at(10, 1)] {
+        let rebook =
+            Command::RebookAsOrganizing { expected_task_entry: None, entry_id: organizing, since, now: at(10, 0) };
         assert_eq!(plan(&rebook, &r.snapshot), Err(CommandError::RebookOutsideEntry));
     }
-    r.run(Command::RebookAsOrganizing { entry_id: organizing, since: at(9, 40), now: at(9, 42) });
+    r.run(Command::RebookAsOrganizing {
+        expected_task_entry: None,
+        entry_id: organizing,
+        since: at(9, 40),
+        now: at(9, 42),
+    });
 
     let ended = r.snapshot.time_entries.iter().find(|e| e.id == focus).unwrap();
     assert_eq!((ended.ended_at, ended.quest_id), (Some(at(9, 40)), Some(quest)));
     let running = r.snapshot.running_entry().unwrap();
     assert_eq!((running.id, running.started_at, running.origin_task_id), (organizing, at(9, 40), Some(task)));
 
-    let again = Command::RebookAsOrganizing { entry_id: EntityId::new(), since: at(9, 41), now: at(9, 42) };
+    let again = Command::RebookAsOrganizing {
+        expected_task_entry: None,
+        entry_id: EntityId::new(),
+        since: at(9, 41),
+        now: at(9, 42),
+    };
     assert_eq!(plan(&again, &r.snapshot), Err(CommandError::NothingToRebook));
     r.run(Command::StopFocus { at: at(9, 50) });
     assert_eq!(plan(&again, &r.snapshot), Err(CommandError::NothingToRebook));
+}
+
+#[test]
+fn rebook_cannot_split_a_replacement_timer() {
+    let (mut r, _, task) = setup();
+    r.run(Command::StartFocus { entry_id: EntityId::new(), task_id: task, at: at(9, 0) });
+    let stale = Command::RebookAsOrganizing {
+        entry_id: EntityId::new(),
+        expected_task_entry: Some(EntityId::new()),
+        since: at(9, 10),
+        now: at(9, 12),
+    };
+    assert_eq!(plan(&stale, &r.snapshot), Err(CommandError::NothingToRebook));
 }
 
 #[test]

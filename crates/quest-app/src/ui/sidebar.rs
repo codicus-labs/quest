@@ -68,7 +68,7 @@ pub fn view(s: &State, p: &Pal) -> El {
     if let Some(note) = workspaces::timer_note(s, p) {
         side = side.child(row().mt(10.0).child(note));
     }
-    side.children(player_card(s, p))
+    side.children(organizing_hint(s, p)).children(player_card(s, p))
 }
 
 fn nav_item(s: &State, view: View, glyph: &'static Icon, ink: Color, count: usize, p: &Pal) -> El {
@@ -174,6 +174,34 @@ fn link(key: &str, glyph: &'static Icon, label: &str, p: &Pal, press: fn(&mut St
 }
 
 /// What runs (with Stop and Focus), Organizing (with "Back to" its task), or the task to resume.
+fn organizing_hint(s: &State, p: &Pal) -> Option<El> {
+    let since = s.focus_exit.hint(&s.snap, s.now)?;
+    let time = crate::clock::local(since).format("%H:%M").to_string();
+    Some(
+        col()
+            .key("organizing-hint")
+            .w_full()
+            .mt(10.0)
+            .padding(10.0)
+            .gap(6.0)
+            .radius(10.0)
+            .fill(p.card)
+            .border(1.0, p.border)
+            .child(text("Organizing?").font(ty::SMALL_MEDIUM).color(p.text))
+            .child(
+                row()
+                    .gap(4.0)
+                    .child(
+                        parts::button("organizing-book", &format!("Book since {time}"), None, p, |s: &mut State, _| {
+                            s.book_organizing();
+                        })
+                        .help("Book  B"),
+                    )
+                    .child(parts::button("organizing-keep", "Keep", None, p, |s: &mut State, _| s.keep_focus_time())),
+            ),
+    )
+}
+
 fn player_card(s: &State, p: &Pal) -> Option<El> {
     let card = col().key("player").w_full().mt(14.0).padding(12.0).radius(12.0).fill(p.card).border(1.0, p.border);
     let since = |at: chrono::DateTime<chrono::Utc>| format::timer((s.now - at).num_milliseconds());
@@ -226,12 +254,12 @@ fn player_card(s: &State, p: &Pal) -> Option<El> {
                 .child(stop_button(false, p));
             let mut card = card.child(label).child(controls.mt(4.0));
             if let Some(task) = back_to {
-                let id = task.task;
                 card = card.child(
                     row()
                         .key("player-back-to")
                         .role("button")
                         .label(format!("Back to {}", task.title))
+                        .help(format!("Back to “{}”", task.title))
                         .w_full()
                         .mt(10.0)
                         .pt(9.0)
@@ -248,7 +276,7 @@ fn player_card(s: &State, p: &Pal) -> Option<El> {
                                 .truncate()
                                 .min_w(0.0),
                         )
-                        .on_press(move |s: &mut State| s.start_focus(id)),
+                        .on_press_tx(State::return_to_task),
                 );
             }
             card

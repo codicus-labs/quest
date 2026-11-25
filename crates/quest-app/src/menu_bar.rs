@@ -70,6 +70,33 @@ pub fn install(app: App<State>) -> App<State> {
             },
             None,
         ))
-        .menu_item(item("Undo Task Change", |s, _| s.undo_latest(), None))
+        .menu_item(item("Back to Lists (Esc)", State::leave_focus, None))
+        .menu_item(item("Stop Timer (Space)", |s, _| s.stop_focus(), None))
+        .menu_item(item(
+            "Done in Focus (X)",
+            |s, tx| {
+                if s.view == View::Focus
+                    && let Some(task) = s.snap.running_entry().and_then(|e| e.task_id)
+                {
+                    s.complete_focus(task, tx);
+                }
+            },
+            None,
+        ))
+        .menu_item(item(
+            "Organize (O)",
+            |s, tx| {
+                s.organize(tx);
+            },
+            None,
+        ))
+        .menu_item(item(
+            "Book as Organizing (B)",
+            |s, _| {
+                s.book_organizing();
+            },
+            None,
+        ))
+        .menu_item(item("Undo Last Change", |s, _| s.undo_latest(), None))
         .menu_item(item("Keyboard Shortcuts", |s, _| s.overlay = Overlay::Shortcuts, None))
 }

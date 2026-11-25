@@ -186,6 +186,7 @@ impl Deletable {
 /// What ⌘Z takes back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Undoable {
+    Rebook(EntityId),
     Delete(Deletable),
     Task(TaskEdit),
     ChecklistDone {
@@ -202,6 +203,7 @@ pub enum Undoable {
 /// What the toast says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Toast {
+    Rebooked,
     Done,
     DateChanged,
     QuestChanged,
@@ -233,6 +235,7 @@ pub struct UndoState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndoEvent {
+    Rebooked(EntityId),
     TaskEdited(TaskEdit),
     ChecklistDone {
         id: EntityId,
@@ -261,6 +264,7 @@ pub enum UndoEvent {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndoEffect {
+    UndoRebook(EntityId),
     None,
     Task(TaskEdit),
     Restore(Deletable),
@@ -273,6 +277,11 @@ impl UndoState {
         let until = now + Duration::seconds(TOAST_SECONDS);
         let mut next = self.clone();
         let effect = match event {
+            UndoEvent::Rebooked(id) => {
+                next.last = Some(Undoable::Rebook(id));
+                next.shown = Some(Shown { toast: Toast::Rebooked, until });
+                UndoEffect::None
+            }
             UndoEvent::ChecklistDone { id, previous } => {
                 next.last = Some(Undoable::ChecklistDone { id, previous });
                 next.shown = Some(Shown { toast: Toast::Done, until });
@@ -306,6 +315,10 @@ impl UndoState {
             }
             UndoEvent::Undo => match next.last.take() {
                 None => UndoEffect::None,
+                Some(Undoable::Rebook(id)) => {
+                    next.shown = None;
+                    UndoEffect::UndoRebook(id)
+                }
                 Some(Undoable::ChecklistDone { id, previous }) => {
                     next.shown = None;
                     UndoEffect::SetChecklistDone { id, done: previous }

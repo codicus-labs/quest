@@ -58,6 +58,9 @@ pub(super) fn plan_edit(
     };
     if current.kind == EntryKind::Organizing && (task_id.is_some() || quest_id.is_some()) {
         writes.push(write(EntityKind::TimeEntry, id, fields::ENTRY_KIND, json!(EntryKind::Task)));
+        if current.rebooked_from.is_some() {
+            writes.push(write(EntityKind::TimeEntry, id, fields::ENTRY_REBOOKED_FROM, serde_json::Value::Null));
+        }
     }
     if task_id != current.task_id {
         writes.push(write(EntityKind::TimeEntry, id, fields::TASK_ID, json!(task_id)));

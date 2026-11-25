@@ -152,8 +152,10 @@ fn blank_space_dismisses_the_detail_but_its_timer_and_check_still_work() {
     click_card(&mut rt, "row", id);
     click(&mut rt, &format!("row-play-{id}"));
     assert_eq!(rt.state.snap.running_entry().unwrap().task_id, Some(id));
-    click(&mut rt, &format!("row-play-{id}"));
+    assert_eq!(rt.state.view, crate::state::View::Focus);
+    click(&mut rt, "focus-toggle");
     assert!(rt.state.snap.running_entry().is_none());
+    click_card(&mut rt, "row", id);
     click(&mut rt, &format!("row-check-{id}"));
     assert!(rt.state.snap.task(id).unwrap().is_done());
     assert_eq!(modal_task(&rt), Some(id));

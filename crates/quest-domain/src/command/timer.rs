@@ -26,17 +26,46 @@ pub(super) fn start_organizing(
 pub(super) fn rebook(
     snapshot: &Snapshot,
     entry_id: EntityId,
+    expected_task_entry: Option<EntityId>,
     since: DateTime<Utc>,
     now: DateTime<Utc>,
 ) -> Result<Vec<FieldWrite>, CommandError> {
-    let running = snapshot.running_focus().filter(|r| r.entry.kind == EntryKind::Task);
+    let running = snapshot
+        .running_focus()
+        .filter(|r| r.entry.kind == EntryKind::Task && expected_task_entry.is_none_or(|id| r.entry.id == id));
     let Some(running) = running else { return Err(CommandError::NothingToRebook) };
-    if since <= running.entry.started_at || since > now {
+    if since < running.entry.started_at || since > now {
         return Err(CommandError::RebookOutsideEntry);
     }
     let mut writes = vec![write(EntityKind::TimeEntry, running.entry.id, fields::ENTRY_ENDED_AT, json!(since))];
     writes.extend(organizing(entry_id, running.entry.task_id, since, running.workspace));
+    writes.push(write(EntityKind::TimeEntry, entry_id, fields::ENTRY_REBOOKED_FROM, json!(running.entry.id)));
     Ok(writes)
+}
+
+pub(super) fn undo_rebook(
+    snapshot: &Snapshot,
+    entry_id: EntityId,
+    at: DateTime<Utc>,
+) -> Result<Vec<FieldWrite>, CommandError> {
+    let booked = snapshot.time_entries.iter().find(|e| e.id == entry_id).ok_or(CommandError::UnknownEntry(entry_id))?;
+    let original = booked
+        .rebooked_from
+        .and_then(|id| snapshot.time_entries.iter().find(|e| e.id == id))
+        .filter(|e| {
+            e.kind == EntryKind::Task && e.task_id == booked.origin_task_id && e.ended_at == Some(booked.started_at)
+        })
+        .ok_or(CommandError::RebookChanged)?;
+    if booked.is_running()
+        && (snapshot.running_focus().is_none_or(|r| r.entry.id != entry_id)
+            || original.task_id.is_some_and(|id| snapshot.task(id).is_none_or(|task| task.is_done())))
+    {
+        return Err(CommandError::RebookChanged);
+    }
+    Ok(vec![
+        write(EntityKind::TimeEntry, entry_id, fields::DELETED_AT, json!(at)),
+        write(EntityKind::TimeEntry, original.id, fields::ENTRY_ENDED_AT, json!(booked.ended_at)),
+    ])
 }
 
 fn organizing(

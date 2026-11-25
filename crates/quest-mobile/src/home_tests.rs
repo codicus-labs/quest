@@ -50,6 +50,7 @@ fn entry(n: u128, quest: Option<u128>, from: &str, to: Option<&str>) -> TimeEntr
         task_id: None,
         quest_id: quest.map(id),
         origin_task_id: None,
+        rebooked_from: None,
         started_at: at(from),
         ended_at: to.map(at),
     }
@@ -140,6 +141,7 @@ fn cards_show_tracked_time_and_the_running_timer() {
         task_id: Some(id(11)),
         quest_id: None,
         origin_task_id: None,
+        rebooked_from: None,
         started_at: at("2026-11-25T09:40:00+01:00"),
         ended_at: None,
     });

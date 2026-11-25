@@ -12,6 +12,7 @@ fn entry() -> TimeEntry {
         id: EntityId::new(),
         kind: EntryKind::Task,
         origin_task_id: None,
+        rebooked_from: None,
         task_id: None,
         quest_id: None,
         started_at: at(23, 14, 50, 20),

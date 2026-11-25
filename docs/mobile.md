@@ -223,6 +223,19 @@ Dauern, Validierungen oder Positionen.
 - **Logged time:** Summe und Einträge im Task-Sheet einheitlich mit `quest_view::entry_editor::duration_label`
   („1h 26m“, „1m“, „1m total“) statt „0h total“ neben „01:26“.
 
+## R5 (Rust): Fokus verlassen und Organizing
+
+- Beim Öffnen des Fokus `focusOpened()`, beim tatsächlichen Verlassen mit weiterlaufendem Task-Timer einmal
+  `focusLeft(now)` aufrufen. Der Zustand ist lokal im `QuestCore`, nicht synchronisiert oder dauerhaft gespeichert.
+- `focusExitStatus(now): FocusExitStatus?` beim Rendern und nach `tick` lesen. `entryId` und `leftAtMs` (Unix-ms)
+  markieren den Abschnitt außerhalb des Fokus; `hintDue` wird nach zwei Minuten wahr. `null` bedeutet: keine
+  passende laufende Task-Session. `keepFocusTime(now)` blendet nur den Hinweis aus, nicht den Abschnitt.
+- `bookFocusTime(now): String?` nimmt einen fälligen Hinweis an und liefert die neue Organizing-ID (`null` ohne
+  fälligen Hinweis). Der Task behält seine Zeit bis `leftAtMs`; Organizing läuft ab dort. `undo(now)` nimmt die
+  Teilung zurück. Das bestehende `rebookAsOrganizing(sinceMs, now)` bleibt als direkter Aufruf verfügbar.
+- `organize(now): Boolean` wechselt vom laufenden Task zu Organizing. Bei `true` Fokus schließen.
+  `backToTask(now): String?` startet den offenen Ursprungs-Task; bei Rückgabe den Fokus dafür öffnen.
+
 ## Phase 3 (Rust): Plan
 
 - **Umzug nach quest-view:** `reorder::nudge` (Desktop ⌥↑/⌥↓, `dnd.rs` re-exportiert es) und

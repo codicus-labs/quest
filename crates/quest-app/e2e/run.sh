@@ -266,6 +266,19 @@ else
   fail "w  skipped: no id for workspace 'Work'"
 fi
 
+# R5 replays the same route in fresh profiles and inspects each checkpoint.
+for stage in started organizing returned hint booked undone; do
+  run anna "$root/r5-$stage" r5-focus "r5-$stage" --demo --now 2026-11-25T14:40 --at "mark:$stage" \
+    || fail "r5 $stage script (see $out/r5-$stage.log)"
+done
+check r5-started "r5 starting a task opens Focus" key focus-timer
+check r5-organizing "r5 O switches to Organizing" key player-back-to
+check r5-returned "r5 Back to Task opens Focus again" key focus-timer
+check r5-hint "r5 two minutes outside Focus show Book" key organizing-book
+check r5-hint "r5 outside part of the task run is hatched" key timeline-outside-focus
+check r5-booked "r5 Booking splits task and Organizing at 14:44" split "Design the next chapter"
+check r5-undone "r5 Undo rejoins the running task entry" joined "Design the next chapter"
+
 echo "$summary"
 echo "PNGs: $out"
 if [ "$failures" -gt 0 ]; then

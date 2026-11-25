@@ -2,6 +2,8 @@
 
 use quest_domain::{Command, EntityId, Task};
 pub use quest_view::focus::FocusTarget;
+use quest_view::focus_exit;
+use quest_view::undo::UndoEvent;
 use rune::{TextEdit, Tx};
 
 use super::{State, View};
@@ -53,23 +55,65 @@ impl State {
     }
 
     pub fn start_focus(&mut self, task: EntityId) {
-        self.focus_task = Some(task);
         let at = self.clock.now();
         self.dispatch(Command::StartFocus { entry_id: EntityId::new(), task_id: task, at });
+        if self.notice.is_none() {
+            self.focus_task = Some(task);
+            self.go(View::Focus);
+        }
     }
 
     pub fn stop_focus(&mut self) {
         let at = self.clock.now();
         self.dispatch(Command::StopFocus { at });
+        if self.notice.is_none() && self.view == View::Focus {
+            self.go(self.focus_return);
+        }
     }
 
-    /// Space on a task: pauses it if it runs, else starts it. The view stays.
+    pub fn leave_focus(&mut self, tx: &mut Tx) {
+        if self.view == View::Focus {
+            self.go_with(self.focus_return, tx);
+        }
+    }
+
+    pub fn organize(&mut self, tx: &mut Tx) -> bool {
+        let Some(command) = focus_exit::organize(&self.snap, EntityId::new(), self.clock.now()) else { return false };
+        self.dispatch(command);
+        if self.notice.is_none() {
+            self.focus_exit.open();
+            self.leave_focus(tx);
+        }
+        true
+    }
+
+    pub fn return_to_task(&mut self, tx: &mut Tx) {
+        let Some(command) = focus_exit::back_to_task(&self.snap, EntityId::new(), self.clock.now()) else { return };
+        self.dispatch(command);
+        if self.notice.is_none() {
+            self.go_with(View::Focus, tx);
+        }
+    }
+
+    pub fn book_organizing(&mut self) -> bool {
+        let entry = EntityId::new();
+        let Some(command) = self.focus_exit.book(&self.snap, entry, self.clock.now()) else { return false };
+        self.dispatch(command);
+        if self.notice.is_none() {
+            self.focus_exit.open();
+            self.step_undo(UndoEvent::Rebooked(entry));
+        }
+        true
+    }
+
+    pub fn keep_focus_time(&mut self) {
+        self.focus_exit.keep(&self.snap, self.clock.now());
+    }
     pub fn toggle_focus(&mut self, task: EntityId) {
         let running = self.snap.running_entry().is_some_and(|e| e.task_id == Some(task));
         if running { self.stop_focus() } else { self.start_focus(task) }
     }
 
-    /// Focus's Complete: the session ends, the task is done, and the app goes Home.
     pub fn complete_focus(&mut self, task: EntityId, tx: &mut Tx) {
         if self.snap.task(task).is_none_or(Task::is_done) {
             return;
@@ -79,6 +123,6 @@ impl State {
             return;
         }
         self.focus_task = None;
-        self.go_with(View::Home, tx);
+        self.leave_focus(tx);
     }
 }

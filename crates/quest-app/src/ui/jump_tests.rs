@@ -44,7 +44,7 @@ fn review_week_buttons_stay_put() {
 }
 
 #[test]
-fn focus_back_button_starts_past_the_traffic_lights() {
+fn focus_heading_starts_past_the_traffic_lights() {
     let (mut rt, _dir) = demo_app();
     let mut insets = ChromeInsets::default();
     insets.leading = 78.0;
@@ -52,9 +52,9 @@ fn focus_back_button_starts_past_the_traffic_lights() {
     rt.state.go(View::Focus);
     settle(&mut rt);
 
-    let [back_x, ..] = rect(&rt, "focus-back");
-    assert_eq!(back_x, super::chrome::leading_pad(insets.leading), "where the top bar's logo starts");
-    assert!(back_x >= insets.leading + 16.0, "the back button clears the traffic lights");
+    let [heading_x, ..] = rect(&rt, "focus-heading");
+    assert_eq!(heading_x, super::chrome::leading_pad(insets.leading), "where the top bar's logo starts");
+    assert!(heading_x >= insets.leading + 16.0, "the heading clears the traffic lights");
 }
 
 #[test]

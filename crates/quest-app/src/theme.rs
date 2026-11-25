@@ -114,8 +114,8 @@ pub mod ty {
     pub const HEADING: TextStyle = TextStyle::new(30.0, 500.0).lh(38.0).tracking(-0.4);
     pub const STAT: TextStyle = TextStyle::new(20.0, 500.0).lh(26.0);
     pub const BIG_STAT: TextStyle = TextStyle::new(30.0, 500.0).lh(36.0);
-    pub const FOCUS_TITLE: TextStyle = TextStyle::new(26.0, 400.0).lh(32.0);
-    pub const TIMER: TextStyle = TextStyle::new(120.0, 500.0).lh(130.0).tracking(-2.0).features("'tnum' 1");
+    pub const FOCUS_TITLE: TextStyle = TextStyle::new(30.0, 700.0).lh(38.0);
+    pub const TIMER: TextStyle = TextStyle::new(96.0, 300.0).lh(100.0).tracking(-3.0).features("'tnum' 1");
     pub const MONO_TIME: TextStyle = TextStyle::new(14.0, 500.0).lh(20.0).features("'tnum' 1");
     /// A list page's title (Today, Inbox, a quest).
     pub const H1: TextStyle = TextStyle::new(28.0, 700.0).lh(34.0).tracking(-0.4);

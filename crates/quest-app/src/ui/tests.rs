@@ -102,7 +102,7 @@ pub(super) fn click(rt: &mut Runtime<State>, key: &str) {
 }
 
 #[test]
-fn command_digits_switch_views_and_escape_leaves_focus_for_today() {
+fn command_digits_switch_views_and_escape_returns_to_the_previous_list() {
     let (mut rt, _dir) = demo_app();
     command(&mut rt, '1');
     assert_eq!(rt.state.view, View::Inbox);
@@ -117,7 +117,7 @@ fn command_digits_switch_views_and_escape_leaves_focus_for_today() {
     go(&mut rt, View::Focus);
     assert_eq!(rt.state.view, View::Focus);
     press(&mut rt, Key::Escape, Mods::default());
-    assert_eq!(rt.state.view, View::Today, "Esc goes back to Today");
+    assert_eq!(rt.state.view, View::Quest(first_quest), "Esc returns to the previous list");
 }
 
 #[test]

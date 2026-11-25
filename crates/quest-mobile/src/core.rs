@@ -55,6 +55,7 @@ pub struct QuestCore {
     ticks: Mutex<TickMemory>,
     /// The undo snackbar. Taken before the store lock, never while holding it.
     pub(crate) undo: Mutex<MobileUndo>,
+    pub(crate) focus_exit: Mutex<quest_view::focus_exit::FocusExit>,
     /// What `plan` showed last. Only copied out, never held while taking another lock.
     plan: Mutex<Option<PlanMemory>>,
     /// What the last applied AI capture created, for its Undo. Never held while taking another lock.
@@ -90,6 +91,7 @@ impl QuestCore {
                 listener,
                 ticks: Mutex::default(),
                 undo: Mutex::default(),
+                focus_exit: Mutex::default(),
                 plan: Mutex::default(),
                 capture_undo: Mutex::default(),
                 shown_workspace: Mutex::default(),
@@ -228,6 +230,7 @@ impl QuestCore {
     fn forget_shown_data(&self) {
         *self.ticks.lock().unwrap_or_else(PoisonError::into_inner) = TickMemory::default();
         *self.undo_state() = MobileUndo::default();
+        self.focus_exit_state().open();
         self.forget_plan();
         *self.capture_undo.lock().unwrap_or_else(PoisonError::into_inner) = None;
     }

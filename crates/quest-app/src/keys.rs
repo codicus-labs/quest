@@ -37,6 +37,8 @@ pub enum Shortcut {
     DeleteSelection,
     Undo,
     EditNotes,
+    Organize,
+    BookOrganizing,
     Pick(Picker),
     QuickPick(Picker),
     Task(TaskKey),
@@ -45,7 +47,7 @@ pub enum Shortcut {
 /// A shortcut on one task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskKey {
-    /// Space: start its session, or pause it.
+    /// Space: start or stop its session.
     StartPause,
     /// X: done, or open again.
     ToggleDone,
@@ -95,6 +97,8 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         Key::Backspace | Key::Delete => Some(Shortcut::DeleteSelection),
         Key::Text(t) if plain => match t.to_lowercase().as_str() {
             "f" => Some(Shortcut::Go(View::Focus)),
+            "o" => Some(Shortcut::Organize),
+            "b" => Some(Shortcut::BookOrganizing),
             "e" if !ev.mods.shift => Some(Shortcut::EditNotes),
             "g" => Some(Shortcut::JumpToday),
             "j" => Some(Shortcut::Select { next: true }),
@@ -113,6 +117,12 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
 }
 
 pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if ev.key == Key::Function(12)
+        && let crate::clock::Clock::Fixed(at) = s.clock
+    {
+        s.clock = crate::clock::Clock::Fixed(at + chrono::TimeDelta::minutes(2));
+        return true;
+    }
     let Some(shortcut) = shortcut(ev) else { return false };
     // With a dialog or sheet open, only the keys that close it act.
     if s.overlay == Overlay::LogWork && shortcut == Shortcut::Task(TaskKey::Complete) {
@@ -133,7 +143,14 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             s.close_task_modal();
             open_palette(s, tx);
         }
+        Shortcut::Go(View::Focus) if s.snap.running_entry().is_none() && s.shortcut_task().is_some() => {
+            if let Some(task) = s.shortcut_task() {
+                s.start_focus(task);
+            }
+        }
         Shortcut::Go(view) => s.go_with(view, tx),
+        Shortcut::Organize => return s.organize(tx),
+        Shortcut::BookOrganizing => return s.book_organizing(),
         Shortcut::GoQuest(index) => {
             let Some(quest) = s.snap.active_quests().nth(index).map(|q| q.id) else { return false };
             s.go_with(View::Quest(quest), tx);
@@ -177,7 +194,7 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         Shortcut::Back if s.overlay == Overlay::EntryEditor => s.close_entry_editor(),
         Shortcut::Back if s.overlay != Overlay::None => s.overlay = Overlay::None,
-        Shortcut::Back if s.view == View::Focus => s.go_with(View::Today, tx),
+        Shortcut::Back if s.view == View::Focus => s.leave_focus(tx),
         Shortcut::Back if s.task_modal.is_some() => {
             tx.blur();
             s.close_task_modal();
@@ -201,7 +218,7 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Shortcut::QuickPick(picker) => quick_picker(s, picker, tx),
         Shortcut::Task(key) => {
             let target = if s.view == View::Focus && key != TaskKey::Open {
-                s.focus_subject().map(|t| t.id)
+                s.snap.running_entry().and_then(|e| e.task_id)
             } else {
                 s.shortcut_task()
             };
@@ -226,8 +243,8 @@ pub fn toggle_tracked(s: &mut State) {
 fn on_task_key(s: &mut State, task: EntityId, key: TaskKey, tx: &mut Tx) {
     match key {
         TaskKey::StartPause => s.toggle_focus(task),
+        TaskKey::ToggleDone | TaskKey::Complete if s.view == View::Focus => s.complete_focus(task, tx),
         TaskKey::ToggleDone => s.toggle_done(task),
-        TaskKey::Complete if s.view == View::Focus => s.complete_focus(task, tx),
         TaskKey::Complete => {}
         TaskKey::Open => {
             s.toggle_task_detail(task);

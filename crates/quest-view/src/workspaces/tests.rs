@@ -56,6 +56,7 @@ fn a_timer_in_another_workspace_names_that_workspace() {
         id: EntityId::new(),
         kind: EntryKind::Task,
         origin_task_id: None,
+        rebooked_from: None,
         task_id: Some(EntityId::new()),
         quest_id: None,
         started_at: chrono::Utc::now(),

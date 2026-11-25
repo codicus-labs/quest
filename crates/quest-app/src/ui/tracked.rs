@@ -27,7 +27,7 @@ const BLOCK_RANGE: TextStyle = TextStyle::new(11.0, 400.0).lh(14.0).features("'t
 const WEEK_LINE: TextStyle = TextStyle::new(13.0, 400.0).lh(18.0).features("'tnum' 1");
 
 pub fn column(s: &State, p: &Pal, cx: &Cx<State>) -> El {
-    let day = tracked::day_timeline(&s.snap, s.today(), &Local, s.now);
+    let day = tracked::day_timeline_with_focus(&s.snap, s.today(), &Local, s.now, &s.focus_exit);
     let week = tracked::week_balance(&s.snap, s.today(), &Local, s.now);
     let today = col()
         .w_full()
@@ -61,7 +61,8 @@ fn timeline(day: &DayTimeline, p: &Pal, cx: &Cx<State>) -> El {
     for block in &day.blocks {
         let top = y(block.start_minute);
         let height = (y(block.end_minute) - top).max(3.0);
-        area = area.child(block_el(block, top, height, p, cx));
+        let outside = block.outside_since_minute.map(|minute| (y(minute) - top).min((height - 3.0).max(0.0)));
+        area = area.child(block_el(block, top, height, outside, p, cx));
     }
     if let Some(now) = day.now_minute {
         let top = y(now);
@@ -78,7 +79,7 @@ fn timeline(day: &DayTimeline, p: &Pal, cx: &Cx<State>) -> El {
     area
 }
 
-fn block_el(block: &TimelineBlock, top: f32, height: f32, p: &Pal, cx: &Cx<State>) -> El {
+fn block_el(block: &TimelineBlock, top: f32, height: f32, outside: Option<f32>, p: &Pal, cx: &Cx<State>) -> El {
     let organizing = block.kind == BlockKind::Organizing;
     let hue = block.color.filter(|_| !organizing).map_or(p.faint, quest_color);
     let range = format!(
@@ -87,10 +88,13 @@ fn block_el(block: &TimelineBlock, top: f32, height: f32, p: &Pal, cx: &Cx<State
         if block.running { "now".to_owned() } else { format::hh_mm(block.end_minute) }
     );
     let entry = block.entry;
+    let title = if block.rebooked { format!("{} · rebooked", block.title) } else { block.title.clone() };
+    let label =
+        if outside.is_some() { format!("{title} {range} · outside focus") } else { format!("{title} {range}") };
     let mut b = col()
         .key(format!("tl-block-{entry}"))
         .role("button")
-        .label(format!("{} {range}", block.title))
+        .label(label.clone())
         .absolute(LABELS + 4.0, top)
         .w(BLOCK_WIDTH)
         .h(height)
@@ -101,33 +105,50 @@ fn block_el(block: &TimelineBlock, top: f32, height: f32, p: &Pal, cx: &Cx<State
         .border_sides([0.0, 0.0, 0.0, 2.0], blend(hue, p.side, 0.7))
         .clip_rounded(6.0)
         .cursor(Cursor::Pointer)
-        .help(format!("{}  {range}", block.title))
+        .help(label)
         .on_press(move |s: &mut State| s.open_entry_editor(entry));
-    if block.running {
+    if block.running || block.rebooked {
         b = b.border(1.0, blend(hue, p.side, 0.7)).border_dash(3.0, 2.0);
     }
+    if let Some(from) = outside {
+        b = b.child(hatching(from, height - from, hue));
+    }
     let ink = if organizing { p.muted } else { p.text };
-    if height >= 19.0 {
-        b = b.child(text(block.title.clone()).font(BLOCK_TITLE).color(ink).single_line().truncate());
-    } else if height >= 12.0 {
+    let label_height = outside.unwrap_or(height);
+    if label_height >= 19.0 {
+        b = b.child(text(title).font(BLOCK_TITLE).color(ink).single_line().truncate());
+    } else if label_height >= 12.0 {
         let key = format!("tl-short-title-{entry}");
         let fits = cx.layout_with(&key, |[_, _, width, _]| width <= BLOCK_WIDTH - 2.0 * BLOCK_PAD);
         // Keep the unconstrained line in layout even when it doesn't fit.
-        b = b.child(
-            row().child(
-                text(block.title.clone())
-                    .key(key)
-                    .font(SHORT_TITLE)
-                    .color(ink)
-                    .a11y_hidden()
-                    .opacity(if fits == Some(true) { 1.0 } else { 0.0 }),
-            ),
-        );
+        b = b.child(row().child(
+            text(title).key(key).font(SHORT_TITLE).color(ink).a11y_hidden().opacity(if fits == Some(true) {
+                1.0
+            } else {
+                0.0
+            }),
+        ));
     }
-    if height > 32.0 {
+    if label_height > 32.0 {
         b = b.child(text(range).font(BLOCK_RANGE).color(p.muted).single_line());
     }
     b
+}
+
+fn hatching(top: f32, height: f32, hue: Color) -> El {
+    let mut stripes =
+        el().key("timeline-outside-focus").absolute(0.0, top).w(BLOCK_WIDTH).h(height).clip_rounded(0.0).a11y_hidden();
+    let length = height * std::f32::consts::SQRT_2 + 2.0;
+    for step in 0..=((BLOCK_WIDTH + height) / 7.0).ceil() as usize {
+        stripes = stripes.child(
+            el().absolute(step as f32 * 7.0 - (height + length) / 2.0, height / 2.0)
+                .w(length)
+                .h(1.0)
+                .rotate(-std::f32::consts::FRAC_PI_4)
+                .fill(hue.alpha(0.44)),
+        );
+    }
+    stripes
 }
 
 /// `amount` of `color` mixed into `under` in sRGB, as CSS `color-mix(in srgb, …)` (Rune's

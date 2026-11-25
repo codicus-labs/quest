@@ -104,6 +104,9 @@ impl QuestCore {
             let now = Now::parse(&now)?;
             let Some(action) = self.undo_state().undo(now.at) else { return Ok(()) };
             match action {
+                UndoAction::UndoRebook(entry_id) => {
+                    self.dispatch(Command::UndoOrganizingRebook { entry_id, at: now.at })
+                }
                 UndoAction::Task(edit) => self.dispatch(edit.command(now.at)),
                 UndoAction::Restore(item) => self.dispatch(item.restore()),
                 UndoAction::SetChecklistDone { id, done } => {

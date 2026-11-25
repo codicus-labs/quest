@@ -88,6 +88,7 @@ pub(crate) fn entry(n: u128, task: Option<u128>, quest: Option<u128>, from: &str
         task_id: task.map(id),
         quest_id: quest.map(id),
         origin_task_id: None,
+        rebooked_from: None,
         started_at: at(from),
         ended_at: to.map(at),
     }

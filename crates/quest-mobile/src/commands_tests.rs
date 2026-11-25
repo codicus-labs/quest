@@ -116,6 +116,7 @@ fn starting_the_timer_that_already_runs_does_nothing() {
         task_id: Some(id(1)),
         quest_id: None,
         origin_task_id: None,
+        rebooked_from: None,
         started_at: frozen().at,
         ended_at: None,
     };

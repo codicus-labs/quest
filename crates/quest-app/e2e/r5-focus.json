@@ -1,0 +1,18 @@
+[
+  {"t":0.2,"type":"tap","key":"player-stop"},
+  {"t":0.4,"type":"tap","key":"player-resume"},
+  {"t":0.6,"type":"mark","name":"started"},
+  {"t":0.8,"type":"key","name":"F12"},
+  {"t":1.0,"type":"type","text":"o"},
+  {"t":1.2,"type":"mark","name":"organizing"},
+  {"t":1.4,"type":"tap","key":"player-back-to"},
+  {"t":1.6,"type":"mark","name":"returned"},
+  {"t":1.8,"type":"key","name":"F12"},
+  {"t":2.0,"type":"key","name":"Escape"},
+  {"t":2.2,"type":"key","name":"F12"},
+  {"t":2.4,"type":"mark","name":"hint"},
+  {"t":2.6,"type":"type","text":"b"},
+  {"t":2.8,"type":"mark","name":"booked"},
+  {"t":3.0,"type":"key","name":"z","cmd":true},
+  {"t":3.2,"type":"mark","name":"undone"}
+]

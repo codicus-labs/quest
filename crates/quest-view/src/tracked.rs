@@ -32,6 +32,8 @@ pub struct TimelineBlock {
     pub start_minute: u32,
     pub end_minute: u32,
     pub running: bool,
+    pub outside_since_minute: Option<u32>,
+    pub rebooked: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -49,7 +51,18 @@ pub struct DayTimeline {
 const DAY_MINUTES: i64 = 24 * 60;
 
 pub fn day_timeline<Tz: TimeZone>(snapshot: &Snapshot, day: NaiveDate, tz: &Tz, now: DateTime<Utc>) -> DayTimeline {
+    day_timeline_with_focus(snapshot, day, tz, now, &Default::default())
+}
+
+pub fn day_timeline_with_focus<Tz: TimeZone>(
+    snapshot: &Snapshot,
+    day: NaiveDate,
+    tz: &Tz,
+    now: DateTime<Utc>,
+    focus_exit: &crate::focus_exit::FocusExit,
+) -> DayTimeline {
     let (from, to) = (midnight(day, tz), midnight(day + Days::new(1), tz));
+    let departure = focus_exit.departure(snapshot);
     let minute = |at: DateTime<Utc>| u32::try_from((at - from).num_minutes().clamp(0, DAY_MINUTES)).unwrap_or(0);
     let mut entries: Vec<_> =
         snapshot.time_entries.iter().filter(|e| e.started_at < to && e.ended_at.unwrap_or(now) > from).collect();
@@ -58,6 +71,9 @@ pub fn day_timeline<Tz: TimeZone>(snapshot: &Snapshot, day: NaiveDate, tz: &Tz, 
     let mut blocks = Vec::new();
     for entry in entries {
         let (start, end) = (entry.started_at.max(from), entry.ended_at.unwrap_or(now).min(to));
+        if end <= start && !entry.is_running() {
+            continue;
+        }
         tracked_ms += (end - start).num_milliseconds().max(0);
         let (kind, title, color) = describe(snapshot, entry);
         blocks.push(TimelineBlock {
@@ -68,6 +84,10 @@ pub fn day_timeline<Tz: TimeZone>(snapshot: &Snapshot, day: NaiveDate, tz: &Tz, 
             start_minute: minute(start),
             end_minute: minute(end),
             running: entry.is_running(),
+            outside_since_minute: departure
+                .filter(|(id, since)| *id == entry.id && *since < end)
+                .map(|(_, since)| minute(since.max(start))),
+            rebooked: entry.rebooked_from.is_some(),
         });
     }
     let now_minute = (from <= now && now < to).then(|| minute(now));
@@ -153,6 +173,22 @@ pub fn fraction(part: i64, whole: i64) -> f32 {
         return 0.0;
     }
     (part as f32 / whole as f32).clamp(0.0, 1.0)
+}
+
+pub fn task_today_ms<Tz: TimeZone>(
+    snap: &Snapshot,
+    task: EntityId,
+    day: NaiveDate,
+    tz: &Tz,
+    now: DateTime<Utc>,
+) -> i64 {
+    let from = midnight(day, tz);
+    let to = midnight(day + Days::new(1), tz);
+    snap.time_entries
+        .iter()
+        .filter(|e| e.task_id == Some(task))
+        .map(|e| (e.ended_at.unwrap_or(now).min(to) - e.started_at.max(from)).num_milliseconds().max(0))
+        .sum()
 }
 
 /// The UTC instant a local day starts (the earlier one if the clock went back).

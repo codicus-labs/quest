@@ -47,25 +47,37 @@ const LEFT: [Group; 3] = [
     ),
 ];
 
-const RIGHT: [Group; 1] = [(
-    "Tasks",
-    &[
-        (&["J", "K"], "Next / previous"),
-        (&["↓", "↑"], "Next / previous"),
-        (&["⌥", "↑/↓"], "Reorder task"),
-        (&["↵"], "Open"),
-        (&["X"], "Done / open"),
-        (&["Space"], "Start / stop timer"),
-        (&["F"], "Focus"),
-        (&["N"], "New task"),
-        (&["L", "P", "D"], "Quest / plan / deadline"),
-        (&["⌘", "⇧", "L/P/D"], "Quick-add fields"),
-        (&["T", "M", "N", "⌫"], "Calendar quick dates"),
-        (&["W"], "Next week"),
-        (&["⌘", "⌫"], "Delete"),
-        (&["⌘", "Z"], "Undo"),
-    ],
-)];
+const RIGHT: [Group; 2] = [
+    (
+        "Tasks",
+        &[
+            (&["J", "K"], "Next / previous"),
+            (&["↓", "↑"], "Next / previous"),
+            (&["⌥", "↑/↓"], "Reorder task"),
+            (&["↵"], "Open"),
+            (&["X"], "Done / open"),
+            (&["Space"], "Start / stop timer"),
+            (&["F"], "Focus"),
+            (&["N"], "New task"),
+            (&["L", "P", "D"], "Quest / plan / deadline"),
+            (&["⌘", "⇧", "L/P/D"], "Quick-add fields"),
+            (&["T", "M", "N", "⌫"], "Calendar quick dates"),
+            (&["W"], "Next week"),
+            (&["⌘", "⌫"], "Delete"),
+            (&["⌘", "Z"], "Undo"),
+        ],
+    ),
+    (
+        "Focus & timer",
+        &[
+            (&["Space"], "Stop in Focus"),
+            (&["X"], "Done in Focus"),
+            (&["Esc"], "Back to lists · keep timer running"),
+            (&["O"], "Organize"),
+            (&["B"], "Book as Organizing when prompted"),
+        ],
+    ),
+];
 
 pub fn layer(p: &Pal, layer: &mut Vec<El>) {
     let header = row()

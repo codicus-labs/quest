@@ -198,8 +198,13 @@ pub enum Command {
     /// `since` and an organizing session (back to that task) runs from there.
     RebookAsOrganizing {
         entry_id: EntityId,
+        expected_task_entry: Option<EntityId>,
         since: DateTime<Utc>,
         now: DateTime<Utc>,
+    },
+    UndoOrganizingRebook {
+        entry_id: EntityId,
+        at: DateTime<Utc>,
     },
     StopFocus {
         at: DateTime<Utc>,
@@ -293,8 +298,10 @@ pub enum CommandError {
     CannotResumeEntry,
     #[error("no task session is running; start one before booking time as organizing")]
     NothingToRebook,
-    #[error("organizing can only start within the running session, after its start and not in the future")]
+    #[error("organizing can only start between the session start and now")]
     RebookOutsideEntry,
+    #[error("the original session or its organizing split changed; edit their times manually")]
+    RebookChanged,
     #[error("{kind:?} {id} is not in the trash")]
     NotInTrash { kind: EntityKind, id: EntityId },
     #[error("a title cannot be empty")]
@@ -477,7 +484,10 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
         Command::StartOrganizing { entry_id, origin_task_id, at } => {
             timer::start_organizing(snapshot, *entry_id, *origin_task_id, *at)?
         }
-        Command::RebookAsOrganizing { entry_id, since, now } => timer::rebook(snapshot, *entry_id, *since, *now)?,
+        Command::RebookAsOrganizing { entry_id, expected_task_entry, since, now } => {
+            timer::rebook(snapshot, *entry_id, *expected_task_entry, *since, *now)?
+        }
+        Command::UndoOrganizingRebook { entry_id, at } => timer::undo_rebook(snapshot, *entry_id, *at)?,
         Command::StopFocus { at } => stop_running(snapshot, *at, |_| true),
         Command::LogTime { entry_id, task_id, started_at, ended_at } => {
             if ended_at <= started_at {

@@ -37,6 +37,13 @@ def find_key(node, key):
     return None
 
 
+def timeline_labels(node):
+    if (node.get("key") or "").startswith("tl-block-"):
+        yield node.get("label") or node.get("name") or ""
+    for child in node.get("children", []):
+        yield from timeline_labels(child)
+
+
 def main():
     path, question, title = sys.argv[1:4]
     with open(path) as f:
@@ -48,6 +55,13 @@ def main():
                 print(match.group(1))
                 return
         sys.exit(1)
+    if question in ("split", "joined"):
+        labels = list(timeline_labels(tree["accessibility"]))
+        if question == "split":
+            task = f"{title} 14:42–14:44"
+            organizing = "Organizing · rebooked 14:44–now"
+            sys.exit(0 if task in labels and organizing in labels else 1)
+        sys.exit(0 if f"{title} 14:42–now" in labels and not any("rebooked" in label for label in labels) else 1)
     if question == "keytext":
         wanted = sys.argv[4]
         sys.exit(0 if any(e.get("key") == title and e.get("text") == wanted for e in tree["elements"]) else 1)

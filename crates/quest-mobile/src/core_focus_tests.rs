@@ -67,6 +67,29 @@ fn complete_ends_the_session_offers_undo_and_leaves_a_done_task_alone() {
 }
 
 #[test]
+fn focus_exit_hint_can_be_kept_rebooked_and_undone() {
+    let (_dir, core) = open();
+    let task = add(&core, "Write");
+    core.start_timer(task.clone(), now()).unwrap();
+    core.focus_left(later(30)).unwrap();
+    assert!(!core.focus_exit_status(later(149)).unwrap().unwrap().hint_due);
+    let status = core.focus_exit_status(later(150)).unwrap().unwrap();
+    assert_eq!(status.left_at_ms, later(30).epoch_ms);
+    assert!(status.hint_due);
+    core.keep_focus_time(later(150)).unwrap();
+    assert_eq!(core.book_focus_time(later(151)).unwrap(), None);
+    core.focus_opened().unwrap();
+    core.focus_left(later(155)).unwrap();
+    assert!(core.book_focus_time(later(275)).unwrap().is_some());
+    assert_eq!(core.focus_exit_status(later(275)).unwrap(), None);
+    assert_eq!(core.home(later(275), HomeQuery::default()).unwrap().toast.unwrap().text, "Booked as Organizing");
+    core.undo(later(276)).unwrap();
+    assert_eq!(shown_task(core.focus(later(276), None).unwrap()), Some((task.clone(), true)));
+    assert!(core.organize(later(280)).unwrap());
+    assert_eq!(core.back_to_task(later(350)).unwrap(), Some(task));
+}
+
+#[test]
 fn an_unknown_focus_task_is_ignored() {
     let (_dir, core) = open();
     assert_eq!(shown_task(core.focus(now(), Some("not-an-id".into())).unwrap()), None);

@@ -42,6 +42,7 @@ pub mod fields {
     pub const POSTPONEMENT_AT: &str = "at";
 
     pub const ENTRY_KIND: &str = "kind";
+    pub const ENTRY_REBOOKED_FROM: &str = "rebooked_from";
     pub const ENTRY_ORIGIN_TASK_ID: &str = "origin_task_id";
     pub const ENTRY_STARTED_AT: &str = "started_at";
     pub const ENTRY_ENDED_AT: &str = "ended_at";
@@ -177,6 +178,7 @@ pub struct TimeEntry {
     pub task_id: Option<EntityId>,
     pub quest_id: Option<EntityId>,
     pub origin_task_id: Option<EntityId>,
+    pub rebooked_from: Option<EntityId>,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
 }
@@ -335,6 +337,7 @@ impl TimeEntry {
             task_id: get_opt(values, fields::TASK_ID).filter(|_| on_task),
             quest_id: get_opt(values, fields::QUEST_ID).filter(|_| on_task),
             origin_task_id: get_opt(values, fields::ENTRY_ORIGIN_TASK_ID).filter(|_| !on_task),
+            rebooked_from: get_opt(values, fields::ENTRY_REBOOKED_FROM).filter(|_| !on_task),
             started_at: get(values, fields::ENTRY_STARTED_AT)?,
             ended_at: get_opt(values, fields::ENTRY_ENDED_AT),
         })

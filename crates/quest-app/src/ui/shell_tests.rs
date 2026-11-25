@@ -67,6 +67,7 @@ fn while_organizing_the_player_goes_back_to_the_task() {
     let design = task(&rt, "Design the next chapter").id;
     let now = rt.state.clock.now();
     rt.state.dispatch(Command::RebookAsOrganizing {
+        expected_task_entry: None,
         entry_id: EntityId::new(),
         since: now - Duration::minutes(12),
         now,

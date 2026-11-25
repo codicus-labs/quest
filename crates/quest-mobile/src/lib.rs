@@ -25,6 +25,8 @@ mod core_capture;
 mod core_checklist;
 mod core_connections;
 mod core_focus;
+mod core_focus_exit;
+pub use core_focus_exit::FocusExitStatus;
 mod core_lists;
 mod core_plan;
 mod core_plan_sections;

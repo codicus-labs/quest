@@ -14,10 +14,6 @@ icon!(
 );
 icon!(PLAY, r#"<path d="M5 3.2L12.5 8L5 12.8Z" fill="currentColor"/>"#);
 icon!(
-    PAUSE,
-    r#"<rect x="4" y="3" width="2.6" height="10" rx="0.6" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="9.4" y="3" width="2.6" height="10" rx="0.6" stroke="currentColor" stroke-width="1.1" fill="none"/>"#
-);
-icon!(
     CHECK,
     r#"<path d="M3.5 8.4L6.5 11.2L12.5 4.8" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>"#
 );

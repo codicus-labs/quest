@@ -138,6 +138,8 @@ pub struct State {
     pub review_week: NaiveDate,
     /// The task Focus is about when nothing runs: the one started or selected last.
     pub focus_task: Option<EntityId>,
+    pub focus_exit: quest_view::focus_exit::FocusExit,
+    focus_return: View,
     pub focus_draft: Option<FocusDraft>,
     pub note: Option<notes::NoteDraft>,
     closed_note: TextEdit,
@@ -214,6 +216,8 @@ impl State {
             landing: None,
             review_week: monday,
             focus_task: None,
+            focus_exit: Default::default(),
+            focus_return: View::Today,
             focus_draft: None,
             note: None,
             closed_note: TextEdit::default(),
@@ -294,6 +298,12 @@ impl State {
             self.landing = None;
         }
         self.finish_note();
+        if self.view != View::Focus && view == View::Focus {
+            self.focus_return = self.view;
+            self.focus_exit.open();
+        } else if self.view == View::Focus && view != View::Focus {
+            self.focus_exit.leave(&self.snap, self.clock.now());
+        }
         self.view = view;
         self.close_repeat_editor();
         self.close_task_modal();
@@ -358,7 +368,8 @@ impl State {
             UndoEvent::Deleted { .. }
             | UndoEvent::QuestStatusChanged { .. }
             | UndoEvent::TaskEdited(_)
-            | UndoEvent::ChecklistDone { .. } => {
+            | UndoEvent::ChecklistDone { .. }
+            | UndoEvent::Rebooked(_) => {
                 self.capture_undo = None;
             }
             _ => {}
@@ -367,6 +378,9 @@ impl State {
         self.undo = next;
         match effect {
             UndoEffect::None => {}
+            UndoEffect::UndoRebook(entry_id) => {
+                self.dispatch(Command::UndoOrganizingRebook { entry_id, at: self.clock.now() });
+            }
             UndoEffect::Task(edit) => self.undo_task_edit(edit),
             UndoEffect::Restore(item) => self.dispatch(item.restore()),
             UndoEffect::SetChecklistDone { id, done } => self.dispatch(Command::SetChecklistItemDone { id, done }),

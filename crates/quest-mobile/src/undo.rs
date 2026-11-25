@@ -12,6 +12,7 @@ use crate::types::UndoToast;
 /// What Undo asks the core to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum UndoAction {
+    UndoRebook(EntityId),
     Task(TaskEdit),
     Restore(Deletable),
     SetChecklistDone {
@@ -33,6 +34,11 @@ pub(crate) struct MobileUndo {
 }
 
 impl MobileUndo {
+    pub fn rebooked(&mut self, id: EntityId, now: DateTime<Utc>) {
+        self.completion_label = None;
+        self.step(UndoEvent::Rebooked(id), now);
+    }
+
     pub fn deleted(&mut self, item: Deletable, title: String, now: DateTime<Utc>) {
         self.completion_label = None;
         self.step(UndoEvent::Deleted { item, title }, now);
@@ -95,6 +101,7 @@ impl MobileUndo {
             UndoEffect::SetQuestStatus { quest, status } => Some(UndoAction::SetQuestStatus { quest, status }),
             UndoEffect::Task(edit) => Some(UndoAction::Task(edit)),
             UndoEffect::SetChecklistDone { id, done } => Some(UndoAction::SetChecklistDone { id, done }),
+            UndoEffect::UndoRebook(id) => Some(UndoAction::UndoRebook(id)),
             UndoEffect::None => None,
         }
     }
@@ -136,6 +143,7 @@ impl MobileUndo {
                 let verb = if *status == QuestStatus::Completed { "Completed" } else { "Reopened" };
                 (format!("{verb} quest “{title}”"), *until)
             }
+            (None, Some(Shown { toast: Toast::Rebooked, until })) => ("Booked as Organizing".into(), *until),
             (None, Some(Shown { toast: Toast::Done, until })) => ("Done".into(), *until),
             (None, Some(Shown { toast: Toast::DateChanged, until })) => ("Date changed".into(), *until),
             (None, Some(Shown { toast: Toast::QuestChanged, until })) => ("Quest changed".into(), *until),

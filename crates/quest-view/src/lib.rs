@@ -6,6 +6,7 @@ pub mod calendar;
 pub mod checklist;
 pub mod entry_editor;
 pub mod focus;
+pub mod focus_exit;
 pub mod format;
 pub mod home;
 pub mod lists;

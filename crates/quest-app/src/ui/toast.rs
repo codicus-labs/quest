@@ -14,6 +14,7 @@ use crate::undo::{Toast, UndoEvent};
 pub fn layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
     if let Some(shown) = &s.undo.shown {
         let (message, action, event) = match &shown.toast {
+            Toast::Rebooked => ("Booked as Organizing".into(), "Undo", UndoEvent::Undo),
             Toast::Done => ("Done".into(), "Undo", UndoEvent::Undo),
             Toast::DateChanged => ("Date change".into(), "Undo", UndoEvent::Undo),
             Toast::QuestChanged => ("Quest change".into(), "Undo", UndoEvent::Undo),

@@ -210,6 +210,18 @@ const SCENES: &[Scene] = &[
     ("entry-editor", entry_editor),
     ("entry-editor-light", |s| light(s, entry_editor)),
     ("shortcuts-light", |s| light(s, |s| s.overlay = Overlay::Shortcuts)),
+    ("r5-hint", focus_hint),
+    ("r5-hint-light", |s| light(s, focus_hint)),
+    ("r5-booked", |s| {
+        focus_hint(s);
+        s.book_organizing();
+    }),
+    ("r5-booked-light", |s| {
+        light(s, |s| {
+            focus_hint(s);
+            s.book_organizing();
+        })
+    }),
     ("organizing", organizing),
     ("organizing-light", |s| light(s, organizing)),
     ("light", |s| s.dark = false),
@@ -245,6 +257,7 @@ fn entry_editor(s: &mut State) {
 fn organizing(s: &mut State) {
     let now = s.clock.now();
     s.dispatch(quest_domain::Command::RebookAsOrganizing {
+        expected_task_entry: None,
         entry_id: quest_domain::EntityId::new(),
         since: now - chrono::Duration::minutes(12),
         now,
@@ -252,6 +265,14 @@ fn organizing(s: &mut State) {
 }
 
 /// Today's first open task's dialog, with the quest picker open on `search`.
+fn focus_hint(s: &mut State) {
+    let original = s.clock;
+    s.go(View::Focus);
+    s.clock = Clock::Fixed(original.now() - chrono::TimeDelta::minutes(22));
+    s.go(View::Today);
+    s.clock = original;
+}
+
 fn task_modal_quests(s: &mut State, search: &str) {
     more_quests(s);
     if let Some(task) = first_open_task(s) {
@@ -306,8 +327,10 @@ fn r4_edit(s: &mut State) {
 
 fn r4_focus(s: &mut State) {
     if let Some(id) = r4_notes(s) {
+        let clock = s.clock;
+        s.clock = Clock::Fixed(clock.now() - chrono::TimeDelta::minutes(18));
         s.start_focus(id);
-        s.go(View::Focus);
+        s.clock = clock;
     }
 }
 

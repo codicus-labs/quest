@@ -32,6 +32,7 @@ fn entry(n: u128, task: u128, minute: u32, running: bool) -> TimeEntry {
         id: id(n),
         kind: EntryKind::Task,
         origin_task_id: None,
+        rebooked_from: None,
         task_id: Some(id(task)),
         quest_id: None,
         started_at: at(minute),

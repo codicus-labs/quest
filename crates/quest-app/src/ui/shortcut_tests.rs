@@ -33,6 +33,9 @@ fn list_timer_keeps_its_position_when_started_and_stopped() {
     let before = center(&rt, &button);
     click(&mut rt, &button);
     assert!(runs(&rt, id));
+    assert_eq!(rt.state.view, View::Focus);
+    press(&mut rt, Key::Escape, Mods::default());
+    assert!(runs(&rt, id));
     assert_eq!(center(&rt, &button), before);
     click(&mut rt, &button);
     assert!(rt.state.snap.running_entry().is_none());
@@ -49,9 +52,10 @@ fn keys_act_on_the_task_under_the_pointer() {
 
     type_text(&mut rt, " ");
     assert!(runs(&rt, essay), "Space starts it");
-    assert_eq!(rt.state.view, View::Today, "and stays on Today");
+    assert_eq!(rt.state.view, View::Focus);
     type_text(&mut rt, " ");
-    assert!(rt.state.snap.running_entry().is_none(), "Space again pauses it");
+    assert!(rt.state.snap.running_entry().is_none(), "Space in Focus stops it");
+    hover(&mut rt, essay);
 
     type_text(&mut rt, "x");
     assert!(task(&rt, "Draft this week’s essay").is_done(), "X completes");
@@ -175,15 +179,16 @@ fn focus_complete_ends_the_session_marks_done_and_goes_home() {
 }
 
 #[test]
-fn focus_keys_pause_resume_complete_and_leave() {
+fn focus_keys_stop_restart_complete_and_leave() {
     let (mut rt, _dir) = demo_app();
     let design = task(&rt, "Design the next chapter").id;
     go(&mut rt, View::Focus);
     type_text(&mut rt, " ");
-    assert!(rt.state.snap.running_entry().is_none(), "Space pauses");
-    assert!(rt.find("focus-title").is_some(), "Focus keeps showing the paused task");
-    type_text(&mut rt, " ");
-    assert!(runs(&rt, design), "Space resumes");
+    assert!(rt.state.snap.running_entry().is_none(), "Space stops");
+    assert_eq!(rt.state.view, View::Today);
+    click(&mut rt, "player-resume");
+    assert!(runs(&rt, design), "Resume starts a new session");
+    assert_eq!(rt.state.view, View::Focus);
     let (key, mods) = cmd(Key::Enter);
     press(&mut rt, key, mods);
     assert!(task(&rt, "Design the next chapter").is_done(), "⌘↵ completes");

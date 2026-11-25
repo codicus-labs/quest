@@ -11,7 +11,7 @@ pub struct Options {
     pub data_dir: PathBuf,
     /// Seed demo quests, tasks and tracked time into an empty store.
     pub demo: bool,
-    /// Pin the clock to a local time (`--now 2026-10-15T14:40`), for reproducible snapshots.
+    /// Pin the clock for snapshots (`--now 2026-10-15T14:40`); F12 advances it by two minutes.
     pub now: Option<NaiveDateTime>,
     /// AI capture answers with this proposal (a `CaptureProposal` as JSON) instead of asking the
     /// server: for the E2E run and demos without network or AI provider.
