@@ -142,6 +142,7 @@ private fun TaskDetails(state: TaskSheetState.Open, actions: TaskSheetActions) {
     )
     Caps(stringResource(R.string.task_date))
     DateRow(detail, actions.setDay)
+    DueRow(detail)
     Caps(stringResource(R.string.task_repeat))
     RepeatRow(detail.repeatLabel, actions.openRepeat)
     Caps(stringResource(R.string.task_quest))
@@ -194,20 +195,33 @@ private fun DateRow(detail: TaskDetail, onSetDay: (String?) -> Unit) {
         TextButton(onClick = { picking = true }, modifier = Modifier.testTag("sheet-date")) {
             Icon(Icons.Filled.DateRange, contentDescription = stringResource(R.string.task_choose_date), tint = colors.textMuted)
             Text(
-                detail.date?.label ?: stringResource(R.string.task_backlog),
+                detail.plannedOn?.label ?: stringResource(R.string.task_backlog),
                 style = QuestType.body,
-                color = if (detail.date == null) colors.textFaint else colors.text,
+                color = if (detail.plannedOn == null) colors.textFaint else colors.text,
                 modifier = Modifier.padding(start = QuestSpacing.small),
             )
         }
         Box(Modifier.weight(1f))
-        if (detail.date != null) {
+        if (detail.plannedOn != null) {
             TextButton(onClick = { onSetDay(null) }, modifier = Modifier.testTag("sheet-backlog")) {
                 Text(stringResource(R.string.task_move_to_backlog), style = QuestType.body, color = colors.textMuted)
             }
         }
     }
-    if (picking) DayPickerDialog(detail.date?.iso, onPick = { onSetDay(it) }, onDismiss = { picking = false })
+    if (picking) DayPickerDialog(detail.plannedOn?.iso, onPick = { onSetDay(it) }, onDismiss = { picking = false })
+}
+
+/** The deadline, read-only (set on the desktop or by capture); nothing without one. */
+@Composable
+private fun DueRow(detail: TaskDetail) {
+    val due = detail.dueOn ?: return
+    Caps(stringResource(R.string.task_deadline))
+    Text(
+        due.label,
+        style = QuestType.body,
+        color = if (detail.overdue) QuestTheme.colors.accent else QuestTheme.colors.text,
+        modifier = Modifier.testTag("sheet-due"),
+    )
 }
 
 @Composable

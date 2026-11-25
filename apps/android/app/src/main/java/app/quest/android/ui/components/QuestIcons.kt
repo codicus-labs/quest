@@ -42,12 +42,9 @@ object QuestIcons {
     )
     val Trash = outline("trash", "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.3c0 .4.4.7.8.7h4.2c.4 0 .8-.3.8-.7l.6-8.3", width = 1.1f)
     val Focus = outline("focus", "M13.5 9A5.5 5.5 0 1 1 2.5 9A5.5 5.5 0 1 1 13.5 9Z", "M8 9V6.2", "M6.5 1.8h3", width = 1.1f)
-    val ListView = outline("list-view", "M5.5 4h8M5.5 8h8M5.5 12h8", "M2.5 4h.6M2.5 8h.6M2.5 12h.6", width = 1.1f)
-    val DayGridView = outline("day-grid-view", "M2.5 2.5h11v11h-11Z", "M2.5 6.2h11M2.5 9.8h11", "M5.5 2.5v11", width = 1.1f)
     /** A task without a quest: a circle with a plus (no desktop icon; the desktop shows "No quest"). */
     val AssignQuest = outline("assign-quest", "M13 8A5 5 0 1 1 3 8A5 5 0 1 1 13 8Z", "M8 5.6v4.8M5.6 8h4.8", width = 1.1f)
     val Archive = outline("archive", "M2.5 3h11v3h-11Z", "M3.5 6v7h9V6", "M6.5 8.5h3", width = 1.1f)
-    val Milestone = outline("milestone", "M8 2.5L13.5 8L8 13.5L2.5 8Z", width = 1.1f)
     val Trophy = outline("trophy", "M5 2.5h6v3.5a3 3 0 0 1-6 0Z", "M5 4H3c0 1.8 1 2.8 2.2 2.9M11 4h2c0 1.8-1 2.8-2.2 2.9", "M8 9v2.5M5.5 13.5h5M6.5 11.5h3", width = 1.1f)
     val Restore = outline("restore", "M3 8a5 5 0 1 0 1.5-3.5", "M2.8 2.5v2.5h2.5", width = 1.1f)
     /** Dictation (no desktop icon). */

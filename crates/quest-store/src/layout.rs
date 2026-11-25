@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use url::Url;
 
-use crate::db;
 use crate::error::StoreError;
 
 const GUEST_DIR: &str = "guest";
@@ -141,34 +140,6 @@ impl Layout {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(storage(&removed, e)),
         }
-    }
-
-    /// Adopts the single database of earlier versions as the guest store, once: its data stays
-    /// on this device, its old session and account binding are dropped. Does nothing if there is
-    /// none or a guest store exists already.
-    pub fn adopt_legacy_db(&self) -> Result<(), StoreError> {
-        let legacy = self.data_dir.join(db::FILE_NAME);
-        if !legacy.exists() {
-            return Ok(());
-        }
-        let guest_dir = self.guest_dir();
-        let guest = guest_dir.join(db::FILE_NAME);
-        if !guest.exists() {
-            std::fs::create_dir_all(&guest_dir).map_err(|e| storage(&guest_dir, e))?;
-            let copy = guest_dir.join(format!("{}.adopting", db::FILE_NAME));
-            let _ = std::fs::remove_file(&copy);
-            db::copy_as_guest(&legacy, &copy)?;
-            std::fs::rename(&copy, &guest).map_err(|e| storage(&guest, e))?;
-        }
-        for suffix in ["", "-wal", "-shm"] {
-            let file = self.data_dir.join(format!("{}{suffix}", db::FILE_NAME));
-            match std::fs::remove_file(&file) {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(storage(&file, e)),
-            }
-        }
-        Ok(())
     }
 }
 

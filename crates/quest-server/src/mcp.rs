@@ -50,6 +50,7 @@ const MAX_BODY_BYTES: usize = 256 * 1024;
 pub(crate) const READ_TOOLS: &[&str] = &[
     "list_tasks",
     "get_task",
+    "get_checklist",
     "list_quests",
     "get_quest",
     "search",
@@ -123,8 +124,8 @@ fn principal(context: &RequestContext<RoleServer>) -> Option<McpPrincipal> {
 #[tool_handler(
     router = self.tool_router,
     name = "quest",
-    instructions = "Quest plans the user's days: quests (long-term goals with milestones), tasks (on a day, \
-        or in the backlog when they have no day) and tracked time. Always pass the user's IANA time_zone (for \
+    instructions = "Quest plans the user's days: quests (long-term goals), tasks (with an optional plan \
+        date, deadline and checklist) and tracked time (on tasks, or organizing). Always pass the user's IANA time_zone (for \
         example Europe/Berlin) so that today, days and clock times mean what the user means; dates are ISO \
         (2026-11-24), clock times HH:MM in that zone, instants RFC 3339 with offset. The user may keep \
         separate workspaces (e.g. work and private); every tool works in the default workspace unless you pass \

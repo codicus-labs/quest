@@ -80,7 +80,7 @@ class SearchViewModelTest {
 
     @Test
     fun queryAndModeSurviveProcessDeath() = runTest(main.dispatcher) {
-        core.searchOutcome = { SearchOutcome.Choose(SearchMode.ScheduleAt("t1"), "Schedule at…") }
+        core.searchOutcome = { SearchOutcome.Choose(SearchMode.MoveTo("t1"), "Move to…") }
         val saved = SavedStateHandle()
         val vm = viewModel(saved)
         vm.run(SearchToken.MoveTask("t1", null))
@@ -88,7 +88,7 @@ class SearchViewModelTest {
 
         val restored = viewModel(saved)
 
-        assertEquals(SavedSearchMode.ScheduleAt("t1"), restored.ready.mode)
+        assertEquals(SavedSearchMode.MoveTo("t1"), restored.ready.mode)
         assertEquals("fri", restored.ready.query)
     }
 }

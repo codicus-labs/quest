@@ -1,7 +1,7 @@
 # Quest for Android (prototype)
 
 Jetpack Compose UI over the shared Rust core (`crates/quest-mobile` → `quest-store` → `quest-domain`),
-bound with UniFFI: Home, Focus, Plan, Calendar, Quests, Review, Archive, Search, Account and Settings, plus a
+bound with UniFFI: Home, Focus, Plan, Quests, Review, Archive, Search, Account and Settings, plus a
 home-screen widget, background sync, sharing, shortcuts and a Quick Settings tile. Architecture notes and
 per-phase decisions: `docs/mobile.md`; startup and jank numbers: `docs/perf/android-startup.md`.
 
@@ -127,34 +127,23 @@ adb shell "input motionevent DOWN 540 1300; sleep 0.8; input motionevent MOVE 54
 Tablet layout on the phone emulator: `adb shell wm size 2560x1600; adb shell wm density 320`, back with
 `wm size reset` and `wm density reset`. Numbers: `docs/perf/plan-android.md`.
 
-## Calendar
+## Log work
 
-One day on phones, three from 600 dp, the week from 840 dp. Swipe or use the arrows to turn pages. Tap a
-session to edit it, a planned block to open its task. Long-press a block to move it (also to another day),
-long-press empty space and drag to log a new span, or drag a block's edge pill to change its start or end.
-“Log work” (FAB on phones, header button on tablets) logs the last 15 minutes by default. Handles drag
-without the long press:
-
-```sh
-adb shell "input motionevent DOWN 613 1908; input motionevent MOVE 613 1880; \
-  input motionevent MOVE 613 1830; input motionevent UP 613 1805"
-```
-
-Dragging a block near the grid's top or bottom edge scrolls the grid (speed from the core's
-`edge_speed`); edge pills take a 48 dp touch zone.
+“Log work” (app shortcut, Search) opens a sheet over the current tab and logs the last 15 minutes by
+default; the task picker can also create the task.
 
 ## Quests, Review, Archive, Search
 
 Quests: as on the desktop, figures (quest hours, in progress, completed), “Active · n” / “Completed · n”
 tabs and Archive beside them; cards show colour, name, open tasks and this week's and total hours. Tapping
-a card opens the quest editor as a bottom sheet (title, description, colour, Complete/Reopen quest with
+a card opens the quest editor as a bottom sheet (title, colour, Complete/Reopen quest with
 Undo, Open quest page, Delete); closing it keeps the tab and scroll. “New quest” (FAB on phones, header
 button on tablets, the dashed card) opens it empty; Create needs only a title. The quest page is for work:
-tasks, and its milestones to read (no section without any). Review: arrows or a sideways swipe
+its tasks. Review: arrows or a sideways swipe
 turn weeks, a bar under “Recent weeks” jumps to that week. Archive (Quests header, Account, Search)
-restores deleted quests, tasks, milestones and sessions; quests an older version archived are listed with
+restores deleted quests, tasks, checklist items and sessions; quests an older version archived are listed with
 Open and Unarchive. Search (top bar): results come from the core;
-the keyboard's Search runs the first one; “Move to…”/“Schedule at…” switch the list.
+the keyboard's Search runs the first one; “Move to…” switches the list.
 
 A running timer keeps a foreground service alive, so
 `am kill` only ends the process once the timer is stopped.
@@ -257,7 +246,7 @@ and review the diff.
 
 ## Baseline Profile and startup benchmark
 
-`:baselineprofile` (a `com.android.test` module) drives the app through start, Home, Plan and Calendar.
+`:baselineprofile` (a `com.android.test` module) drives the app through start, Home and Plan.
 The generated profile is checked in (`app/src/release/generated/baselineProfiles/`) and installed by
 profileinstaller. Regenerate after larger UI changes, with the emulator running:
 
@@ -342,9 +331,9 @@ Without Obtainium: download the APK from the release page and open it (allow ins
 ## Accessibility
 
 Screen titles and section headings are `heading()`s; cards have accessibility actions for what touch does by
-swipe or drag (complete, delete, move, and in the calendar “Move/End 15 minutes earlier/later”). Text scales
+swipe or drag (complete, delete, move). Text scales
 with the system font size (checked at 200 % in Roborazzi: `*-font200-light.png`); only the bottom navigation
-labels (130 %) and the calendar's hour column (120 %) are capped. Password fields are marked for autofill.
+labels (130 %) are capped. Password fields are marked for autofill.
 
 ## License
 

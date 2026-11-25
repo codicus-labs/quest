@@ -18,14 +18,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uniffi.quest_mobile.AddPosition
-import uniffi.quest_mobile.DayGrid
 import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.SyncState
 import uniffi.quest_mobile.TaskSection
-
-/** What a compact (phone) Home shows; wider windows show both side by side. */
-enum class CompactView { List, Grid }
 
 /**
  * What the user typed or picked on Home. Kept in the [SavedStateHandle], so it survives
@@ -36,7 +32,6 @@ data class HomeInputs(
     val questPick: String? = null,
     val questWorkDraft: String = "",
     val otherDraft: String = "",
-    val compactView: CompactView = CompactView.List,
 ) : Serializable {
     val query get() = HomeQuery(questFilter = questFilter, questPick = questPick)
 
@@ -56,7 +51,6 @@ sealed interface HomeUiState {
 
     data class Ready(
         val home: HomeData,
-        val grid: DayGrid,
         val sync: SyncState,
         val prefs: HomePrefs,
         val inputs: HomeInputs,
@@ -135,8 +129,6 @@ class HomeViewModel(
     /** Another workspace is shown: its quests differ, so the filter and the pick go (typed text stays). */
     fun leaveWorkspace() = updateInputs { it.copy(questFilter = null, questPick = null) }
 
-    fun setCompactView(view: CompactView) = updateInputs { it.copy(compactView = view) }
-
     fun setShowOther(show: Boolean) {
         viewModelScope.launch { preferences.setShowOther(show) }
     }
@@ -156,6 +148,6 @@ class HomeViewModel(
 
 private fun homeState(state: CoreState, prefs: HomePrefs?, inputs: HomeInputs): HomeUiState = when (state) {
     CoreState.Opening -> HomeUiState.Loading
-    is CoreState.Ready -> if (prefs == null) HomeUiState.Loading else HomeUiState.Ready(state.home, state.todayGrid, state.sync, prefs, inputs)
+    is CoreState.Ready -> if (prefs == null) HomeUiState.Loading else HomeUiState.Ready(state.home, state.sync, prefs, inputs)
     is CoreState.Failed -> HomeUiState.Failed(state.message)
 }

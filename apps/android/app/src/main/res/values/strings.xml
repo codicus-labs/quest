@@ -26,8 +26,6 @@
     <string name="home_add_quest">Quest for new quest work</string>
     <string name="home_add_top">Top</string>
     <string name="home_add_bottom">Bottom</string>
-    <string name="home_view_list">Show list</string>
-    <string name="home_view_grid">Show day grid</string>
     <string name="home_add_task">Add task</string>
     <string name="home_add_position">New tasks go to</string>
 
@@ -60,6 +58,7 @@
     <string name="task_date">Date</string>
     <string name="task_choose_date">Choose date</string>
     <string name="task_backlog">Backlog</string>
+    <string name="task_deadline">Deadline</string>
     <string name="task_move_to_backlog">Move to backlog</string>
     <string name="task_repeat">Repeat</string>
     <string name="task_quest">Quest</string>
@@ -111,7 +110,6 @@
     <!-- App frame, account and settings (phase 0) -->
     <string name="nav_home">Home</string>
     <string name="nav_plan">Plan</string>
-    <string name="nav_calendar">Calendar</string>
     <string name="nav_quests">Quests</string>
     <string name="nav_review">Review</string>
     <string name="search">Search</string>
@@ -173,17 +171,7 @@
     <string name="plan_move_down">Move down</string>
     <string name="plan_move_previous_day">Move to previous day</string>
     <string name="plan_move_next_day">Move to next day</string>
-    <!-- Calendar (desktop ui/calendar.rs, log_work.rs, entry_editor.rs, task_picker.rs) -->
-    <string name="calendar_previous_week">Previous week</string>
-    <string name="calendar_next_week">Next week</string>
-    <string name="calendar_previous_days">Previous days</string>
-    <string name="calendar_next_days">Next days</string>
-    <string name="calendar_of_target">/ %1$s quest</string>
-    <string name="calendar_edit_entry">Edit time entry</string>
-    <string name="calendar_move_earlier">Move 15 minutes earlier</string>
-    <string name="calendar_move_later">Move 15 minutes later</string>
-    <string name="calendar_end_earlier">End 15 minutes earlier</string>
-    <string name="calendar_end_later">End 15 minutes later</string>
+    <!-- Log work (desktop log_work.rs, task_picker.rs) -->
     <string name="log_work">Log work</string>
     <string name="log_work_new_task">New completed task</string>
     <string name="form_task">Task</string>
@@ -192,15 +180,6 @@
     <string name="form_start">Start</string>
     <string name="form_end">End</string>
     <string name="form_duration">Duration</string>
-    <string name="entry_editor_title">Edit time entry</string>
-    <string name="entry_no_task">No task</string>
-    <string name="entry_clear_task">Clear task</string>
-    <string name="entry_open_task">Open task</string>
-    <string name="entry_start_date">Start date</string>
-    <string name="entry_end_date">End date</string>
-    <string name="entry_running">running</string>
-    <string name="entry_ends_other_day">Ends on a different day</string>
-    <string name="task_picker_search">Search tasks…</string>
     <string name="task_picker_search_or_create">Search or create a task…</string>
     <string name="task_picker_empty">No matching tasks.</string>
 
@@ -218,8 +197,6 @@
     <string name="quests_this_week">This week</string>
     <string name="quest_name">Name</string>
     <string name="quest_rename">Rename quest</string>
-    <string name="quest_description">Description</string>
-    <string name="quest_description_placeholder">Add a description…</string>
     <string name="quest_edit">Edit quest</string>
     <string name="quest_title">Quest title</string>
     <string name="quest_title_placeholder">Name a long-term goal</string>
@@ -235,7 +212,6 @@
     <string name="quest_done_count">Done</string>
     <string name="quest_week_hours">This week</string>
     <string name="quest_total_hours">Total</string>
-    <string name="quest_milestones">Milestones</string>
     <string name="quest_add">Add</string>
     <!-- Review -->
     <string name="review_title">Weekly review</string>
@@ -341,8 +317,6 @@
     <string name="capture_quest_title">Quest name</string>
     <string name="capture_someday">Someday</string>
     <string name="capture_pick_day">Choose a day</string>
-    <string name="capture_block">Time block</string>
-    <string name="capture_remove_block">Remove time block</string>
     <string name="capture_repeat_edit">Edit repeat</string>
     <string name="capture_new_task">New task</string>
     <string name="capture_back_to_text">Back to text</string>

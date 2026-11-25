@@ -83,20 +83,20 @@ pub fn total_ms(snapshot: &Snapshot, quest: EntityId, now: DateTime<Utc>) -> i64
     quest_ms(snapshot, quest, DateTime::<Utc>::MIN_UTC, DateTime::<Utc>::MAX_UTC, now)
 }
 
-/// The quest's tasks in display order: open ones by day, then the backlog, then what's done
-/// (latest first). Empty groups are left out.
+/// The quest's tasks in display order: open ones by plan date, then the unplanned ones, then
+/// what's done (latest first). Empty groups are left out.
 pub fn task_groups(snapshot: &Snapshot, quest: EntityId, today: NaiveDate) -> Vec<(String, Vec<&Task>)> {
     let mine = || snapshot.tasks.iter().filter(move |t| t.quest_id == Some(quest));
-    let mut days: Vec<NaiveDate> = mine().filter(|t| !t.is_done()).filter_map(|t| t.day).collect();
+    let mut days: Vec<NaiveDate> = mine().filter(|t| !t.is_done()).filter_map(|t| t.planned_on).collect();
     days.sort();
     days.dedup();
     let mut out: Vec<(String, Vec<&Task>)> = days
         .into_iter()
-        .map(|day| (day_label(day, today), mine().filter(|t| !t.is_done() && t.day == Some(day)).collect()))
+        .map(|day| (day_label(day, today), mine().filter(|t| !t.is_done() && t.planned_on == Some(day)).collect()))
         .collect();
-    let backlog: Vec<&Task> = mine().filter(|t| !t.is_done() && t.day.is_none()).collect();
-    if !backlog.is_empty() {
-        out.push(("Backlog".to_owned(), backlog));
+    let unplanned: Vec<&Task> = mine().filter(|t| !t.is_done() && t.planned_on.is_none()).collect();
+    if !unplanned.is_empty() {
+        out.push(("Not planned".to_owned(), unplanned));
     }
     let mut done: Vec<&Task> = mine().filter(|t| t.is_done()).collect();
     done.sort_by_key(|t| std::cmp::Reverse(t.completed_at));

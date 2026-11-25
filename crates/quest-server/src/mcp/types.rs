@@ -27,7 +27,7 @@ pub enum DoneFilter {
 
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema)]
 pub struct ListTasksInput {
-    /// One day (ISO date). Without day, from/to and someday: today.
+    /// One plan date (ISO date). Without day, from/to and unplanned: today.
     #[serde(default)]
     pub day: Option<String>,
     /// First day of a range (ISO date, inclusive).
@@ -36,9 +36,9 @@ pub struct ListTasksInput {
     /// Last day of a range (ISO date, inclusive); at most 62 days after `from`.
     #[serde(default)]
     pub to: Option<String>,
-    /// true: the backlog (tasks without a day) instead of days.
+    /// true: tasks without a plan date instead of days.
     #[serde(default)]
-    pub someday: bool,
+    pub unplanned: bool,
     /// Only tasks of this quest.
     #[serde(default)]
     pub quest_id: Option<String>,
@@ -123,15 +123,6 @@ pub struct ListEntriesInput {
     pub context: CallContext,
 }
 
-/// A planned time slot on the task's day.
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-pub struct BlockInput {
-    /// Local start time "HH:MM".
-    pub start: String,
-    /// Length in minutes (5 to 1440); the block must end by midnight.
-    pub minutes: u32,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FrequencyInput {
@@ -141,7 +132,7 @@ pub enum FrequencyInput {
     Year,
 }
 
-/// When a task repeats. The series starts on the task's day (or `starts`).
+/// When a task repeats. The series starts on the task's plan date (or `starts`).
 #[derive(Clone, Debug, Deserialize, JsonSchema)]
 pub struct RepeatInput {
     /// Every n days/weeks/months/years (1 to 999); default 1.
@@ -154,7 +145,7 @@ pub struct RepeatInput {
     /// Monthly only: day of month 1 to 31, or "last"; default the start's day.
     #[serde(default)]
     pub month_day: Option<String>,
-    /// First day (ISO date); default the task's day, else today.
+    /// First day (ISO date); default the task's plan date, else today.
     #[serde(default)]
     pub starts: Option<String>,
     /// Last day (ISO date); default never.
@@ -167,14 +158,14 @@ pub struct CreateTaskInput {
     pub title: String,
     #[serde(default)]
     pub description: Option<String>,
-    /// ISO date, or "someday" for the backlog. Default today.
+    /// Plan date (ISO date); default none.
     #[serde(default)]
-    pub day: Option<String>,
+    pub planned_on: Option<String>,
+    /// Deadline (ISO date); default none.
+    #[serde(default)]
+    pub due_on: Option<String>,
     #[serde(default)]
     pub quest_id: Option<String>,
-    /// Needs a day.
-    #[serde(default)]
-    pub block: Option<BlockInput>,
     #[serde(default)]
     pub repeat: Option<RepeatInput>,
     #[serde(flatten)]
@@ -190,17 +181,15 @@ pub struct UpdateTaskInput {
     /// Replaces the description; "" clears it.
     #[serde(default)]
     pub description: Option<String>,
-    /// ISO date, or "someday" for the backlog. Moves the task to the end of that day.
+    /// Plan date (ISO date), or "none" to unplan. Moves the task to the end of that day.
     #[serde(default)]
-    pub day: Option<String>,
+    pub planned_on: Option<String>,
+    /// Deadline (ISO date), or "none" to clear it.
+    #[serde(default)]
+    pub due_on: Option<String>,
     /// A quest id, or "none" to take the task out of its quest.
     #[serde(default)]
     pub quest_id: Option<String>,
-    #[serde(default)]
-    pub block: Option<BlockInput>,
-    /// true: remove the time block.
-    #[serde(default)]
-    pub clear_block: bool,
     /// Sets the repeat of the task's series.
     #[serde(default)]
     pub repeat: Option<RepeatInput>,
@@ -222,8 +211,8 @@ pub enum PositionInput {
 #[derive(Clone, Debug, Deserialize, JsonSchema)]
 pub struct MoveTaskInput {
     pub task_id: String,
-    /// ISO date, or "someday" for the backlog.
-    pub day: String,
+    /// Plan date (ISO date), or "none" to unplan.
+    pub planned_on: String,
     /// top or bottom (default) of that day's list.
     #[serde(default)]
     pub position: PositionInput,
@@ -236,7 +225,7 @@ pub struct MoveTaskInput {
 pub enum ItemKind {
     Task,
     Quest,
-    Milestone,
+    ChecklistItem,
     TimeEntry,
 }
 
@@ -265,8 +254,6 @@ pub enum ColorInput {
 #[derive(Clone, Debug, Deserialize, JsonSchema)]
 pub struct CreateQuestInput {
     pub title: String,
-    #[serde(default)]
-    pub description: Option<String>,
     /// Default: the next unused color.
     #[serde(default)]
     pub color: Option<ColorInput>,
@@ -287,9 +274,6 @@ pub struct UpdateQuestInput {
     pub quest_id: String,
     #[serde(default)]
     pub title: Option<String>,
-    /// Replaces the description; "" clears it.
-    #[serde(default)]
-    pub description: Option<String>,
     #[serde(default)]
     pub color: Option<ColorInput>,
     /// completed = done (moves to Completed); active reopens it.
@@ -300,31 +284,51 @@ pub struct UpdateQuestInput {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema)]
-pub struct AddMilestoneInput {
-    pub quest_id: String,
-    pub title: String,
-    /// ISO date; default today.
-    #[serde(default)]
-    pub achieved_on: Option<String>,
+pub struct AddChecklistItemInput {
+    pub task_id: String,
+    pub text: String,
     #[serde(flatten)]
     pub context: CallContext,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema)]
-pub struct UpdateMilestoneInput {
-    pub milestone_id: String,
-    #[serde(default)]
-    pub title: Option<String>,
-    /// ISO date.
-    #[serde(default)]
-    pub achieved_on: Option<String>,
+pub struct CheckChecklistItemInput {
+    pub item_id: String,
+    /// true (default): done; false: open again.
+    #[serde(default = "yes")]
+    pub done: bool,
+    #[serde(flatten)]
+    pub context: CallContext,
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
+pub struct RenameChecklistItemInput {
+    pub item_id: String,
+    pub text: String,
     #[serde(flatten)]
     pub context: CallContext,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema)]
-pub struct MilestoneIdInput {
-    pub milestone_id: String,
+pub struct ChecklistItemIdInput {
+    pub item_id: String,
+    #[serde(flatten)]
+    pub context: CallContext,
+}
+
+/// Tracks a task, or organizing (sorting out lists between tasks).
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema)]
+pub struct StartTimerInput {
+    /// The task to track; with organizing, the task to go back to (optional).
+    #[serde(default)]
+    pub task_id: Option<String>,
+    /// true: track organizing instead of the task.
+    #[serde(default)]
+    pub organizing: bool,
     #[serde(flatten)]
     pub context: CallContext,
 }
@@ -373,23 +377,15 @@ pub struct RefOut {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
-pub struct BlockOut {
-    /// Local "HH:MM".
-    pub start: String,
-    /// Local "HH:MM"; "24:00" is midnight.
-    pub end: String,
-    pub minutes: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct TaskOut {
     pub id: String,
     pub title: String,
     pub description: String,
     pub quest: Option<RefOut>,
-    /// ISO date; null: backlog ("someday").
-    pub day: Option<String>,
-    pub block: Option<BlockOut>,
+    /// Plan date (ISO date); null: not planned.
+    pub planned_on: Option<String>,
+    /// Deadline (ISO date); null: none.
+    pub due_on: Option<String>,
     pub done: bool,
     /// RFC 3339.
     pub completed_at: Option<String>,
@@ -413,19 +409,9 @@ pub struct TaskResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
-pub struct MilestoneOut {
-    pub id: String,
-    pub quest_id: String,
-    pub title: String,
-    /// ISO date.
-    pub achieved_on: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct QuestOut {
     pub id: String,
     pub title: String,
-    pub description: String,
     pub color: String,
     /// active, completed, or archived (put away by an older app version; not counted as completed).
     pub status: String,
@@ -442,8 +428,7 @@ pub struct QuestsOut {
 pub struct QuestDetailOut {
     pub time_zone: String,
     pub quest: QuestOut,
-    pub milestones: Vec<MilestoneOut>,
-    /// Open tasks first (by day), then the 20 most recently done.
+    /// Open tasks first (by plan date), then the 20 most recently done.
     pub tasks: Vec<TaskOut>,
 }
 
@@ -453,8 +438,17 @@ pub struct QuestResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
-pub struct MilestoneResult {
-    pub milestone: MilestoneOut,
+pub struct ChecklistItemOut {
+    pub id: String,
+    pub text: String,
+    pub done: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct ChecklistOut {
+    pub task: RefOut,
+    /// In display order.
+    pub items: Vec<ChecklistItemOut>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -471,7 +465,6 @@ pub struct SearchOut {
     pub time_zone: String,
     pub quests: Vec<QuestOut>,
     pub tasks: Vec<TaskOut>,
-    pub milestones: Vec<MilestoneOut>,
     /// Only with include_archived.
     pub archived: Vec<ArchivedOut>,
 }
@@ -495,7 +488,9 @@ pub struct WeekReviewOut {
     /// Monday, ISO date.
     pub week_start: String,
     pub quest_minutes: i64,
-    /// Tracked time not linked to a quest.
+    /// Sorting out lists between tasks.
+    pub organizing_minutes: i64,
+    /// Other tracked time not linked to a quest.
     pub other_minutes: i64,
     pub target_minutes: i64,
     pub quest_share_percent: u8,
@@ -504,10 +499,21 @@ pub struct WeekReviewOut {
     pub quests: Vec<QuestMinutesOut>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum EntryKindOut {
+    Task,
+    Organizing,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct EntryOut {
     pub id: String,
+    /// task: work (on a task or other work); organizing: sorting out lists.
+    pub kind: EntryKindOut,
     pub task: Option<RefOut>,
+    /// Organizing only: the task to go back to.
+    pub origin_task: Option<RefOut>,
     pub quest: Option<RefOut>,
     /// RFC 3339.
     pub started_at: String,

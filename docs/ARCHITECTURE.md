@@ -5,14 +5,18 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
 
 ## Produkt
 
-- **Quest**: langfristiges Ziel mit Farbe. **Task**: konkrete Arbeit, optional einer Quest und
-  einem Tag zugeordnet, optional mit Zeitblock im Tageskalender. **Time entry**: getrackte Zeit
-  (Focus-Session) auf einem Task; Zeit auf Quest-Tasks = „Quest Hours“. **Milestone**: erreichter
-  Meilenstein einer Quest. **Settings**: Wochenziel in Minuten.
-- Ansichten (Top-Navigation): **Home** (Tag: Quest-Work-Liste + Tageskalender,
-  „3.6h today / 18h this week“), **Plan** (Wochenplaner, Spalten pro Tag, Tasks verschieben),
-  **Calendar** (Woche als Zeitraster mit Zeitblöcken), **Focus** (ein Task, großer Timer,
-  Pause/Complete), **Quests** (Quests verwalten, Milestones), **Review** (Wochen-Review).
+- **Quest**: langfristiges Ziel mit Titel, Farbe und Status. **Task**: konkrete Arbeit, optional einer Quest
+  zugeordnet, mit optionalem Plan-Datum (`planned_on`) und optionaler Deadline (`due_on`, Plan ≤ Deadline) und
+  einer Markdown-Beschreibung. **Checklist item**: abhakbarer Punkt eines Tasks. **Postponement**: eine Verschiebung
+  von Plan-Datum oder Deadline auf später. **Time entry**: getrackte Zeit, Art `Task` (Focus-Session auf einem Task;
+  Zeit auf Quest-Tasks = „Quest Hours“) oder `Organizing` (ohne Task, optional mit Herkunfts-Task).
+  **Settings**: Wochenziel in Minuten. Begriffe: `GLOSSARY.md`.
+- Listen (Regeln pur in `quest-domain/src/dates.rs`, Abfragen in `quest-view/src/lists.rs`): **Today** (offen und
+  Plan oder Deadline ≤ heute; überfällig, liegengeblieben, heute fällig, Rest), **Inbox** (offen, ohne Quest und
+  ohne Plan-Datum), **Logbook** (erledigt, neueste zuerst). Nur der User verschiebt Daten.
+- Ansichten der Desktop-App (Top-Navigation): **Home**, **Plan** (Spalten pro Tag nach Plan-Datum), **Focus**
+  (ein Task, großer Timer), **Quests**, **Review** (Woche: Stunden pro Quest, Organizing-Anteil; die Abfragen für
+  Verschiebungen, liegengebliebene und überfällige Tasks liefert `WeekTasks`). Das neue Layout folgt.
 - ⌘K Command-Menü („Search or jump…“), Tastatur-first, Light/Dark.
 - Offline-First: Alles funktioniert ohne Server und ohne Konto (Gast); Sync, sobald angemeldet und verbunden.
 
@@ -20,14 +24,14 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
 
 | Crate | Rolle | Abhängigkeiten |
 |---|---|---|
-| `quest-domain` | Entities, HLC, LWW-Merge (`FieldStore`), `Command` → `plan()` → `FieldWrite`s, `Snapshot`, `WeeklyReview`. Pur, kein IO. | chrono, serde, uuid |
+| `quest-domain` | Entities, HLC, LWW-Merge (`FieldStore`), `Command` → `plan()` → `FieldWrite`s, `Snapshot`, Datumsregeln (`dates`), `WeeklyReview`/`WeekTasks`. Pur, kein IO. | chrono, serde, uuid |
 | `quest-protocol` | Auth-Pfade und -DTOs (`AccountInfo`, `TokenResponse`, Erstanbieter-Clients, Scopes), WebSocket-Nachrichten, Pfade, KI-Erfassung (`CaptureRequest`, `CaptureProposal`). | quest-domain |
 | `quest-capture` | KI-Erfassung, pur: Kontext und Request, Prompt und JSON-Schema, strikte Validierung der Modellantwort, Review-Entwurf und Labels, bestätigter Vorschlag → Domain-Commands und Undo. Keine IO, keine Uhr. | quest-domain, quest-protocol, quest-view |
 | `quest-server` | axum-HTTP + WebSocket, SQLite via sqlx; Anmeldung per OIDC beim Identity Provider, OAuth-2.1-Authorization-Server für Apps und MCP (Bearer-Token mit Audience). | tokio, axum, sqlx, openidconnect |
 | `quest-oidc-fake` | OIDC-Provider für Tests und lokale Entwicklung (Discovery, JWKS, RS256-ID-Tokens, absichtliche Fehler) plus Test-Helfer für einen kompletten App-Login ohne Browser (`app_login`, `Browser`). Nie für Produktion. | axum, rsa, reqwest |
 | `quest-ai-eval` | Eval-Set der KI-Erfassung: synthetische Diktate mit erwarteten Vorschlägen, Bewertung (pur), Binary gegen ein echtes Modell (`mise run ai-eval --model <id>`, siehe `docs/ai-models.md`). | quest-capture, quest-server |
 | `quest-store` | Client-Persistenz (SQLite, rusqlite) + Sync-Engine (tokio-tungstenite), Profile (Gast + ein Store pro Konto), App-Login (OAuth 2.1, PKCE) und Token-Speicher. UI-agnostisch. | rusqlite, tokio, reqwest |
-| `quest-view` | Präsentationslogik ohne UI-Framework, geteilt von den Clients: `format`, `timescale`, `log_work`, `entry_editor`, `undo`, `plan_strip`, `quests`, `palette`, `menu`, `nav` (`View`). Pur, kein IO, keine Uhr (Zeit wird übergeben). | quest-domain, chrono |
+| `quest-view` | Präsentationslogik ohne UI-Framework, geteilt von den Clients: `format`, `lists`, `log_work`, `entry_editor`, `undo`, `plan_strip`, `quests`, `palette`, `menu`, `nav` (`View`). Pur, kein IO, keine Uhr (Zeit wird übergeben). | quest-domain, chrono |
 | `quest-app` | macOS-Client mit Rune + rune-kit. | rune, quest-store, quest-view |
 | `quest-mobile` | UniFFI-Schicht für native Mobile-UIs (Android-Prototyp in `apps/android`, siehe `docs/mobile.md`). | uniffi, quest-store |
 
@@ -48,27 +52,40 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
   (node_id, cursor, Kontoinfo; Tokens nie in der DB). Lokale Commands werden sofort angewendet (optimistisch), in die
   Outbox geschrieben und bei Verbindung gepusht; nach `Ack` aus der Outbox entfernt.
 - Protokolldetails: Doku-Kommentar in `crates/quest-protocol/src/lib.rs`.
+- **Postponements** werden im selben Command wie die Datumsänderung geschrieben (`postponed_fields`), nie geändert;
+  Undo löscht sie weich. Ihre ID ist eine UUIDv5 aus Task und Inhalt, weil `plan()` pur ist. Zwei Geräte, die
+  offline verschieben, behalten beide Verschiebungen; das Datum selbst entscheidet LWW.
+- Ein wiederholter Termin bekommt `planned_on` = Termindatum, keine Deadline und die Checkliste der Vorlage
+  unabgehakt; jeder Punkt mit UUIDv5 aus Termin- und Punkt-ID und Anfangswerten im separaten Feld `initial`.
+
+### Datenmodell 2: der Schnitt
+
+Das Modell hat sich ohne Migrationspfad geändert (Kalender, Zeitblöcke, Meilensteine und Quest-Beschreibung
+entfernt; neue Entities oben). Deshalb:
+- `PROTOCOL_VERSION` 2: Clients mit Protokoll 1 bekommen `UnsupportedProtocol`.
+- Server-Migration `0005_drop_synced_data.sql` löscht alle Feldzeilen, setzt `last_seq` auf 0 und vergibt jedem
+  User eine neue Epoch. Konten, OAuth- und OIDC-Daten bleiben; Anmeldungen bleiben gültig.
+- Client-Store: Meta `model` (aktuell `2`). Weicht es beim Öffnen ab, löscht der Store Feld-Tabelle, Outbox, Cursor,
+  Epoch und den gemerkten Workspace. Profile, Node-ID und Kontoinfo bleiben, Tokens liegen ohnehin im Vault.
+- So lädt niemand Altes wieder hoch: alte Clients sind abgewiesen, neue Stores sind leer, wenn sie die neue Epoch
+  sehen.
 
 ### Workspaces (Phase 18)
 
 - Ein Konto bzw. das Gastprofil hat beliebig viele **Workspaces** (`EntityKind::Workspace`, Felder `name`,
-  `deleted_at`). Quests, Tasks/Serien, Meilensteine und Zeiteinträge tragen `workspace_id`; das Wochenziel ist der
+  `deleted_at`). Quests, Tasks/Serien, Checklist-Punkte, Postponements und Zeiteinträge tragen
+  `workspace_id`; das Wochenziel ist der
   Settings-Datensatz mit der ID des Workspace. Konto, Anmeldung und Sync bleiben auf Kontoebene: ein Sync für alle
   Workspaces, das Feld synct wie jedes andere.
 - **Default-Workspace** mit fester ID (`EntityId::DEFAULT_WORKSPACE`, die nil-UUID, zugleich die bisherige
   Settings-ID). Jedes Gerät kennt ihn ohne Absprache, auch offline. Er lässt sich wie jeder andere umbenennen,
   löschen und wiederherstellen. Gelöscht werden kann jeder Workspace, solange ein anderer lebender bleibt
   (`CannotDeleteLastWorkspace`). Löschen zwei Geräte offline zusammen alle, gilt der Default als nicht gelöscht.
-  Schreibzugriffe ohne Workspace (ältere Clients, MCP ohne Parameter) meinen immer die feste Default-ID. Ist der
-  Default gelöscht, bleiben solche Daten dort und erscheinen nach dem Wiederherstellen; MCP verweigert dann Aufrufe
-  ohne `workspace`.
-- **Migration ohne Schreiben:** Die Zuordnung ist eine reine Lesefunktion (`quest-domain/src/workspace.rs`). Hat ein
-  Datensatz kein eigenes `workspace_id`, gilt der Workspace der Eltern-Entität: bei einem Termin die Serie, bei einem
-  Task die Quest, bei einem Zeiteintrag der Task bzw. die Quest, bei einem Meilenstein die Quest. Sonst gilt der
-  Default. Bestandsdaten, Gastdaten und Änderungen älterer Clients landen so auf jedem Gerät gleich. Die Migration
-  ist dadurch wiederholbar und idempotent und erzeugt keine Konflikte.
+  MCP-Aufrufe ohne Workspace meinen die feste Default-ID; ist der Default gelöscht, verweigert MCP sie.
+- **Zuordnung** (reine Lesefunktion, `quest-domain/src/workspace.rs`): der eigene `workspace_id`, sonst der der
+  Eltern-Entität (ein Termin folgt seiner Serie, ein kopierter Checklist-Punkt seinem Task), sonst der Default.
 - `Snapshot::from_store(store, workspace)` liefert die Sicht genau eines Workspace. Ein gelöschter oder unbekannter
-  Workspace fällt auf den Default zurück, ist der gelöscht, auf den ersten lebenden. Alle Views (Home, Plan, Kalender, Focus, Review, Suche, Archiv) und der
+  Workspace fällt auf den Default zurück, ist der gelöscht, auf den ersten lebenden. Alle Views (Home, Plan, Focus, Review, Suche, Archiv) und der
   Kontext der KI-Erfassung lesen nur diese Sicht. Commands legen Neues im Workspace des Snapshots an. IDs aus anderen
   Workspaces kennen sie nicht (`UnknownTask` usw.). So kann ein veralteter Dialog nichts in einen anderen Workspace
   schreiben.
@@ -80,9 +97,6 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
   alle laufenden Sessions mit ihrem Workspace, `running_focus()` die maßgebliche, `running_entry()` nur, wenn sie im
   aktiven Workspace liegt. `StartFocus` und `StopFocus` beenden laufende Sessions in jedem Workspace;
   `DeleteWorkspace` beendet die in diesem Workspace.
-- Ältere Clients überspringen unbekannte Entitätsarten und sehen alle Workspaces gemischt. Ihre neuen Datensätze
-  landen im Default bzw. bei der Eltern-Entität. Ein Store aus der Zeit vor Workspaces holt nach dem Update einmal
-  von Cursor 0 auf (Meta `known_kinds`). Dadurch erhält er die Workspace-Datensätze, die er vorher übersprungen hat.
 
 ### Vertrag `quest-store` (wird von `quest-app` und `quest-mobile` genutzt)
 
@@ -123,8 +137,7 @@ impl Store { // Send + Sync; als Arc<Store> zwischen UI- und Hintergrund-Threads
 Außerdem: `dispatch_all` (alles oder nichts), `ai() -> AiClient`, `connections()`, `flush`, `waiter`,
 `reconnect_now`. Access-Token für WebSocket und REST; Refresh kurz vor Ablauf und bei 401, serialisiert, neues Paar
 (Rotation) wird vor der Benutzung gespeichert; abgelehnter Refresh → `Failed { SessionExpired }`, Daten bleiben,
-erneuter Login desselben Kontos → `Renewed`. Der Gast synct nie. Die Einzel-DB älterer Versionen wird einmal als
-Gast übernommen. Vollständige API: Rustdoc von `quest-store`.
+erneuter Login desselben Kontos → `Renewed`. Der Gast synct nie. Vollständige API: Rustdoc von `quest-store`.
 
 Regel aus Rune: **kein Datei-IO im UI-Thread** – `dispatch` schreibt nur in den Speicher und
 übergibt an den Worker-Thread.
@@ -140,8 +153,8 @@ Freier Text (getippt oder diktiert) wird zu einem **Vorschlag**, den der User pr
 Bestätigung legt etwas an.
 
 1. **Client** baut mit `quest_capture::request` den `CaptureRequest`: Text, Zeitpunkt + IANA-Zeitzone, Sprache und
-   einen kompakten Kontext (aktive Quests mit gekürzter Beschreibung; Tasks von 7 Tagen vor bis 14 Tage nach heute,
-   nächste zuerst, dann offene Backlog-Tasks; Limits in `quest-protocol`). Aufruf `POST /v1/ai/capture` über
+   einen kompakten Kontext (aktive Quests; Tasks von 7 Tagen vor bis 14 Tage nach heute,
+   nächste zuerst, dann offene Tasks ohne Plan-Datum; Limits in `quest-protocol`). Aufruf `POST /v1/ai/capture` über
    `Store::ai()` mit dem bestehenden Bearer-Token.
 2. **Server** (`quest-server`, Modul `ai`): Auth, Rate-Limit pro Account, Größenlimits (`check_request`), Prompt +
    JSON-Schema (`prompt`, `output_schema`, strikt für OpenAI-Structured-Outputs) an einen `LlmProvider`
@@ -150,13 +163,13 @@ Bestätigung legt etwas an.
    ohne Konfiguration antwortet die Route `AiNotConfigured`. Text und Antworten werden nie geloggt.
 3. **Validierung** (`quest_capture::validate`): Die Modellantwort ist nicht vertrauenswürdig. Unbekannte Quest-IDs →
    keine Quest, als unsicher markiert; unbekannte Task-IDs → neue Aufgabe (unsicher) oder verworfen; ungültige oder
-   weit entfernte Daten, Ende ≤ Start, Blöcke über Mitternacht, zukünftige Arbeit, Überlänge und zu viele Elemente
-   werden verworfen und in `dropped` gemeldet. Neue Entitäten tragen temporäre Schlüssel (`q1`, `t1`, `w1`).
-   **Keine Schätzungen:** Eine Dauer ohne Startzeit wird ignoriert; mit Startzeit wird sie ein Zeitblock.
+   weit entfernte Daten, Ende ≤ Start, zukünftige Arbeit, Überlänge und zu viele Elemente werden verworfen und in
+   `dropped` gemeldet. Plan-Datum und Deadline laufen durch die Domain-Regel (Plan ≤ Deadline). Neue Entitäten
+   tragen temporäre Schlüssel (`q1`, `t1`, `w1`).
 4. **Review** (`quest_capture::review::Draft`): Auswahl pro Element, Labels, Fehler pro Element. Eine abgewählte
    neue Quest nimmt sich aus ihren Tasks/Sitzungen heraus.
-5. **Anwenden** (`quest_capture::plan`): `CreateQuest`/`SetQuestDescription`/`AddMilestone`, `CreateTask`
-   (unten am Tag) + `SetTaskDescription`/`SetTaskBlock`/`SetTaskRepeat`, `LogWork` (bestehende Aufgabe, auch erledigt,
+5. **Anwenden** (`quest_capture::plan`): `CreateQuest`, `CreateTask` mit Plan-Datum und
+   Deadline (unten am Tag) + `SetTaskDescription`/`SetTaskRepeat`, `LogWork` (bestehende Aufgabe, auch erledigt,
    oder neue, erledigt angelegte). Fachregeln (Sortierschlüssel, Sitzung zählt zur Quest der Aufgabe, Repeat-Prüfung)
    kommen aus den Commands. Ende `00:00` = Mitternacht am Ende des Tages; Ortszeit → UTC wie überall (früherer
    Zeitpunkt bei doppelter Stunde, übersprungene Zeit eine Stunde später). Angewendet mit `dispatch_all`; Undo
@@ -202,8 +215,8 @@ und Begründungen: `docs/auth.md`.
   teilen sich alle Clients ein Budget.
 - Offene Sync-Verbindungen enden beim Ablauf ihres Access-Tokens und sofort beim Widerruf ihres Grants – aber nur
   für Widerrufe dieser Server-Instanz (In-Process-Broadcast; mehrere Instanzen bräuchten einen gemeinsamen Kanal).
-- Konten aus der Passwort-Zeit behalten ihre Daten, haben aber keine Identität; eine Verknüpfung (z. B. per
-  verifizierter E-Mail) gibt es nicht automatisch.
+- Konten aus der Passwort-Zeit haben keine Identität; eine Verknüpfung (z. B. per verifizierter E-Mail) gibt es
+  nicht automatisch.
 - Tokens liegen im Schlüsselbund (macOS) bzw. Keystore (Android), nie in der SQLite; `http://` auch für
   Nicht-Loopback erlaubt.
 - Client-SQLite mit `synchronous=NORMAL` (bei Stromausfall können die letzten lokalen Edits fehlen; Konsistenz bleibt).

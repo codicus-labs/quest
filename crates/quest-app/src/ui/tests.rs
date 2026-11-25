@@ -122,7 +122,7 @@ fn command_digits_switch_views_and_escape_leaves_focus_for_home() {
     command(&mut rt, '2');
     assert_eq!(rt.state.view, View::Plan);
     assert!(rt.find("plan").is_some(), "the planner is drawn");
-    command(&mut rt, '4');
+    command(&mut rt, '3');
     assert_eq!(rt.state.view, View::Focus);
     press(&mut rt, Key::Escape, Mods::default());
     assert_eq!(rt.state.view, View::Home, "Esc goes back to Home");
@@ -142,7 +142,7 @@ fn the_palette_jumps_to_a_view() {
 #[test]
 fn n_focuses_the_add_field_and_enter_creates_a_task() {
     let (mut rt, _dir) = demo_app();
-    command(&mut rt, '3');
+    command(&mut rt, '2');
     type_text(&mut rt, "n");
     assert_eq!(rt.state.view, View::Home);
     let before = rt.state.snap.tasks.len();

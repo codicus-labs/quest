@@ -99,18 +99,18 @@ fn starting_a_timer_stops_the_other_one() {
 }
 
 #[test]
-fn the_sheet_edits_description_quest_and_day() {
+fn the_sheet_edits_description_quest_and_plan_date() {
     let (_dir, core) = open();
     let id = add(&core, "Draft");
     core.set_task_description(id.clone(), "Notes\nmore".into()).unwrap();
-    core.set_task_day(id.clone(), Some("2026-11-26".into()), now()).unwrap();
+    core.set_task_planned(id.clone(), Some("2026-11-26".into()), now()).unwrap();
     let detail = core.task_detail(id.clone(), now()).unwrap();
     assert_eq!(detail.description, "Notes\nmore");
-    assert_eq!(detail.date.map(|d| d.label), Some("Nov 26, 2026".into()));
+    assert_eq!(detail.planned_on.map(|d| d.label), Some("Nov 26, 2026".into()));
     assert!(home(&core).other.is_empty(), "moved to tomorrow");
-    core.set_task_day(id.clone(), None, now()).unwrap();
-    assert_eq!(core.task_detail(id.clone(), now()).unwrap().date, None);
-    let bad = core.set_task_day(id.clone(), Some("tomorrow".into()), now());
+    core.set_task_planned(id.clone(), None, now()).unwrap();
+    assert_eq!(core.task_detail(id.clone(), now()).unwrap().planned_on, None);
+    let bad = core.set_task_planned(id.clone(), Some("tomorrow".into()), now());
     assert_eq!(bad, Err(MobileError::InvalidDate { value: "tomorrow".into() }));
     core.set_task_quest(id.clone(), None).unwrap();
     core.delete_task(id.clone(), now()).unwrap();
@@ -146,15 +146,23 @@ fn repeating_creates_occurrences_that_edit_their_series() {
 }
 
 #[test]
-fn the_day_grid_shows_the_running_timer() {
+fn dates_keep_plan_before_deadline_and_count_postponements() {
     let (_dir, core) = open();
     let id = add(&core, "Draft");
-    core.start_timer(id, now()).unwrap();
-    let grid = core.day_grid("2026-11-25".into(), later(30 * 60)).unwrap();
-    let block = &grid.blocks[0];
-    assert_eq!((block.start_minute, block.end_minute, block.title.as_str()), (600, 630, "Draft"));
-    assert_eq!(grid.now_minute, Some(630.0));
-    assert!(matches!(core.day_grid("25.11.".into(), now()), Err(MobileError::InvalidDate { .. })));
+    core.set_task_due(id.clone(), Some("2026-11-24".into()), now()).unwrap();
+    let detail = core.task_detail(id.clone(), now()).unwrap();
+    let dates = (detail.planned_on.map(|d| d.iso), detail.due_on.map(|d| d.iso));
+    assert_eq!(dates, (Some("2026-11-24".into()), Some("2026-11-24".into())), "the plan date moves along");
+    assert!(detail.overdue);
+    assert_eq!(detail.postponed.total, 0, "moving earlier is no postponement");
+
+    core.set_task_planned(id.clone(), Some("2026-11-27".into()), now()).unwrap();
+    let detail = core.task_detail(id.clone(), now()).unwrap();
+    assert_eq!(detail.due_on.map(|d| d.iso), Some("2026-11-27".into()), "the deadline moves along");
+    assert_eq!((detail.postponed.plan, detail.postponed.due, detail.postponed.total), (1, 1, 2));
+    assert!(!detail.overdue);
+    core.set_task_due(id.clone(), None, now()).unwrap();
+    assert_eq!(core.task_detail(id, now()).unwrap().due_on, None);
 }
 
 #[test]

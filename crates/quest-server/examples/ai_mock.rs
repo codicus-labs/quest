@@ -79,14 +79,13 @@ fn answer(context: &Value) -> Value {
     let confidence = if relaunch.is_some() { "high" } else { "low" };
     let date = |day: NaiveDate| day.format("%Y-%m-%d").to_string();
     json!({
-        "new_quests": [{ "key": "q1", "title": "Steuererklärung", "description": "", "milestones": [] }],
+        "new_quests": [{ "key": "q1", "title": "Steuererklärung" }],
         "tasks": [
             { "title": "Angebot für Müller schreiben", "description": "Dauert etwa zwei Stunden.",
               "quest_id": relaunch_id, "new_quest_key": null, "quest_confidence": confidence,
-              "day": date(tomorrow), "start_time": null, "duration_minutes": null, "repeat": null },
+              "planned_on": date(tomorrow), "due_on": null, "repeat": null },
             { "title": "Belege sammeln", "description": "", "quest_id": null, "new_quest_key": "q1",
-              "quest_confidence": "high", "day": date(friday), "start_time": null, "duration_minutes": null,
-              "repeat": null },
+              "quest_confidence": "high", "planned_on": date(friday), "due_on": null, "repeat": null },
         ],
         "work_logs": [
             { "task_id": null, "new_task_title": "Relaunch-Konzept", "quest_id": relaunch_id,

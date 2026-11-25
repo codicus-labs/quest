@@ -188,6 +188,10 @@ async fn protocol_violations_are_answered_with_an_error_and_close() {
     assert_eq!(client.closing_error().await.code, ErrorCode::UnsupportedProtocol);
 
     let mut client = server.connect_raw(Some(&session.token)).await.unwrap();
+    client.send(&ClientMessage::Hello { protocol: 1, node: NODE, cursor: Cursor(0), epoch: None }).await;
+    assert_eq!(client.closing_error().await.code, ErrorCode::UnsupportedProtocol, "protocol 1 is gone");
+
+    let mut client = server.connect_raw(Some(&session.token)).await.unwrap();
     client.send(&ClientMessage::Push { batch: BatchId(Uuid::nil()), changes: vec![] }).await;
     assert_eq!(client.closing_error().await.code, ErrorCode::InvalidRequest, "push before hello");
 

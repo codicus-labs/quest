@@ -25,22 +25,18 @@ sealed interface SavedSearchMode : Serializable {
 
     data class MoveTo(val taskId: String) : SavedSearchMode
 
-    data class ScheduleAt(val taskId: String) : SavedSearchMode
-
     data object SwitchWorkspace : SavedSearchMode
 }
 
 fun SavedSearchMode.toCore(): SearchMode = when (this) {
     SavedSearchMode.Commands -> SearchMode.Commands
     is SavedSearchMode.MoveTo -> SearchMode.MoveTo(taskId)
-    is SavedSearchMode.ScheduleAt -> SearchMode.ScheduleAt(taskId)
     SavedSearchMode.SwitchWorkspace -> SearchMode.SwitchWorkspace
 }
 
 fun SearchMode.toSaved(): SavedSearchMode = when (this) {
     SearchMode.Commands -> SavedSearchMode.Commands
     is SearchMode.MoveTo -> SavedSearchMode.MoveTo(taskId)
-    is SearchMode.ScheduleAt -> SavedSearchMode.ScheduleAt(taskId)
     SearchMode.SwitchWorkspace -> SavedSearchMode.SwitchWorkspace
 }
 
@@ -59,7 +55,7 @@ private const val INPUTS_KEY = "search.inputs"
 
 /**
  * Search: the core lists results for the query and mode; running one returns a [SearchOutcome]
- * the app carries out. A choice (move to, schedule at) switches the mode and stays open.
+ * the app carries out. A choice (move to, switch workspace) switches the mode and stays open.
  */
 class SearchViewModel(private val core: CoreHolder, private val savedState: SavedStateHandle) : ViewModel() {
     private val inputs: StateFlow<SearchInputs> = savedState.getStateFlow(INPUTS_KEY, SearchInputs())

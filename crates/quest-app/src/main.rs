@@ -17,7 +17,7 @@ mod theme;
 mod ui;
 
 // The pure presentation modules live in quest-view; mounted here so `crate::format` etc. resolve.
-use quest_view::{entry_editor, format, log_work, menu, palette, plan_strip, timescale, undo};
+use quest_view::{format, log_work, menu, palette, plan_strip, undo};
 
 use std::sync::Arc;
 
@@ -61,7 +61,6 @@ const SCENES: &[Scene] = &[
         let work = workspaces_scene(s);
         s.switch_workspace(work);
     }),
-    ("calendar", |s| s.go(View::Calendar)),
     ("focus", |s| s.go(View::Focus)),
     ("quests", |s| s.go(View::Quests)),
     ("quests-completed", |s| quests_completed(s, 1, state::QuestsTab::Completed)),
@@ -84,27 +83,12 @@ const SCENES: &[Scene] = &[
     ("log-work", |s| {
         let (start, end) = (chrono::NaiveTime::from_hms_opt(14, 50, 0), chrono::NaiveTime::from_hms_opt(15, 5, 0));
         if let (Some(start), Some(end)) = (start, end) {
-            s.go(View::Calendar);
             s.open_log_work(s.today(), start, end);
         }
     }),
     ("shortcuts", |s| s.overlay = Overlay::Shortcuts),
-    ("entry-editor", |s| {
-        s.go(View::Calendar);
-        if let Some(entry) = finished_entry_on(s, s.today()) {
-            s.open_entry_editor(entry);
-        }
-    }),
-    ("entry-midnight", entry_midnight),
-    ("home-tracked", home_tracked),
     ("quest-detail", |s| {
         let quest = s.snap.active_quests().next().map(|q| q.id);
-        if let Some(quest) = quest {
-            s.go(View::Quest(quest));
-        }
-    }),
-    ("quest-detail-no-milestones", |s| {
-        let quest = s.snap.active_quests().find(|q| s.snap.milestones_of(q.id).next().is_none()).map(|q| q.id);
         if let Some(quest) = quest {
             s.go(View::Quest(quest));
         }
@@ -158,7 +142,6 @@ const SCENES: &[Scene] = &[
         more_quests(s);
         let (start, end) = (chrono::NaiveTime::from_hms_opt(14, 50, 0), chrono::NaiveTime::from_hms_opt(15, 5, 0));
         if let (Some(start), Some(end)) = (start, end) {
-            s.go(View::Calendar);
             s.open_log_work(s.today(), start, end);
         }
         s.log_work.title = rune::TextEdit::new("Sketch the cover");
@@ -171,14 +154,6 @@ const SCENES: &[Scene] = &[
         if let Some(task) = task {
             s.toggle_quest_picker(state::quest_picker::PickFor::CaptureTask(task));
         }
-    }),
-    ("entry-editor-quests", |s| {
-        more_quests(s);
-        s.go(View::Calendar);
-        if let Some(entry) = finished_entry_on(s, s.today()) {
-            s.open_entry_editor(entry);
-        }
-        s.toggle_quest_picker(state::quest_picker::PickFor::Entry);
     }),
     ("home-quests", |s| {
         more_quests(s);
@@ -280,10 +255,8 @@ fn quest_rename(s: &mut State) {
 fn archive(s: &mut State) {
     use undo::Deletable;
     let quests: Vec<_> = s.snap.active_quests().map(|q| q.id).collect();
-    let milestone = quests.first().and_then(|q| s.snap.milestones_of(*q).next()).map(|m| m.id);
     let entry = s.snap.time_entries.iter().find(|e| !e.is_running()).map(|e| e.id);
-    let items =
-        [first_open_task(s).map(Deletable::Task), milestone.map(Deletable::Milestone), entry.map(Deletable::Entry)];
+    let items = [first_open_task(s).map(Deletable::Task), entry.map(Deletable::Entry)];
     for item in items.into_iter().flatten() {
         s.delete(item);
     }
@@ -292,38 +265,6 @@ fn archive(s: &mut State) {
     }
     s.step_undo(undo::UndoEvent::Dismiss);
     s.go(View::Archive);
-}
-
-/// The last finished session on `day`.
-fn finished_entry_on(s: &State, day: chrono::NaiveDate) -> Option<quest_domain::EntityId> {
-    let on_day = |e: &&quest_domain::TimeEntry| !e.is_running() && clock::local_day(e.started_at) == day;
-    s.snap.time_entries.iter().filter(on_day).max_by_key(|e| e.started_at).map(|e| e.id)
-}
-
-/// The calendar after the editor moved yesterday's last session to run over midnight (22:15 to
-/// 07:30 today): a segment on each day, and each day's total counts its part.
-fn entry_midnight(s: &mut State) {
-    s.go(View::Calendar);
-    let Some(entry) = finished_entry_on(s, s.today() - chrono::Days::new(1)) else { return };
-    s.open_entry_editor(entry);
-    let form = &mut s.entry_form;
-    form.start = rune::TextEdit::new("22:15");
-    form.end_date = rune::TextEdit::new(log_work::date_label(clock::local_day(s.now)));
-    form.end = rune::TextEdit::new("07:30");
-    s.save_entry_editor();
-}
-
-/// Home with a manual session that overlaps a tracked one (two lanes).
-fn home_tracked(s: &mut State) {
-    let today = s.today();
-    let at = |h, m| clock::at_local(today, chrono::NaiveTime::from_hms_opt(h, m, 0).unwrap_or_default());
-    let entry_id = quest_domain::EntityId::new();
-    s.dispatch(quest_domain::Command::LogTime {
-        entry_id,
-        task_id: None,
-        started_at: at(11, 30),
-        ended_at: at(12, 15),
-    });
 }
 
 fn main() {

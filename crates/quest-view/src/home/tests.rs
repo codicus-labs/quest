@@ -7,14 +7,7 @@ fn id(n: u128) -> EntityId {
 }
 
 fn quest(n: u128, status: QuestStatus) -> Quest {
-    Quest {
-        id: id(n),
-        title: format!("Q{n}"),
-        color: QuestColor::Blue,
-        status,
-        sort_key: format!("{n}"),
-        description: String::new(),
-    }
+    Quest { id: id(n), title: format!("Q{n}"), color: QuestColor::Blue, status, sort_key: format!("{n}") }
 }
 
 fn task(n: u128, quest: Option<u128>) -> Task {
@@ -22,9 +15,9 @@ fn task(n: u128, quest: Option<u128>) -> Task {
         id: id(n),
         title: format!("T{n}"),
         quest_id: quest.map(id),
-        day: None,
+        planned_on: None,
+        due_on: None,
         sort_key: format!("{n}"),
-        block: None,
         completed_at: None,
         description: String::new(),
         repeat: None,

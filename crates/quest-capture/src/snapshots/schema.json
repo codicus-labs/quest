@@ -5,36 +5,9 @@
       "items": {
         "additionalProperties": false,
         "properties": {
-          "description": {
-            "description": "Details from the text; empty if none.",
-            "type": "string"
-          },
           "key": {
             "description": "Short key such as q1, used by new_quest_key.",
             "type": "string"
-          },
-          "milestones": {
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "date": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "title": {
-                  "description": "Short title of the achievement.",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "date",
-                "title"
-              ],
-              "type": "object"
-            },
-            "type": "array"
           },
           "title": {
             "description": "Short quest title.",
@@ -42,9 +15,7 @@
           }
         },
         "required": [
-          "description",
           "key",
-          "milestones",
           "title"
         ],
         "type": "object"
@@ -55,23 +26,23 @@
       "items": {
         "additionalProperties": false,
         "properties": {
-          "day": {
+          "description": {
+            "description": "Details from the text; empty if none.",
+            "type": "string"
+          },
+          "due_on": {
             "type": [
               "string",
               "null"
             ]
           },
-          "description": {
-            "description": "Details from the text; empty if none.",
-            "type": "string"
-          },
-          "duration_minutes": {
+          "new_quest_key": {
             "type": [
-              "integer",
+              "string",
               "null"
             ]
           },
-          "new_quest_key": {
+          "planned_on": {
             "type": [
               "string",
               "null"
@@ -150,26 +121,19 @@
               }
             ]
           },
-          "start_time": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "title": {
             "description": "Short, clean task title.",
             "type": "string"
           }
         },
         "required": [
-          "day",
           "description",
-          "duration_minutes",
+          "due_on",
           "new_quest_key",
+          "planned_on",
           "quest_confidence",
           "quest_id",
           "repeat",
-          "start_time",
           "title"
         ],
         "type": "object"

@@ -21,26 +21,16 @@ import app.quest.android.core.ConnectionsException
 import uniffi.quest_mobile.Account
 import uniffi.quest_mobile.AiConnectionRow
 import uniffi.quest_mobile.AddPosition
-import uniffi.quest_mobile.CalendarData
-import uniffi.quest_mobile.CalendarQuery
-import uniffi.quest_mobile.EntryCheck
-import uniffi.quest_mobile.EntryDraft
-import uniffi.quest_mobile.GridDrag
-import uniffi.quest_mobile.GridPlacement
 import uniffi.quest_mobile.LogWorkCheck
 import uniffi.quest_mobile.LogWorkDraft
 import uniffi.quest_mobile.TaskChoices
-import uniffi.quest_mobile.DayGrid
 import uniffi.quest_mobile.DayValue
 import uniffi.quest_mobile.FocusPickTask
 import uniffi.quest_mobile.FocusSession
 import uniffi.quest_mobile.FocusView
-import uniffi.quest_mobile.GridBlock
-import uniffi.quest_mobile.GridBlockKind
 import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.HomeTask
-import uniffi.quest_mobile.HourMark
 import uniffi.quest_mobile.LoggedEntry
 import uniffi.quest_mobile.MobileException
 import uniffi.quest_mobile.Moment
@@ -53,7 +43,9 @@ import uniffi.quest_mobile.RepeatDraft
 import uniffi.quest_mobile.RepeatFrequency
 import uniffi.quest_mobile.RepeatPinChoice
 import uniffi.quest_mobile.RepeatWeekday
+import uniffi.quest_mobile.PostponedCount
 import uniffi.quest_mobile.RunningSession
+import uniffi.quest_mobile.SessionKind
 import uniffi.quest_mobile.SettingsData
 import uniffi.quest_mobile.SignInResult
 import uniffi.quest_mobile.SyncState
@@ -83,42 +75,14 @@ class FakeClock(var epochMs: Long = NOW_MS) : Clock {
     override fun now() = Moment(epochMs, ZONE)
 }
 
-/** A grid block with the drags the core would allow for its kind (running: only its start handle). */
-fun gridBlock(
-    id: String,
-    kind: GridBlockKind,
-    start: Int,
-    end: Int,
-    title: String,
-    range: String,
-    colorHex: String?,
-    lane: Int = 0,
-    lanes: Int = 1,
-    done: Boolean = false,
-) = GridBlock(
-    id = id,
-    kind = kind,
-    startMinute = start.toUInt(),
-    endMinute = end.toUInt(),
-    title = title,
-    rangeLabel = range,
-    colorHex = colorHex,
-    done = done,
-    lane = lane.toUInt(),
-    laneCount = lanes.toUInt(),
-    targetId = id.substringBefore("-"),
-    a11yLabel = "${if (kind == GridBlockKind.PLANNED) "Planned" else "Session"} $title, $range",
-    canMove = kind != GridBlockKind.RUNNING,
-    startHandle = true,
-    endHandle = kind != GridBlockKind.RUNNING,
-)
-
 object Samples {
+    val notPostponed = PostponedCount(0u, 0u, 0u)
+
     val writing = QuestChip("q1", "Write the book", "#5c8fd9")
     val fitness = QuestChip("q2", "Fitness", "#62b87a")
 
     private fun task(id: String, title: String, quest: QuestChip?, done: Boolean = false, tracked: String? = null, running: Boolean = false) =
-        HomeTask(id = id, title = title, done = done, quest = quest, tracked = tracked, timerRunning = running, canStartTimer = !done)
+        HomeTask(id = id, title = title, done = done, quest = quest, tracked = tracked, timerRunning = running, canStartTimer = !done, plannedOn = null, dueOn = null, overdue = false, postponed = notPostponed)
 
     val home = HomeData(
         dayLabel = "Monday, November 23",
@@ -151,19 +115,6 @@ object Samples {
 
     val toast = UndoToast(text = "Deleted “Call the bank”", actionLabel = "Undo", expiresAtMs = NOW_MS + 6_000)
 
-    val grid = DayGrid(
-        day = "2026-11-23",
-        dayLabel = "Monday, November 23",
-        hours = (1..23).map { HourMark(minute = (it * 60).toUInt(), label = "%02d:00".format(it)) },
-        blocks = listOf(
-            gridBlock("e1", GridBlockKind.SESSION, 7 * 60, 8 * 60 + 15, "Morning run", "07:00 – 08:15", fitness.colorHex),
-            gridBlock("e2", GridBlockKind.RUNNING, 8 * 60 + 18, 9 * 60 + 30, "Outline chapter 3", "08:18 – 09:30", writing.colorHex),
-            gridBlock("t4", GridBlockKind.PLANNED, 11 * 60, 12 * 60 + 30, "Edit chapter 2", "11:00 – 12:30", writing.colorHex, lane = 0, lanes = 2),
-            gridBlock("t3", GridBlockKind.PLANNED, 11 * 60 + 30, 12 * 60, "Call the bank", "11:30 – 12:00", null, lane = 1, lanes = 2),
-        ),
-        nowMinute = 9f * 60f + 30f,
-    )
-
     val detail = TaskDetail(
         id = "t1",
         title = "Outline chapter 3",
@@ -171,7 +122,11 @@ object Samples {
         done = false,
         quest = writing,
         questOptions = listOf(writing, fitness),
-        date = DayValue(iso = "2026-11-23", label = "Nov 23, 2026"),
+        plannedOn = DayValue(iso = "2026-11-23", label = "Nov 23, 2026"),
+        dueOn = null,
+        overdue = false,
+        postponed = notPostponed,
+        checklist = emptyList(),
         repeatLabel = "Does not repeat",
         repeats = false,
         loggedTotal = "1h 32m total",
@@ -225,7 +180,10 @@ object Samples {
     )
 
     /** Started 1:12:05 before [NOW_MS]. */
-    val running = RunningSession("t1", "Outline chapter 3", writing.name, writing.colorHex, NOW_MS - 4_325_000, null)
+    val running = RunningSession(SessionKind.TASK, "t1", "Outline chapter 3", writing.name, writing.colorHex, NOW_MS - 4_325_000, null, null, null)
+
+    /** Organizing for 10 minutes, coming from "Outline chapter 3". */
+    val organizing = RunningSession(SessionKind.ORGANIZING, null, "Organizing", null, null, NOW_MS - 600_000, "t1", "Outline chapter 3", null)
 
     val settings = SettingsData(weeklyTargetMinutes = 20u * 60u, weeklyTargetLabel = "20h")
 
@@ -255,21 +213,12 @@ class FakeCore(
     var account: Account? = null,
     var sync: SyncState = SyncState.SignedOut,
     var nextWakeInMs: Long = 60_000,
-    var grid: DayGrid = Samples.grid,
     /** Task details by id; a missing id is an unknown task. */
     val details: MutableMap<String, TaskDetail> = mutableMapOf("t1" to Samples.detail),
     var focus: FocusView = FocusView.Session(Samples.focusSession),
     var running: RunningSession? = null,
     var plan: PlanData = PlanSamples.plan,
-    var calendar: CalendarData = CalendarSamples.page(1),
-    /** What [gridDragPreview] answers. */
-    var placement: GridPlacement? = CalendarSamples.placement,
-    /** What [gridDrop] returns (a new span's Log work draft), else null. */
-    var dropDraft: LogWorkDraft? = null,
-    var logWorkCheck: LogWorkCheck = CalendarSamples.logWorkCheck,
-    var entryCheck: EntryCheck = CalendarSamples.entryCheck,
-    /** Entry drafts by id; a missing id is an unknown entry. */
-    val entries: MutableMap<String, EntryDraft> = mutableMapOf("e1" to CalendarSamples.entryDraft),
+    var logWorkCheck: LogWorkCheck = LogWorkSamples.check,
     var quests: QuestsData = QuestSamples.quests,
     /** Quest pages by id; a missing id is an unknown quest. */
     val questDetails: MutableMap<String, QuestDetail> = mutableMapOf("q1" to QuestSamples.detail),
@@ -318,12 +267,8 @@ class FakeCore(
     /** Every [search] as mode and query. */
     val searches = mutableListOf<Pair<SearchMode, String>>()
 
-    /** Every [calendar] read's query. */
-    val calendarReads = mutableListOf<CalendarQuery>()
-
-    /** Every draft checked by [checkLogWork] / [checkEntry]. */
+    /** Every draft checked by [checkLogWork]. */
     val logWorkChecks = mutableListOf<LogWorkDraft>()
-    val entryChecks = mutableListOf<EntryDraft>()
     val choiceQueries = mutableListOf<String>()
 
     /** The window and filter of every [plan] read. */
@@ -335,7 +280,6 @@ class FakeCore(
     /** Every other action as "name arg…", in order. */
     val calls = mutableListOf<String>()
     val queries = mutableListOf<HomeQuery>()
-    val gridDays = mutableListOf<String>()
     val signIns = mutableListOf<String>()
 
     /** The holder's change signal, as the Rust core's `ChangeListener`; set by [openedHolder][app.quest.android.ui.openedHolder]. */
@@ -412,7 +356,7 @@ class FakeCore(
 
     override fun setTaskQuest(taskId: String, questId: String?) = record("quest $taskId $questId")
 
-    override fun setTaskDay(taskId: String, day: String?, now: Moment) = record("day $taskId $day")
+    override fun setTaskPlanned(taskId: String, plannedOn: String?, now: Moment) = record("day $taskId $plannedOn")
 
     override fun repeatDraft(taskId: String, now: Moment): RepeatDraft {
         maybeFail()
@@ -423,11 +367,6 @@ class FakeCore(
         record("repeat $taskId ${draft.every} ${draft.frequency}")
 
     override fun clearTaskRepeat(taskId: String, now: Moment) = record("norepeat $taskId")
-
-    override fun dayGrid(day: String, now: Moment): DayGrid {
-        gridDays += day
-        return grid
-    }
 
     override fun focus(now: Moment, focusTask: String?): FocusView {
         maybeFail()
@@ -478,31 +417,15 @@ class FakeCore(
         return PlanSamples.targets
     }
 
-    override fun calendar(query: CalendarQuery, now: Moment): CalendarData {
-        maybeFail()
-        calendarReads += query
-        return calendar
-    }
-
-    override fun gridDragPreview(drag: GridDrag, day: String, minute: Float, now: Moment): GridPlacement? {
-        calls += "preview ${drag.kind} ${drag.blockId} $day $minute"
-        return placement
-    }
-
-    override fun gridDrop(drag: GridDrag, day: String, minute: Float, now: Moment): LogWorkDraft? {
-        record("drop ${drag.kind} ${drag.blockId} ${drag.fromDay} ${drag.grabMinute} $day $minute")
-        return dropDraft
-    }
-
     override fun taskChoices(query: String): TaskChoices {
         maybeFail()
         choiceQueries += query
-        return if (query.isEmpty()) CalendarSamples.choices else TaskChoices(emptyList(), "Create “$query”")
+        return if (query.isEmpty()) LogWorkSamples.choices else TaskChoices(emptyList(), "Create “$query”")
     }
 
     override fun logWorkNow(now: Moment): LogWorkDraft {
         maybeFail()
-        return CalendarSamples.logWorkDraft
+        return LogWorkSamples.draft
     }
 
     override fun checkLogWork(draft: LogWorkDraft, now: Moment): LogWorkCheck {
@@ -517,36 +440,14 @@ class FakeCore(
         return "new-entry"
     }
 
-    override fun entryDraft(entryId: String, now: Moment): EntryDraft {
-        maybeFail()
-        return entries[entryId] ?: throw MobileException.UnknownEntry("This time entry is gone.")
-    }
-
-    override fun checkEntry(draft: EntryDraft, now: Moment): EntryCheck {
-        maybeFail()
-        if (draft.entryId !in entries) throw MobileException.UnknownEntry("This time entry is gone.")
-        entryChecks += draft
-        return entryCheck
-    }
-
-    override fun saveEntry(draft: EntryDraft, now: Moment) {
-        if (draft.entryId !in entries) throw MobileException.UnknownEntry("This time entry is gone.")
-        record("save-entry ${draft.entryId} ${draft.taskId} ${draft.startDay} ${draft.startMinute}-${draft.endMinute} ${draft.endsOtherDay}")
-    }
-
-    override fun deleteEntry(entryId: String, now: Moment) {
-        record("delete-entry $entryId")
-        entries.remove(entryId)
-    }
-
     override fun quests(now: Moment): QuestsData {
         maybeFail()
         return quests
     }
 
-    override fun createQuest(title: String, description: String, hue: QuestHue?): String {
+    override fun createQuest(title: String, hue: QuestHue?): String {
         if (title.isBlank()) throw MobileException.EmptyTitle("Enter a name.")
-        record("create-quest $title|$description|$hue")
+        record("create-quest $title|$hue")
         return "q-new"
     }
 
@@ -563,8 +464,6 @@ class FakeCore(
         if (title.isBlank()) throw MobileException.EmptyTitle("Enter a name.")
         record("rename-quest $questId $title")
     }
-
-    override fun setQuestDescription(questId: String, description: String) = record("describe-quest $questId $description")
 
     override fun setQuestHue(questId: String, hue: QuestHue) = record("hue $questId $hue")
 

@@ -1,4 +1,4 @@
-//! Records of the task sheet, the Repeat dialog and the day grid. Like `types`: plain values,
+//! Records of the task sheet, its checklist and the Repeat dialog. Like `types`: plain values,
 //! ready-made labels, ids as strings.
 
 use crate::types::QuestChip;
@@ -8,15 +8,23 @@ use crate::types::QuestChip;
 pub struct TaskDetail {
     pub id: String,
     pub title: String,
-    /// Plain text, possibly several lines.
+    /// Markdown, possibly several lines.
     pub description: String,
     pub done: bool,
     /// The task's quest; None: "No quest" is selected.
     pub quest: Option<QuestChip>,
     /// The quests it can get: the active ones. Kotlin lists "No quest" first.
     pub quest_options: Vec<QuestChip>,
-    /// Its day; None: the backlog ("Move to backlog" only shows with a day).
-    pub date: Option<DayValue>,
+    /// The day it is planned for; None: not planned.
+    pub planned_on: Option<DayValue>,
+    /// The deadline; None: none. Never before `planned_on`.
+    pub due_on: Option<DayValue>,
+    /// Open and the deadline has passed.
+    pub overdue: bool,
+    /// How often its dates were moved later.
+    pub postponed: PostponedCount,
+    /// In its order.
+    pub checklist: Vec<ChecklistRow>,
     /// "Does not repeat", "Every day", "Every 2 weeks" (its series' rule).
     pub repeat_label: String,
     /// Whether it repeats: the Repeat dialog offers "Stop repeating".
@@ -35,6 +43,34 @@ pub struct DayValue {
     pub iso: String,
     /// "Nov 24, 2026".
     pub label: String,
+}
+
+/// How often a task's plan date and deadline were moved later.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct PostponedCount {
+    pub plan: u32,
+    pub due: u32,
+    /// Both together.
+    pub total: u32,
+}
+
+/// One item of a task's checklist.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ChecklistRow {
+    pub id: String,
+    pub text: String,
+    pub done: bool,
+}
+
+/// Where a checklist item is added or moved to.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum ChecklistPosition {
+    Top,
+    Bottom,
+    /// Right before this item of the same checklist.
+    Before {
+        item_id: String,
+    },
 }
 
 /// One session in the task sheet's logged time.
@@ -116,73 +152,6 @@ pub struct RepeatCheck {
     pub starts: Option<DayValue>,
     /// The end date the same way (also when "Never" is chosen, so switching keeps it).
     pub ends: Option<DayValue>,
-}
-
-/// A day's time grid, read-only: 24 hours, positions in minutes after local midnight.
-#[derive(Clone, Debug, PartialEq, uniffi::Record)]
-pub struct DayGrid {
-    /// "2026-11-23".
-    pub day: String,
-    /// "Monday, November 23".
-    pub day_label: String,
-    /// The hour lines 01:00 to 23:00.
-    pub hours: Vec<HourMark>,
-    /// Sessions, then planned blocks, in drawing order.
-    pub blocks: Vec<GridBlock>,
-    /// The now-line in minutes (with the fraction of the current minute), only on today.
-    pub now_minute: Option<f32>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct HourMark {
-    /// Minutes after midnight, e.g. 60.
-    pub minute: u32,
-    /// "01:00".
-    pub label: String,
-}
-
-/// Something drawn on the grid.
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct GridBlock {
-    /// The session's or task's id; a session's later segment past midnight adds "-<day>".
-    pub id: String,
-    pub kind: GridBlockKind,
-    /// Minutes after midnight, 0..1440.
-    pub start_minute: u32,
-    /// After `start_minute` (at least a minute, as on the desktop), at most 1440.
-    pub end_minute: u32,
-    /// The task's title; a session without a task: "Other work".
-    pub title: String,
-    /// "09:00 – 10:30".
-    pub range_label: String,
-    /// The quest's colour ("#rrggbb"); None: the theme's faint colour.
-    pub color_hex: Option<String>,
-    /// A planned block of a done task (its title dims).
-    pub done: bool,
-    /// The lane it takes among overlapping items, and how many lanes they share: it is
-    /// `1 / lane_count` wide.
-    pub lane: u32,
-    pub lane_count: u32,
-    /// What actions take: the session's id (without the "-<day>" suffix) or the planned task's.
-    pub target_id: String,
-    /// "Session Write docs, 09:00 – 10:30" / "Planned Write docs, 09:00 – 10:30".
-    pub a11y_label: String,
-    /// Long-press moves the whole block: any planned block, a finished session wholly on this day.
-    pub can_move: bool,
-    /// The top handle changes the start (a session's start lies on this day).
-    pub start_handle: bool,
-    /// The bottom handle changes the end (not while running; a session's end lies on this day).
-    pub end_handle: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
-pub enum GridBlockKind {
-    /// Tracked time: filled and hatched, a colour bar on the left.
-    Session,
-    /// The running timer: dashed, growing to now.
-    Running,
-    /// A task's planned block: an outline.
-    Planned,
 }
 
 /// The quick-add sheet (share target, app shortcut, quick settings tile).

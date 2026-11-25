@@ -134,8 +134,14 @@ impl TestStore {
 
     pub fn create_task(&self, title: &str) -> EntityId {
         let id = EntityId::new();
-        let command =
-            Command::CreateTask { id, title: title.into(), quest_id: None, day: None, position: Position::Bottom };
+        let command = Command::CreateTask {
+            id,
+            title: title.into(),
+            quest_id: None,
+            planned_on: None,
+            due_on: None,
+            position: Position::Bottom,
+        };
         self.store().dispatch(command).expect("task is valid");
         id
     }

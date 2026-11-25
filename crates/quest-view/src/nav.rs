@@ -6,7 +6,6 @@ use quest_domain::EntityId;
 pub enum View {
     Home,
     Plan,
-    Calendar,
     Focus,
     Quests,
     Review,
@@ -17,7 +16,7 @@ pub enum View {
 }
 
 impl View {
-    pub const ALL: [View; 6] = [View::Home, View::Plan, View::Calendar, View::Focus, View::Quests, View::Review];
+    pub const ALL: [View; 5] = [View::Home, View::Plan, View::Focus, View::Quests, View::Review];
 
     /// The tab after (or before) this view's, wrapping around: Tab and ⇧Tab.
     pub fn cycled(self, back: bool) -> View {
@@ -30,7 +29,6 @@ impl View {
         match self {
             View::Home => "Home",
             View::Plan => "Plan",
-            View::Calendar => "Calendar",
             View::Focus => "Focus",
             View::Quests => "Quests",
             View::Review => "Review",

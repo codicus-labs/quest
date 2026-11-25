@@ -32,7 +32,14 @@ pub(crate) fn add_task(
         AddPosition::Bottom => Position::Bottom,
     };
     let quest_id = choice.known_in(snapshot).quest_for(snapshot, section);
-    Ok(Command::CreateTask { id, title: title.to_owned(), quest_id, day: Some(now.today()), position })
+    Ok(Command::CreateTask {
+        id,
+        title: title.to_owned(),
+        quest_id,
+        planned_on: Some(now.today()),
+        due_on: None,
+        position,
+    })
 }
 
 /// Completes an open task or reopens a done one. Completing goes the plan's way (desktop
@@ -77,10 +84,20 @@ pub(crate) fn set_quest(task: &Task, quest_id: Option<&str>) -> Result<Option<Co
     Ok((task.quest_id != quest_id).then_some(Command::AssignTask { id: task.id, quest_id }))
 }
 
-/// Moves the task to `day` (None: the backlog) at the bottom of that list, as the task dialog's
-/// DATE field does; nothing when it is there already.
-pub(crate) fn set_day(task: &Task, day: Option<NaiveDate>) -> Option<Command> {
-    (task.day != day).then_some(Command::MoveTask { id: task.id, day, position: Position::Bottom })
+/// Plans the task for `planned_on` (None: unplanned) at the bottom of that day's list, as the
+/// task dialog's date field does; nothing when it is planned so already.
+pub(crate) fn set_planned(task: &Task, planned_on: Option<NaiveDate>, now: Now) -> Option<Command> {
+    (task.planned_on != planned_on).then_some(Command::MoveTask {
+        id: task.id,
+        planned_on,
+        position: Position::Bottom,
+        at: now.at,
+    })
+}
+
+/// Sets or clears the deadline; nothing when it is so already.
+pub(crate) fn set_due(task: &Task, due_on: Option<NaiveDate>, now: Now) -> Option<Command> {
+    (task.due_on != due_on).then_some(Command::SetTaskDue { id: task.id, due_on, at: now.at })
 }
 
 /// Sets or (with `None`) stops the repeat of the task's series.

@@ -81,7 +81,8 @@ enum class NotificationAction { Pause, Resume, Complete }
 
 /** The focus notification's content, independent of Android's builder (so it is testable). */
 data class FocusNotificationContent(
-    val taskId: String,
+    /** null while organizing (no task). */
+    val taskId: String?,
     val title: String,
     /** The quest's name; null without a quest. */
     val questName: String?,
@@ -96,7 +97,10 @@ data class FocusNotificationContent(
     val actions: List<NotificationAction>,
 )
 
-/** Running: chronometer from the core's base (no per-second updates), Pause and Complete. */
+/**
+ * Running: chronometer from the core's base (no per-second updates), Pause and Complete. Organizing
+ * (titled "Organizing" by the core) has no task to pause or complete, so no buttons.
+ */
 fun runningContent(session: RunningSession) = FocusNotificationContent(
     taskId = session.taskId,
     title = session.title,
@@ -106,7 +110,7 @@ fun runningContent(session: RunningSession) = FocusNotificationContent(
     chronometerBaseMs = session.chronometerBaseMs,
     running = true,
     ongoing = true,
-    actions = listOf(NotificationAction.Pause, NotificationAction.Complete),
+    actions = if (session.taskId == null) emptyList() else listOf(NotificationAction.Pause, NotificationAction.Complete),
 )
 
 /** Paused from the notification: no chronometer, Resume and Complete, dismissible. */

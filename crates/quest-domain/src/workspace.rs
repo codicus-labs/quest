@@ -4,29 +4,28 @@ use crate::change::{EntityId, EntityKind, FieldStore, FieldValues};
 use crate::command::CommandError;
 use std::collections::HashMap;
 
-use crate::model::{Workspace, fields, get, get_opt, workspace_id};
-use crate::recurrence::Occurrence;
+use crate::model::{Workspace, fields, get, workspace_id};
+use crate::recurrence::{ChecklistCopy, Occurrence};
 use crate::snapshot::Snapshot;
 
-/// Parent links are at most session → task → series → quest deep; the limit also stops cycles
-/// in corrupt data.
-const MAX_DEPTH: u8 = 4;
+/// Parent links are at most checklist item → occurrence → series deep; the limit also stops
+/// cycles in corrupt data.
+const MAX_DEPTH: u8 = 3;
 
-/// The workspace a record belongs to: its own `workspace_id`, else its parent's (an occurrence's
-/// series, a task's quest, a session's task or quest, a milestone's quest), else the default
-/// workspace. Records from before workspaces and from older clients carry no workspace, so they
-/// land with their parent, and parentless ones in the default workspace, on every device alike.
+/// The workspace a record belongs to: its own `workspace_id`, else its parent's (see
+/// `parents`), else the default workspace.
 pub(crate) fn workspace_of(store: &FieldStore, kind: EntityKind, id: EntityId) -> EntityId {
     placed(store, kind, id, MAX_DEPTH).unwrap_or(EntityId::DEFAULT_WORKSPACE)
 }
 
-/// Where every quest, task, milestone and session is, worked out once per snapshot.
+/// Where every record of a workspace is, worked out once per snapshot.
 pub(crate) struct Placements(HashMap<(EntityKind, EntityId), EntityId>);
 
 impl Placements {
     pub(crate) fn new(store: &FieldStore) -> Self {
-        let placed = [EntityKind::Quest, EntityKind::Task, EntityKind::Milestone, EntityKind::TimeEntry]
+        let placed = EntityKind::ALL
             .into_iter()
+            .filter(|kind| !matches!(kind, EntityKind::Settings | EntityKind::Workspace))
             .flat_map(|kind| store.entities(kind).map(move |(id, _)| ((kind, id), workspace_of(store, kind, id))));
         Placements(placed.collect())
     }
@@ -65,24 +64,27 @@ fn placed(store: &FieldStore, kind: EntityKind, id: EntityId, depth: u8) -> Opti
         return Some(workspace);
     }
     let depth = depth.checked_sub(1)?;
-    parents(kind, values).into_iter().flatten().find_map(|(kind, id)| placed(store, kind, id, depth))
+    let (kind, id) = parents(kind, values)?;
+    placed(store, kind, id, depth)
 }
 
-fn parents(kind: EntityKind, values: &FieldValues) -> [Option<(EntityKind, EntityId)>; 2] {
-    let quest = |id: Option<EntityId>| id.map(|id| (EntityKind::Quest, id));
+/// A copy a repeat makes carries no workspace: an occurrence follows its series, a copied
+/// checklist item its task.
+fn parents(kind: EntityKind, values: &FieldValues) -> Option<(EntityKind, EntityId)> {
     match kind {
         EntityKind::Task => {
             let initial: Option<Occurrence> = get(values, fields::TASK_OCCURRENCE);
-            let own_quest = get::<Option<EntityId>>(values, fields::QUEST_ID);
-            let quest_id = own_quest.unwrap_or_else(|| initial.as_ref().and_then(|o| o.quest_id));
-            [initial.map(|o| (EntityKind::Task, o.series)), quest(quest_id)]
+            initial.map(|o| (EntityKind::Task, o.series))
         }
-        EntityKind::TimeEntry => {
-            let task = get_opt(values, fields::ENTRY_TASK_ID).map(|id| (EntityKind::Task, id));
-            [task, quest(get_opt(values, fields::QUEST_ID))]
+        EntityKind::ChecklistItem => {
+            let initial: Option<ChecklistCopy> = get(values, fields::CHECKLIST_INITIAL);
+            initial.map(|i| (EntityKind::Task, i.task_id))
         }
-        EntityKind::Milestone => [quest(get(values, fields::QUEST_ID)), None],
-        EntityKind::Quest | EntityKind::Settings | EntityKind::Workspace => [None, None],
+        EntityKind::Quest
+        | EntityKind::Postponement
+        | EntityKind::TimeEntry
+        | EntityKind::Settings
+        | EntityKind::Workspace => None,
     }
 }
 

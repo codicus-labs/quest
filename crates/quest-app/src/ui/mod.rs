@@ -1,14 +1,12 @@
 //! The view: top bar, the current view, and overlays (command palette, account, Log work, shortcuts,
-//! a task's dialog, a quest's dialog, a time entry's editor).
+//! a task's dialog, a quest's dialog).
 
 mod account;
 mod archive;
 mod auth_dialogs;
-mod calendar;
 mod capture;
 pub(crate) mod date_picker;
 pub mod drag;
-mod entry_editor;
 mod focus;
 mod home;
 mod log_work;
@@ -26,7 +24,6 @@ mod review;
 mod shortcuts;
 mod task_modal;
 mod task_picker;
-mod timegrid;
 mod toast;
 pub mod topbar;
 pub(crate) mod workspaces;
@@ -45,8 +42,6 @@ mod dnd_room_tests;
 mod dnd_scroll_tests;
 #[cfg(test)]
 mod dnd_tests;
-#[cfg(test)]
-mod entry_editor_tests;
 #[cfg(test)]
 mod idle_tests;
 #[cfg(test)]
@@ -88,7 +83,6 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     let page = match s.view {
         View::Home => home::view(s, p),
         View::Plan => plan::view(s, p, cx),
-        View::Calendar => calendar::view(s, p),
         View::Focus => focus::view(s, p, cx.chrome_insets().leading),
         View::Quests => quests::view(s, p),
         View::Review => review::view(s, p),
@@ -111,7 +105,6 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
         Overlay::LogWork => log_work::layer(s, p, &mut layer),
         Overlay::Shortcuts => shortcuts::layer(p, &mut layer),
         Overlay::Task => task_modal::layer(s, p, &mut layer),
-        Overlay::EntryEditor => entry_editor::layer(s, p, &mut layer),
         Overlay::RepeatEditor => recurrence::editor_layer(s, p, &mut layer),
         Overlay::RecurringTasks => recurrence::overview_layer(s, p, &mut layer),
         Overlay::Capture => capture::layer(s, p, &mut layer),

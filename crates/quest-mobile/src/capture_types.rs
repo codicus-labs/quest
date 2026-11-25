@@ -25,14 +25,6 @@ pub struct DraftQuest {
     pub key: String,
     pub selected: bool,
     pub title: String,
-    pub description: String,
-    pub milestones: Vec<DraftMilestone>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct DraftMilestone {
-    pub title: String,
-    pub day: DayValue,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -44,20 +36,13 @@ pub struct DraftTask {
     pub quest: Option<DraftQuestRef>,
     /// The AI guessed the quest: show it marked.
     pub quest_uncertain: bool,
-    /// None: Someday (the backlog).
-    pub day: Option<DayValue>,
-    /// Only kept with a day.
-    pub block: Option<DraftBlock>,
-    /// Only kept with a day; the series starts on it (the draft's `starts` and `pin` are not used).
+    /// The plan date; None: not planned.
+    pub planned_on: Option<DayValue>,
+    /// The deadline; None: none. Not before `planned_on` (else the task shows an error).
+    pub due_on: Option<DayValue>,
+    /// Only kept with a plan date; the series starts on it (the draft's `starts` and `pin` are
+    /// not used).
     pub repeat: Option<RepeatDraft>,
-}
-
-/// A planned block as the time pickers give it: minutes since midnight, 0 to 1439. An end of 0
-/// is midnight at the end of the day.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct DraftBlock {
-    pub start_minutes: u32,
-    pub end_minutes: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -103,8 +88,6 @@ pub struct DraftQuestView {
     pub key: String,
     /// The colour the quest will get.
     pub color_hex: String,
-    /// "2 milestones", or "".
-    pub detail: String,
     pub error: Option<String>,
 }
 
@@ -113,11 +96,8 @@ pub struct DraftTaskView {
     pub key: String,
     /// The quest it will get (None also when its new quest is deselected).
     pub quest: Option<QuestChip>,
-    /// "Tomorrow · 09:00–10:00", "Fri, Nov 27", "Someday".
+    /// "Tomorrow · due Fri, Nov 27", "Fri, Nov 27", "Due Tomorrow", "Someday".
     pub when: String,
-    /// "09:00" and "24:00" for the block's time pickers.
-    pub block_start_label: Option<String>,
-    pub block_end_label: Option<String>,
     /// "Every week on Mon, Wed"-style summary of the repeat.
     pub repeat_summary: Option<String>,
     /// What to fix before it can be created.

@@ -38,7 +38,7 @@ impl QuestCore {
         search::placeholder(&mode)
     }
 
-    /// Carries out an entry's data part (create, move, schedule, delete, start the timer) and
+    /// Carries out an entry's data part (create, move, delete, start the timer) and
     /// says what the UI shows next.
     pub fn run_search(&self, token: SearchToken, now: Moment) -> Result<SearchOutcome, MobileError> {
         guard(|| {
@@ -60,7 +60,7 @@ impl QuestCore {
                     SearchOutcome::Show { view: AppView::Home }
                 }
                 SearchToken::CreateQuest { title } => {
-                    SearchOutcome::ShowQuest { quest_id: self.create_quest(title, String::new(), None)? }
+                    SearchOutcome::ShowQuest { quest_id: self.create_quest(title, None)? }
                 }
                 SearchToken::Focus { task_id } => {
                     let snapshot = self.store().snapshot();
@@ -70,13 +70,7 @@ impl QuestCore {
                 }
                 SearchToken::MoveTask { task_id, day } => {
                     let task = self.task(&task_id)?;
-                    self.dispatch(search::move_task(task.id, day.as_deref())?)?;
-                    SearchOutcome::Done
-                }
-                SearchToken::Schedule { task_id, day, start_minute } => {
-                    let task = self.task(&task_id)?;
-                    let command = search::schedule(&self.store().snapshot(), task.id, &day, start_minute)?;
-                    self.dispatch(command)?;
+                    self.dispatch(search::move_task(task.id, day.as_deref(), now.at)?)?;
                     SearchOutcome::Done
                 }
                 SearchToken::DeleteTask { task_id } => {

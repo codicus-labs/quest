@@ -24,21 +24,11 @@ fn time_zone_defaults_and_rejects_unknown_names() {
 }
 
 #[test]
-fn days_parse_iso_or_someday() {
-    assert_eq!(parse_day_or_someday("someday", "day").unwrap(), None);
-    assert_eq!(parse_day_or_someday("2026-11-24", "day").unwrap(), NaiveDate::from_ymd_opt(2026, 11, 24));
+fn days_parse_iso_or_none() {
+    assert_eq!(parse_day_or_none("none", "planned_on").unwrap(), None);
+    assert_eq!(parse_day_or_none("2026-11-24", "planned_on").unwrap(), NaiveDate::from_ymd_opt(2026, 11, 24));
     let error = parse_day("24.11.2026", "day").unwrap_err();
     assert!(error.message.contains("ISO date"), "{}", error.message);
-}
-
-#[test]
-fn blocks_must_fit_the_day() {
-    let block = |start: &str, minutes| parse_block(&BlockInput { start: start.into(), minutes });
-    assert_eq!(block("09:30", 45).unwrap().minutes, 45);
-    assert!(block("23:00", 60).is_ok());
-    assert!(block("23:30", 60).is_err());
-    assert!(block("09:30", 2).is_err());
-    assert!(block("9.30", 30).is_err());
 }
 
 #[test]

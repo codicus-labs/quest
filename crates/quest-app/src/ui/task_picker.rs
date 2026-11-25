@@ -1,72 +1,31 @@
 use quest_domain::EntityId;
 use rune::{Cursor, El, Tx, icon, row, text};
-use rune_kit::{Combobox, ComboboxOption, ComboboxState};
+use rune_kit::{Combobox, ComboboxOption};
 
 use crate::state::State;
 use crate::theme::{Pal, ty};
 
 const CREATE: &str = "create";
 
-#[derive(Clone, Copy)]
-pub(super) enum Form {
-    LogWork,
-    Entry,
+fn choose(s: &mut State, id: &str) {
+    if id != CREATE {
+        if let Ok(task) = id.parse::<EntityId>() {
+            s.pick_log_work_task(task);
+        }
+        return;
+    }
+    let title = s.log_work.task_picker.search().text.trim().to_owned();
+    if title.is_empty() {
+        return;
+    }
+    s.log_work.task = None;
+    s.log_work.title = rune::TextEdit::new(title);
+    s.log_work.error = None;
 }
 
-impl Form {
-    fn picker(self, s: &mut State) -> &mut ComboboxState {
-        match self {
-            Self::LogWork => &mut s.log_work.task_picker,
-            Self::Entry => &mut s.entry_form.task_picker,
-        }
-    }
-
-    fn choose(self, s: &mut State, id: &str) {
-        if id == CREATE {
-            let title = self.picker(s).search().text.trim().to_owned();
-            if title.is_empty() {
-                return;
-            }
-            match self {
-                Self::LogWork => {
-                    s.log_work.task = None;
-                    s.log_work.title = rune::TextEdit::new(title);
-                    s.log_work.error = None;
-                }
-                Self::Entry => {
-                    s.entry_form.task = None;
-                    s.entry_form.new_task = Some(title);
-                }
-            }
-            return;
-        }
-        let task = id.parse::<EntityId>().ok();
-        match (self, task) {
-            (Self::Entry, task) => s.pick_entry_task(task),
-            (Self::LogWork, Some(task)) => s.pick_log_work_task(task),
-            (Self::LogWork, None) => {}
-        }
-    }
-}
-
-pub(super) fn combo(form: Form, s: &State, p: &Pal, popups: &mut Vec<El>) -> El {
-    let (key, state, task, new_task, empty) = match form {
-        Form::LogWork => (
-            "log-work-task",
-            &s.log_work.task_picker,
-            s.log_work.task,
-            Some(s.log_work.title.text.as_str()),
-            "Choose task…",
-        ),
-        Form::Entry => (
-            "entry-editor-task",
-            &s.entry_form.task_picker,
-            s.entry_form.task,
-            s.entry_form.new_task.as_deref(),
-            "No task",
-        ),
-    };
-    let new_task = new_task.filter(|title| !title.is_empty() && task.is_none());
+pub(super) fn combo(s: &State, p: &Pal, popups: &mut Vec<El>) -> El {
+    let (key, state, task, empty) = ("log-work-task", &s.log_work.task_picker, s.log_work.task, "Choose task…");
+    let new_task = Some(s.log_work.title.text.as_str()).filter(|title| !title.is_empty() && task.is_none());
     let selected = task.map(|id| id.to_string()).or_else(|| new_task.map(|_| CREATE.to_owned()));
     let query = state.search().text.trim();
     let needle = query.to_lowercase();
@@ -127,14 +86,14 @@ pub(super) fn combo(form: Form, s: &State, p: &Pal, popups: &mut Vec<El>) -> El 
                 .a11y_hidden(),
         )
         .child(icon(p.kit.glyph.chevron_down, 14.0).color(p.muted).a11y_hidden());
-    Combobox::new(key, state, &options, move |s: &mut State| form.picker(s))
+    Combobox::new(key, state, &options, |s: &mut State| &mut s.log_work.task_picker)
         .label("Tasks")
         .trigger(trigger)
         .current(selected.as_deref())
         .placeholder(empty)
         .search_placeholder("Search or create a task…")
         .width(320.0)
-        .on_choose(move |s, id, _: &mut Tx| form.choose(s, id))
+        .on_choose(|s, id, _: &mut Tx| choose(s, id))
         .build(&p.kit, popups)
         .grow(1.0)
         .min_w(0.0)

@@ -132,8 +132,8 @@ impl QuestCore {
             let now = Now::parse(&now)?;
             let task = self.task(&task_id)?;
             self.dispatch(commands::toggle_task(&task, now))?;
-            let day_now = self.store().snapshot().task(task.id).and_then(|t| t.day);
-            let moved_from = task.day.filter(|_| day_now != task.day);
+            let day_now = self.store().snapshot().task(task.id).and_then(|t| t.planned_on);
+            let moved_from = task.planned_on.filter(|_| day_now != task.planned_on);
             self.undo_state().toggled(task.id, !task.is_done(), moved_from, task.title, now.at);
             Ok(())
         })

@@ -1,11 +1,10 @@
 //! The undo snackbar, pure. Deletes and quest completions go through the desktop's
-//! `quest_view::undo::UndoState` unchanged. Mobile adds two cases the desktop lacks: a swipe that completes or reopens a task
-//! shows "Completed “…”" / "Reopened “…”" with Undo, which flips it back; a block dragged on the
-//! calendar shows "Moved “…”" / "Changed “…”" with Undo, which puts it back. The core performs
-//! the returned `UndoAction`.
+//! `quest_view::undo::UndoState` unchanged. Mobile adds a case the desktop lacks: a swipe that
+//! completes or reopens a task shows "Completed “…”" / "Reopened “…”" with Undo, which flips it
+//! back. The core performs the returned `UndoAction`.
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
-use quest_domain::{EntityId, QuestStatus, TimeBlock};
+use quest_domain::{EntityId, QuestStatus};
 use quest_view::undo::{Deletable, Shown, TOAST_SECONDS, Toast, UndoEffect, UndoEvent, UndoState};
 
 use crate::types::UndoToast;
@@ -20,7 +19,6 @@ pub(crate) enum UndoAction {
         back_to: Option<NaiveDate>,
     },
     Complete(EntityId),
-    PutBack(PutBack),
     /// Puts a completed or reopened quest back to `status`.
     SetQuestStatus {
         quest: EntityId,
@@ -28,19 +26,10 @@ pub(crate) enum UndoAction {
     },
 }
 
-/// Where a dragged block was before.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PutBack {
-    /// A session's times (a running one keeps running).
-    Entry { id: EntityId, started_at: DateTime<Utc>, ended_at: Option<DateTime<Utc>> },
-    /// A task's planned block on its day.
-    Block { id: EntityId, day: NaiveDate, block: TimeBlock },
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct MobileUndo {
     deletes: UndoState,
-    /// A mobile toast: a completion or a drag, with what its Undo does.
+    /// A mobile toast: a completion, with what its Undo does.
     own: Option<Own>,
 }
 
@@ -92,19 +81,13 @@ impl MobileUndo {
         self.show_own(action, format!("{verb} “{title}”"), now);
     }
 
-    /// A drag moved a block (`resized`: changed its length): Undo puts it back as `before`.
-    pub fn moved(&mut self, before: PutBack, resized: bool, title: &str, now: DateTime<Utc>) {
-        let verb = if resized { "Changed" } else { "Moved" };
-        self.show_own(UndoAction::PutBack(before), format!("{verb} “{title}”"), now);
-    }
-
     fn show_own(&mut self, action: UndoAction, text: String, now: DateTime<Utc>) {
         self.step(UndoEvent::Dismiss, now);
         let until = now + Duration::seconds(TOAST_SECONDS);
         self.own = Some(Own { action, text, until });
     }
 
-    /// The toast's Undo: flips a shown completion back or puts a dragged block back, else
+    /// The toast's Undo: flips a shown completion back, else
     /// takes back the last delete or quest completion (also after its toast went, like the
     /// desktop's ⌘Z). A mobile
     /// toast whose time ran out but that a tick has not removed yet is still what the user

@@ -18,15 +18,14 @@ fn snapshot() -> (Snapshot, EntityId, EntityId) {
         color: QuestColor::Red,
         status: QuestStatus::Active,
         sort_key: "a".into(),
-        description: String::new(),
     };
     let task = |title: &str, done: bool| Task {
         id: EntityId::new(),
         title: title.into(),
         quest_id: Some(quest.id),
-        day: Some(today()),
+        planned_on: Some(today()),
+        due_on: None,
         sort_key: "a".into(),
-        block: None,
         completed_at: done.then(|| "2026-10-15T14:40:00Z".parse().unwrap()),
         description: String::new(),
         repeat: None,
@@ -76,7 +75,7 @@ fn saving_logs_on_the_picked_task_or_creates_a_done_one() {
         decide(&fresh, today(), utc, entry, new),
         Ok(Command::LogWork {
             entry_id: entry,
-            task: WorkTask::New { id: new, title: "Contact sheet".into(), quest_id: Some(quest), day: today() },
+            task: WorkTask::New { id: new, title: "Contact sheet".into(), quest_id: Some(quest), planned_on: today() },
             started_at: at(9, 0),
             ended_at: at(9, 30)
         })

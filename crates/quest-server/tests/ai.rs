@@ -41,7 +41,7 @@ fn capture_request(text: &str) -> CaptureRequest {
         time_zone: "Europe/Berlin".into(),
         language: "de-DE".into(),
         context: CaptureContext {
-            quests: vec![ContextQuest { id: relaunch(), title: "Website-Relaunch".into(), description: String::new() }],
+            quests: vec![ContextQuest { id: relaunch(), title: "Website-Relaunch".into() }],
             tasks: vec![],
         },
     }
@@ -50,14 +50,13 @@ fn capture_request(text: &str) -> CaptureRequest {
 /// What a model would answer for [`TEXT`], shaped like `quest_capture::output_schema`.
 fn model_answer() -> Value {
     json!({
-        "new_quests": [{ "key": "q1", "title": "Steuererklärung", "description": "", "milestones": [] }],
+        "new_quests": [{ "key": "q1", "title": "Steuererklärung" }],
         "tasks": [
             { "title": "Angebot für Müller schreiben", "description": "", "quest_id": relaunch().0.to_string(),
-              "new_quest_key": null, "quest_confidence": "high", "day": "2026-11-25", "start_time": null,
-              "duration_minutes": null, "repeat": null },
-            { "title": "Belege sammeln", "description": "", "quest_id": null, "new_quest_key": "q1",
-              "quest_confidence": "high", "day": "2026-11-27", "start_time": null, "duration_minutes": null,
+              "new_quest_key": null, "quest_confidence": "high", "planned_on": "2026-11-25", "due_on": null,
               "repeat": null },
+            { "title": "Belege sammeln", "description": "", "quest_id": null, "new_quest_key": "q1",
+              "quest_confidence": "high", "planned_on": "2026-11-27", "due_on": null, "repeat": null },
         ],
         "work_logs": [
             { "task_id": null, "new_task_title": "Relaunch-Konzept", "quest_id": relaunch().0.to_string(),
@@ -129,8 +128,8 @@ fn assert_example_proposal(response: &CaptureResponse) {
     assert_eq!(proposal.quests[0].title, "Steuererklärung");
     assert_eq!(proposal.tasks.len(), 2);
     assert_eq!(proposal.tasks[0].quest, Some(QuestRef::Existing { id: relaunch() }));
-    assert_eq!(proposal.tasks[0].day, NaiveDate::from_ymd_opt(2026, 11, 25));
-    assert_eq!(proposal.tasks[0].block, None, "a duration without a start time is no block");
+    assert_eq!(proposal.tasks[0].planned_on, NaiveDate::from_ymd_opt(2026, 11, 25));
+    assert_eq!(proposal.tasks[1].planned_on, NaiveDate::from_ymd_opt(2026, 11, 27));
     assert_eq!(proposal.tasks[1].quest, Some(QuestRef::New { key: proposal.quests[0].key.clone() }));
     assert_eq!(proposal.work.len(), 1);
     let work = &proposal.work[0];

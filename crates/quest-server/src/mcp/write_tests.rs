@@ -1,8 +1,8 @@
-use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
-use quest_domain::{FieldStore, Hlc, HlcClock, NodeId, PlannedBatch, plan_all};
+use chrono::{NaiveDate, TimeZone, Utc};
+use quest_domain::{EntryKind, FieldStore, Hlc, HlcClock, NodeId, PlannedBatch, plan_all};
 
 use super::*;
-use crate::mcp::types::{BlockInput, CallContext, ColorInput, ItemKind};
+use crate::mcp::types::{CallContext, ColorInput, ItemKind, StartTimerInput};
 use crate::mcp::view::find_task;
 
 struct World {
@@ -35,8 +35,7 @@ impl World {
     }
 
     fn quest(&mut self, title: &str) -> EntityId {
-        let input =
-            CreateQuestInput { title: title.into(), description: None, color: None, context: CallContext::default() };
+        let input = CreateQuestInput { title: title.into(), color: None, context: CallContext::default() };
         let decision = create_quest(&self.snapshot(), &input, &mut EntityId::new);
         self.decide(decision)
     }
@@ -51,9 +50,9 @@ fn new_task(title: &str) -> CreateTaskInput {
     CreateTaskInput {
         title: title.into(),
         description: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         quest_id: None,
-        block: None,
         repeat: None,
         context: CallContext::default(),
     }
@@ -64,10 +63,9 @@ fn update(task: EntityId) -> UpdateTaskInput {
         task_id: task.to_string(),
         title: None,
         description: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         quest_id: None,
-        block: None,
-        clear_block: false,
         repeat: None,
         clear_repeat: false,
         context: CallContext::default(),
@@ -85,37 +83,41 @@ fn daily() -> RepeatInput {
     }
 }
 
+/// Planned for today, repeating daily.
+fn repeating(title: &str) -> CreateTaskInput {
+    CreateTaskInput { planned_on: Some("2026-11-24".into()), repeat: Some(daily()), ..new_task(title) }
+}
+
 fn day(d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, 11, d).unwrap()
 }
 
 #[test]
-fn create_task_lands_on_today_with_quest_block_and_description() {
+fn create_task_takes_dates_quest_and_description() {
     let mut world = World::new();
     let quest = world.quest("Fitness");
     let id = world.task(CreateTaskInput {
         description: Some("  3 sets  ".into()),
         quest_id: Some(quest.to_string()),
-        block: Some(BlockInput { start: "18:00".into(), minutes: 60 }),
+        planned_on: Some("2026-11-25".into()),
+        due_on: Some("2026-11-27".into()),
         ..new_task(" Run ")
     });
     let snapshot = world.snapshot();
     let task = snapshot.task(id).unwrap();
     assert_eq!((task.title.as_str(), task.description.as_str()), ("Run", "3 sets"));
-    assert_eq!((task.day, task.quest_id), (Some(day(24)), Some(quest)));
-    assert_eq!(task.block.unwrap().start, NaiveTime::from_hms_opt(18, 0, 0).unwrap());
+    assert_eq!((task.planned_on, task.due_on, task.quest_id), (Some(day(25)), Some(day(27)), Some(quest)));
+    let unplanned = world.task(new_task("Someday"));
+    assert_eq!(world.snapshot().task(unplanned).unwrap().dates(), Default::default());
 }
 
 #[test]
-fn create_task_refuses_a_block_in_the_backlog_and_unknown_quests() {
+fn create_task_refuses_a_deadline_before_the_plan_and_unknown_quests() {
     let world = World::new();
-    let backlog_block = CreateTaskInput {
-        day: Some("someday".into()),
-        block: Some(BlockInput { start: "09:00".into(), minutes: 30 }),
-        ..new_task("x")
-    };
+    let late_plan =
+        CreateTaskInput { planned_on: Some("2026-11-28".into()), due_on: Some("2026-11-26".into()), ..new_task("x") };
     assert_eq!(
-        create_task(&world.snapshot(), &backlog_block, &world.clock, &mut EntityId::new).unwrap_err().code,
+        create_task(&world.snapshot(), &late_plan, &world.clock, &mut EntityId::new).unwrap_err().code,
         ToolCode::InvalidInput
     );
     let unknown = CreateTaskInput { quest_id: Some(EntityId::new().to_string()), ..new_task("x") };
@@ -134,19 +136,62 @@ fn create_task_refuses_a_block_in_the_backlog_and_unknown_quests() {
 fn update_task_changes_only_given_fields_and_needs_one() {
     let mut world = World::new();
     let id = world.task(new_task("Write report"));
-    let decision =
-        update_task(&world.snapshot(), &UpdateTaskInput { day: Some("2026-11-26".into()), ..update(id) }, &world.clock);
+    let input = UpdateTaskInput { planned_on: Some("2026-11-26".into()), ..update(id) };
+    let decision = update_task(&world.snapshot(), &input, &world.clock);
     world.decide(decision);
     let snapshot = world.snapshot();
     let task = snapshot.task(id).unwrap();
-    assert_eq!((task.title.as_str(), task.day), ("Write report", Some(day(26))));
+    assert_eq!((task.title.as_str(), task.planned_on), ("Write report", Some(day(26))));
     assert_eq!(update_task(&snapshot, &update(id), &world.clock).unwrap_err().code, ToolCode::InvalidInput);
+}
+
+#[test]
+fn one_date_takes_the_other_along() {
+    let mut world = World::new();
+    let id = world.task(CreateTaskInput {
+        planned_on: Some("2026-11-25".into()),
+        due_on: Some("2026-11-27".into()),
+        ..new_task("Report")
+    });
+    let later_plan = UpdateTaskInput { planned_on: Some("2026-11-29".into()), ..update(id) };
+    let decision = update_task(&world.snapshot(), &later_plan, &world.clock);
+    world.decide(decision);
+    assert_eq!(world.snapshot().task(id).unwrap().due_on, Some(day(29)));
+    let earlier_due = UpdateTaskInput { due_on: Some("2026-11-26".into()), ..update(id) };
+    let decision = update_task(&world.snapshot(), &earlier_due, &world.clock);
+    world.decide(decision);
+    assert_eq!(world.snapshot().task(id).unwrap().planned_on, Some(day(26)));
+    let cleared = UpdateTaskInput { planned_on: Some("none".into()), due_on: Some("none".into()), ..update(id) };
+    let decision = update_task(&world.snapshot(), &cleared, &world.clock);
+    world.decide(decision);
+    assert_eq!(world.snapshot().task(id).unwrap().dates(), Default::default());
+    // Moving the plan date later recorded a postponement.
+    assert!(world.snapshot().postponements_of(id).next().is_some());
+}
+
+#[test]
+fn move_task_plans_and_unplans() {
+    let mut world = World::new();
+    let id = world.task(CreateTaskInput { due_on: Some("2026-11-25".into()), ..new_task("Call") });
+    let input = |planned_on: &str| MoveTaskInput {
+        task_id: id.to_string(),
+        planned_on: planned_on.into(),
+        position: PositionInput::Top,
+        context: CallContext::default(),
+    };
+    let decision = move_task(&world.snapshot(), &input("2026-11-26"), &world.clock);
+    world.decide(decision);
+    let dates = world.snapshot().task(id).unwrap().dates();
+    assert_eq!((dates.planned_on, dates.due_on), (Some(day(26)), Some(day(26))));
+    let decision = move_task(&world.snapshot(), &input("none"), &world.clock);
+    world.decide(decision);
+    assert_eq!(world.snapshot().task(id).unwrap().planned_on, None);
 }
 
 #[test]
 fn editing_a_planned_repeat_saves_it_first() {
     let mut world = World::new();
-    let series = world.task(CreateTaskInput { repeat: Some(daily()), ..new_task("Stretch") });
+    let series = world.task(repeating("Stretch"));
     let snapshot = world.snapshot();
     let planned = snapshot.planned_occurrences(day(25), world.clock.now).next().expect("tomorrow's repeat");
     assert_eq!(planned.series, Some(series));
@@ -156,13 +201,13 @@ fn editing_a_planned_repeat_saves_it_first() {
     let saved = snapshot.task(planned.id).expect("the repeat is saved");
     assert!(saved.is_done());
     // Done ahead of time: it moves to the day it was done on, as in the apps.
-    assert_eq!(saved.day, Some(day(24)));
+    assert_eq!(saved.planned_on, Some(day(24)));
 }
 
 #[test]
 fn repeat_on_an_occurrence_edits_its_series() {
     let mut world = World::new();
-    let series = world.task(CreateTaskInput { repeat: Some(daily()), ..new_task("Stretch") });
+    let series = world.task(repeating("Stretch"));
     let snapshot = world.snapshot();
     let planned = snapshot.planned_occurrences(day(25), world.clock.now).next().unwrap();
     let weekly = RepeatInput { frequency: FrequencyInput::Week, weekdays: vec!["mon".into(), "thu".into()], ..daily() };
@@ -182,7 +227,7 @@ fn repeat_rules_are_checked() {
     assert_eq!(repeat_rule(&weekdays_on_daily, None, None, &clock).unwrap_err().code, ToolCode::InvalidRepeatRule);
     let last = RepeatInput { frequency: FrequencyInput::Month, month_day: Some("last".into()), ..daily() };
     assert_eq!(repeat_rule(&last, Some(day(30)), None, &clock).unwrap().month_day, Some(MonthDay::Last));
-    // Starts on the task's day, but not in the past.
+    // Starts on the task's plan date, but not in the past.
     assert_eq!(repeat_rule(&daily(), Some(day(1)), None, &clock).unwrap().starts, day(24));
 }
 
@@ -244,7 +289,7 @@ fn log_work_needs_a_past_range_and_one_task() {
 #[test]
 fn log_work_on_a_planned_repeat_saves_it_first() {
     let mut world = World::new();
-    world.task(CreateTaskInput { repeat: Some(daily()), ..new_task("Stretch") });
+    world.task(repeating("Stretch"));
     let snapshot = world.snapshot();
     let planned = snapshot.planned_occurrences(day(25), world.clock.now).next().unwrap();
     let input = LogWorkInput {
@@ -263,17 +308,37 @@ fn log_work_on_a_planned_repeat_saves_it_first() {
     assert_eq!(entry.task_id, Some(planned.id));
 }
 
+fn timer(task_id: Option<EntityId>, organizing: bool) -> StartTimerInput {
+    StartTimerInput { task_id: task_id.map(|id| id.to_string()), organizing, context: CallContext::default() }
+}
+
 #[test]
 fn timer_starts_on_a_task_and_stopping_twice_is_fine() {
     let mut world = World::new();
     let id = world.task(new_task("Deep work"));
-    let decision = start_timer(&world.snapshot(), &id.to_string(), &world.clock, &mut EntityId::new);
+    let decision = start_timer(&world.snapshot(), &timer(Some(id), false), &world.clock, &mut EntityId::new);
     world.decide(decision);
     assert_eq!(world.snapshot().running_entry().unwrap().task_id, Some(id));
     let (commands, stopped) = stop_timer(&world.snapshot(), &world.clock);
     assert!(stopped.is_some());
     world.run(&commands);
     assert_eq!(stop_timer(&world.snapshot(), &world.clock), (Vec::new(), None));
+    let error = start_timer(&world.snapshot(), &timer(None, false), &world.clock, &mut EntityId::new).unwrap_err();
+    assert_eq!(error.code, ToolCode::InvalidInput);
+}
+
+#[test]
+fn timer_tracks_organizing_with_or_without_a_task_to_go_back_to() {
+    let mut world = World::new();
+    let id = world.task(new_task("Deep work"));
+    let decision = start_timer(&world.snapshot(), &timer(Some(id), true), &world.clock, &mut EntityId::new);
+    world.decide(decision);
+    let running = world.snapshot().running_entry().cloned().unwrap();
+    assert_eq!((running.kind, running.task_id, running.origin_task_id), (EntryKind::Organizing, None, Some(id)));
+    let decision = start_timer(&world.snapshot(), &timer(None, true), &world.clock, &mut EntityId::new);
+    world.decide(decision);
+    let running = world.snapshot().running_entry().cloned().unwrap();
+    assert_eq!((running.kind, running.origin_task_id), (EntryKind::Organizing, None));
 }
 
 #[test]
@@ -282,8 +347,7 @@ fn quests_get_updated_and_completed() {
     let quest = world.quest("Learn Rust");
     let input = UpdateQuestInput {
         quest_id: quest.to_string(),
-        title: None,
-        description: Some("Ownership first".into()),
+        title: Some("Learn Rust well".into()),
         color: Some(ColorInput::Teal),
         status: None,
         context: CallContext::default(),
@@ -294,31 +358,50 @@ fn quests_get_updated_and_completed() {
     world.decide(decision);
     let snapshot = world.snapshot();
     let saved = snapshot.quest(quest).unwrap();
-    assert_eq!((saved.description.as_str(), saved.status), ("Ownership first", QuestStatus::Completed));
+    assert_eq!((saved.title.as_str(), saved.status), ("Learn Rust well", QuestStatus::Completed));
     assert!(complete_quest(&snapshot, &quest.to_string()).unwrap().0.is_empty());
 }
 
 #[test]
-fn milestones_are_added_renamed_and_checked() {
+fn checklist_items_are_added_checked_renamed_and_deleted() {
     let mut world = World::new();
-    let quest = world.quest("Marathon");
-    let add = AddMilestoneInput {
-        quest_id: quest.to_string(),
-        title: "10 km".into(),
-        achieved_on: None,
+    let task = world.task(new_task("Pack"));
+    let add = |text: &str| AddChecklistItemInput {
+        task_id: task.to_string(),
+        text: text.into(),
         context: CallContext::default(),
     };
-    let decision = add_milestone(&world.snapshot(), &add, &world.clock, &mut EntityId::new);
-    let id = world.decide(decision);
-    let rename = UpdateMilestoneInput {
-        milestone_id: id.to_string(),
-        title: Some("First 10 km".into()),
-        achieved_on: None,
-        context: CallContext::default(),
-    };
-    let decision = update_milestone(&world.snapshot(), &rename);
+    for text in ["Passport", "Charger"] {
+        let decision = add_checklist_item(&world.snapshot(), &add(text), &world.clock, &mut EntityId::new);
+        assert_eq!(world.decide(decision), task);
+    }
+    let first = world.snapshot().checklist_of(task).next().unwrap().id;
+    let check = CheckChecklistItemInput { item_id: first.to_string(), done: true, context: CallContext::default() };
+    let decision = check_checklist_item(&world.snapshot(), &check);
     world.decide(decision);
-    assert_eq!(world.snapshot().milestones[0].title, "First 10 km");
-    let unknown = UpdateMilestoneInput { milestone_id: EntityId::new().to_string(), ..rename };
-    assert_eq!(update_milestone(&world.snapshot(), &unknown).unwrap_err().code, ToolCode::MilestoneNotFound);
+    let rename = RenameChecklistItemInput {
+        item_id: first.to_string(),
+        text: " ID card ".into(),
+        context: CallContext::default(),
+    };
+    let decision = rename_checklist_item(&world.snapshot(), &rename);
+    world.decide(decision);
+    let snapshot = world.snapshot();
+    let items: Vec<_> = snapshot.checklist_of(task).map(|item| (item.text.as_str(), item.done)).collect();
+    assert_eq!(items, [("ID card", true), ("Charger", false)]);
+    let decision = delete_checklist_item(&snapshot, &first.to_string(), &world.clock);
+    world.decide(decision);
+    assert_eq!(world.snapshot().checklist_of(task).count(), 1);
+    let (commands, _) = restore(&RestoreInput {
+        kind: ItemKind::ChecklistItem,
+        id: first.to_string(),
+        context: CallContext::default(),
+    })
+    .unwrap();
+    world.run(&commands);
+    assert_eq!(world.snapshot().checklist_of(task).count(), 2);
+    let unknown = CheckChecklistItemInput { item_id: EntityId::new().to_string(), ..check };
+    assert_eq!(check_checklist_item(&world.snapshot(), &unknown).unwrap_err().code, ToolCode::ChecklistItemNotFound);
+    let empty = add_checklist_item(&world.snapshot(), &add(" "), &world.clock, &mut EntityId::new);
+    assert_eq!(empty.unwrap_err().code, ToolCode::EmptyTitle);
 }

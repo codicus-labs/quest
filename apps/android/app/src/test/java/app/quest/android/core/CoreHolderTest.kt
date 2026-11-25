@@ -43,7 +43,7 @@ class CoreHolderTest {
         runCurrent()
 
         assertEquals(listOf(NOW_MS), fake.ticks)
-        assertEquals(CoreState.Ready(Samples.home, Samples.grid, fake.sync, null, Samples.settings, WorkspaceSamples.one), holder.state.value)
+        assertEquals(CoreState.Ready(Samples.home, fake.sync, null, Samples.settings, WorkspaceSamples.one), holder.state.value)
     }
 
     @Test
@@ -200,7 +200,7 @@ class CoreHolderTest {
     }
 
     @Test
-    fun homeIsReadWithTheLatestQueryAndTodaysGrid() = runTest {
+    fun homeIsReadWithTheLatestQuery() = runTest {
         val holder = holder()
         runCurrent()
 
@@ -208,7 +208,6 @@ class CoreHolderTest {
         runCurrent()
 
         assertEquals(HomeQuery(questFilter = "q1", questPick = null), fake.queries.last())
-        assertEquals("2026-11-23", fake.gridDays.last())
     }
 
     @Test

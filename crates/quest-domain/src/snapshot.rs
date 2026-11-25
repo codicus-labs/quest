@@ -3,11 +3,12 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::change::{EntityId, EntityKind, FieldStore, FieldValues};
-use crate::model::{Milestone, Quest, QuestStatus, Settings, Task, TimeEntry, Workspace, deleted_at};
+use crate::model::{ChecklistItem, Postponement, Quest, QuestStatus, Settings, Task, TimeEntry, Workspace, deleted_at};
 use crate::workspace::{Placements, workspace_records};
 
 /// A consistent, typed read model of one workspace, built from merged fields. Collections are
-/// sorted for display: quests and tasks by sort key, milestones by date, time entries by start.
+/// sorted for display: quests, tasks and checklist items by sort key, postponements by time,
+/// time entries by start.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Snapshot {
     /// The workspace everything below belongs to; commands create new records in it.
@@ -17,7 +18,10 @@ pub struct Snapshot {
     pub workspaces: Vec<Workspace>,
     pub quests: Vec<Quest>,
     pub tasks: Vec<Task>,
-    pub milestones: Vec<Milestone>,
+    /// Items of live tasks.
+    pub checklist: Vec<ChecklistItem>,
+    /// Postponements of live tasks.
+    pub postponements: Vec<Postponement>,
     pub time_entries: Vec<TimeEntry>,
     pub settings: Settings,
     /// Soft-deleted records that can be restored, most recently deleted first.
@@ -31,6 +35,8 @@ pub struct Snapshot {
     /// When each task was last written: its creation or its latest change, from the newest
     /// field's HLC wall time.
     pub task_written: BTreeMap<EntityId, DateTime<Utc>>,
+    /// When each task was created, from its oldest field's HLC wall time.
+    pub task_created: BTreeMap<EntityId, DateTime<Utc>>,
 }
 
 /// A running focus session, wherever it is.
@@ -96,29 +102,41 @@ impl Snapshot {
         quests.sort_by(|a, b| a.sort_key.cmp(&b.sort_key).then(a.id.cmp(&b.id)));
         let mut tasks: Vec<Task> = live(store, placements, EntityKind::Task, workspace, Task::from_fields).collect();
         tasks.sort_by(|a, b| a.sort_key.cmp(&b.sort_key).then(a.id.cmp(&b.id)));
-        let mut milestones: Vec<Milestone> =
-            live(store, placements, EntityKind::Milestone, workspace, Milestone::from_fields).collect();
-        milestones.sort_by_key(|m| (m.achieved_on, m.id));
+        let has_task = |task: EntityId| tasks.iter().any(|t| t.id == task);
+        let mut checklist: Vec<ChecklistItem> =
+            live(store, placements, EntityKind::ChecklistItem, workspace, ChecklistItem::from_fields)
+                .filter(|item| has_task(item.task_id))
+                .collect();
+        checklist.sort_by(|a, b| a.sort_key.cmp(&b.sort_key).then(a.id.cmp(&b.id)));
+        let mut postponements: Vec<Postponement> =
+            live(store, placements, EntityKind::Postponement, workspace, Postponement::from_fields)
+                .filter(|p| has_task(p.task_id))
+                .collect();
+        postponements.sort_by_key(|p| (p.at, p.field, p.id));
         let mut time_entries: Vec<TimeEntry> =
             live(store, placements, EntityKind::TimeEntry, workspace, TimeEntry::from_fields).collect();
         time_entries.sort_by_key(|e| (e.started_at, e.id));
         let settings = Settings::from_fields(store.get(EntityKind::Settings, workspace));
         let trash = trash(store, placements, workspace);
         let running = running(store, placements, &workspaces);
-        let task_written =
-            tasks.iter().filter_map(|t| Some((t.id, written(store.get(EntityKind::Task, t.id)?)?))).collect();
+        let task_time = |pick: fn(&FieldValues) -> Option<DateTime<Utc>>| {
+            tasks.iter().filter_map(|t| Some((t.id, pick(store.get(EntityKind::Task, t.id)?)?))).collect()
+        };
+        let (task_written, task_created) = (task_time(written), task_time(created));
         Snapshot {
             workspace,
             workspaces,
             quests,
             tasks,
-            milestones,
+            checklist,
+            postponements,
             time_entries,
             settings,
             trash,
             default_revived,
             running,
             task_written,
+            task_created,
         }
     }
 
@@ -165,16 +183,21 @@ impl Snapshot {
 
     /// Tasks planned for `day`, in display order.
     pub fn tasks_on(&self, day: NaiveDate) -> impl Iterator<Item = &Task> {
-        self.tasks.iter().filter(move |t| t.day == Some(day))
+        self.tasks.iter().filter(move |t| t.planned_on == Some(day))
     }
 
-    /// Unscheduled tasks ("someday").
-    pub fn backlog(&self) -> impl Iterator<Item = &Task> {
-        self.tasks.iter().filter(|t| t.day.is_none())
+    /// A task's checklist, in display order.
+    pub fn checklist_of(&self, task: EntityId) -> impl Iterator<Item = &ChecklistItem> {
+        self.checklist.iter().filter(move |item| item.task_id == task)
     }
 
-    pub fn milestones_of(&self, quest: EntityId) -> impl Iterator<Item = &Milestone> {
-        self.milestones.iter().filter(move |m| m.quest_id == quest)
+    pub fn checklist_item(&self, id: EntityId) -> Option<&ChecklistItem> {
+        self.checklist.iter().find(|item| item.id == id)
+    }
+
+    /// A task's postponements, oldest first.
+    pub fn postponements_of(&self, task: EntityId) -> impl Iterator<Item = &Postponement> {
+        self.postponements.iter().filter(move |p| p.task_id == task)
     }
 
     /// The running focus session, in whichever workspace it is. If two devices started one while
@@ -200,7 +223,16 @@ impl Snapshot {
 
 /// The wall time of a record's newest field write.
 fn written(values: &FieldValues) -> Option<DateTime<Utc>> {
-    let ms = values.values().map(|(_, hlc)| hlc.wall_ms).max()?;
+    wall_time(values.values().map(|(_, hlc)| hlc.wall_ms).max()?)
+}
+
+/// The wall time of a record's oldest field write: a field set on creation and never again
+/// (its workspace, or a repeat's initial values) keeps it.
+fn created(values: &FieldValues) -> Option<DateTime<Utc>> {
+    wall_time(values.values().map(|(_, hlc)| hlc.wall_ms).min()?)
+}
+
+fn wall_time(ms: u64) -> Option<DateTime<Utc>> {
     DateTime::from_timestamp_millis(i64::try_from(ms).ok()?)
 }
 
@@ -253,19 +285,18 @@ fn running(store: &FieldStore, placements: &Placements, workspaces: &[Workspace]
 }
 
 fn trash(store: &FieldStore, placements: &Placements, workspace: EntityId) -> Vec<Trashed> {
-    let task_title = |id: Option<EntityId>| {
-        let values = store.get(EntityKind::Task, id?)?;
-        Task::from_fields(id?, values).map(|t| t.title)
-    };
+    let task = |id: EntityId| Task::from_fields(id, store.get(EntityKind::Task, id)?);
+    let task_title = |id: Option<EntityId>| task(id?).map(|t| t.title);
     // (title, quest) of a record, or None if it can't be materialised.
     type Described = Option<(Option<String>, Option<EntityId>)>;
     let describe = |kind: EntityKind, id: EntityId, values: &FieldValues| -> Described {
         match kind {
             EntityKind::Quest => Quest::from_fields(id, values).map(|q| (Some(q.title), Some(id))),
             EntityKind::Task => Task::from_fields(id, values).map(|t| (Some(t.title), t.quest_id)),
-            EntityKind::Milestone => Milestone::from_fields(id, values).map(|m| (Some(m.title), Some(m.quest_id))),
+            EntityKind::ChecklistItem => ChecklistItem::from_fields(id, values)
+                .map(|item| (Some(item.text), task(item.task_id).and_then(|t| t.quest_id))),
             EntityKind::TimeEntry => TimeEntry::from_fields(id, values).map(|e| (task_title(e.task_id), e.quest_id)),
-            EntityKind::Settings | EntityKind::Workspace => None,
+            EntityKind::Postponement | EntityKind::Settings | EntityKind::Workspace => None,
         }
     };
     let mut trash: Vec<Trashed> = EntityKind::ALL

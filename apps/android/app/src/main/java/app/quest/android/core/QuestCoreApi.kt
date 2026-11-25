@@ -19,15 +19,8 @@ import uniffi.quest_mobile.SearchResult
 import uniffi.quest_mobile.SearchToken
 import uniffi.quest_mobile.TrashKind
 import uniffi.quest_mobile.AddPosition
-import uniffi.quest_mobile.CalendarData
-import uniffi.quest_mobile.CalendarQuery
-import uniffi.quest_mobile.DayGrid
 import uniffi.quest_mobile.DayValue
-import uniffi.quest_mobile.EntryCheck
-import uniffi.quest_mobile.EntryDraft
 import uniffi.quest_mobile.FocusView
-import uniffi.quest_mobile.GridDrag
-import uniffi.quest_mobile.GridPlacement
 import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.LogWorkCheck
@@ -83,17 +76,14 @@ interface QuestCoreApi : WorkspacesApi {
 
     fun setTaskQuest(taskId: String, questId: String?)
 
-    /** [day] is ISO ("2026-11-24"); null moves the task to the backlog. */
-    fun setTaskDay(taskId: String, day: String?, now: Moment)
+    /** Plans the task for [plannedOn] (ISO, "2026-11-24"); null unplans it. A later deadline is pulled along. */
+    fun setTaskPlanned(taskId: String, plannedOn: String?, now: Moment)
 
     fun repeatDraft(taskId: String, now: Moment): RepeatDraft
 
     fun setTaskRepeat(taskId: String, draft: RepeatDraft, now: Moment)
 
     fun clearTaskRepeat(taskId: String, now: Moment)
-
-    /** The read-only day grid for [day] (ISO). */
-    fun dayGrid(day: String, now: Moment): DayGrid
 
     /**
      * What Focus shows: the running task, else [focusTask] (started or picked last on this device;
@@ -131,19 +121,7 @@ interface QuestCoreApi : WorkspacesApi {
     /** The "Move to…" entries ("Today", "Tomorrow", …, "Backlog · someday"). */
     fun moveTargets(now: Moment): List<MoveTarget>
 
-    /** The calendar page [query] asks for (its days' grids, totals, the week's Quest Hours). */
-    fun calendar(query: CalendarQuery, now: Moment): CalendarData
-
-    /** Where [drag] would land with the finger over [day] (ISO) at [minute] (unsnapped); null: nowhere. */
-    fun gridDragPreview(drag: GridDrag, day: String, minute: Float, now: Moment): GridPlacement?
-
-    /**
-     * Drops [drag] there. A move or resize is saved (the toast offers Undo) and returns null; a new
-     * span saves nothing and returns the Log work draft for it.
-     */
-    fun gridDrop(drag: GridDrag, day: String, minute: Float, now: Moment): LogWorkDraft?
-
-    /** Tasks to pick for Log work and the entry editor, matching [query]. */
+    /** Tasks to pick for Log work, matching [query]. */
     fun taskChoices(query: String): TaskChoices
 
     /** Log work from the button: the quarter hour that just ended, today. */
@@ -154,34 +132,20 @@ interface QuestCoreApi : WorkspacesApi {
     /** Saves the session; a wrong field throws `InvalidForm`. Returns the entry's id. */
     fun logWork(draft: LogWorkDraft, now: Moment): String
 
-    /** The editor's first draft for a stored entry. */
-    fun entryDraft(entryId: String, now: Moment): EntryDraft
-
-    fun checkEntry(draft: EntryDraft, now: Moment): EntryCheck
-
-    /** Saves the edited entry (its quest follows the task); `UnknownEntry` when it is gone. */
-    fun saveEntry(draft: EntryDraft, now: Moment)
-
-    /** Deletes the entry; the toast offers Undo. */
-    fun deleteEntry(entryId: String, now: Moment)
-
     /** The Quests tab: the figures, active and completed cards, a new quest's colours. */
     fun quests(now: Moment): QuestsData
 
     /**
-     * Creates a quest from the editor: trimmed title (`EmptyTitle` when blank), description, and [hue]
-     * (null: the first unused colour). Returns its id.
+     * Creates a quest from the editor: trimmed title (`EmptyTitle` when blank) and [hue] (null: the
+     * first unused colour). Returns its id.
      */
-    fun createQuest(title: String, description: String, hue: QuestHue?): String
+    fun createQuest(title: String, hue: QuestHue?): String
 
     /** One quest's page; `UnknownQuest` when it is gone (deleted, or never synced here). */
     fun questDetail(questId: String, now: Moment): QuestDetail
 
     /** An empty or unchanged title saves nothing. */
     fun renameQuest(questId: String, title: String)
-
-    /** Plain text; unchanged saves nothing. */
-    fun setQuestDescription(questId: String, description: String)
 
     fun setQuestHue(questId: String, hue: QuestHue)
 
@@ -191,7 +155,7 @@ interface QuestCoreApi : WorkspacesApi {
     /** The archive's Unarchive: an archived quest becomes active (no toast, as on the desktop). */
     fun unarchiveQuest(questId: String)
 
-    /** Soft-deletes the quest with its milestones; the toast offers Undo. */
+    /** Soft-deletes the quest; the toast offers Undo. */
     fun deleteQuest(questId: String, now: Moment)
 
     /** The quest page's add field: today or the backlog, at [position]. Returns the new id. */
@@ -200,7 +164,7 @@ interface QuestCoreApi : WorkspacesApi {
     /** The week with [week] in it (any ISO day; null: this week). */
     fun review(week: String?, now: Moment): ReviewData
 
-    /** Deleted quests, tasks, milestones and sessions, newest first. */
+    /** Deleted quests, tasks, checklist items and sessions, newest first. */
     fun archive(now: Moment): ArchiveData
 
     /** Brings a deleted thing back (and clears its delete toast); `Rejected` when it is no longer deleted. */

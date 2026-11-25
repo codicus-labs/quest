@@ -135,7 +135,7 @@ class AppNavigationTest {
     }
 
     @Test
-    fun logWorkFromSearchOpensTheFormOnTheCalendar() {
+    fun logWorkFromSearchOpensTheForm() {
         core.searchOutcome = { SearchOutcome.LogWork }
         showApp()
 
@@ -143,7 +143,7 @@ class AppNavigationTest {
         compose.onNodeWithTag("search-result:Log work").performClick()
 
         compose.onNodeWithTag("search").assertDoesNotExist()
-        compose.onNodeWithTag("calendar-sheet").assertExists()
+        compose.onNodeWithTag("log-work-sheet").assertExists()
     }
 
     @Test

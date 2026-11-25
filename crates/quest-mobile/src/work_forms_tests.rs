@@ -55,7 +55,8 @@ fn task_choices_list_open_then_done_and_offer_to_create_what_matches_nothing() {
 
 #[test]
 fn log_work_now_is_the_quarter_hour_that_just_ended() {
-    assert_eq!(log_work_now(now()), log_work_for(now().today(), 625, 640));
+    let draft = log_work_now(now());
+    assert_eq!((draft.day.as_str(), draft.start_minute, draft.end_minute), ("2026-11-25", 625, 640));
     let early = log_work_now(berlin("2026-11-25T00:07:00+01:00"));
     assert_eq!((early.start_minute, early.end_minute), (0, 7));
 }
@@ -124,8 +125,8 @@ fn saving_log_work_is_one_log_work_command() {
     assert_eq!((entry_id, task), (id(40), WorkTask::Existing(id(11))));
     assert_eq!((started_at, ended_at), (at("2026-11-25T09:00:00+01:00"), at("2026-11-25T10:15:00+01:00")));
     let command = decide_log_work(&snapshot(), &log(None, "Invoice", 540, 600), id(41), now()).unwrap();
-    let Command::LogWork { task: WorkTask::New { title, quest_id, day, .. }, .. } = command else { panic!() };
-    assert_eq!((title.as_str(), quest_id, day), ("Invoice", None, now().today()));
+    let Command::LogWork { task: WorkTask::New { title, quest_id, planned_on, .. }, .. } = command else { panic!() };
+    assert_eq!((title.as_str(), quest_id, planned_on), ("Invoice", None, now().today()));
 }
 
 #[test]
@@ -202,13 +203,4 @@ fn a_running_entry_has_no_end_and_counts_to_now() {
 fn deleting_names_the_task_or_session() {
     assert_eq!(delete_entry(&snapshot(), &id(20).to_string()).unwrap().1, "Write chapter");
     assert_eq!(delete_entry(&snapshot(), &id(21).to_string()).unwrap(), (Deletable::Entry(id(21)), "Session".into()));
-}
-
-#[test]
-fn time_dragged_to_midnight_logs_until_23_59() {
-    let draft = log_work_for(now().today(), 1380, 1440);
-    assert_eq!(draft.end_minute, 1439);
-    let check =
-        check_log_work(&snapshot(), &LogWorkDraft { task_id: Some(id(10).to_string()), ..draft }, now()).unwrap();
-    assert_eq!((check.error, check.end_label.as_str(), check.duration.as_str()), (None, "23:59", "59m"));
 }

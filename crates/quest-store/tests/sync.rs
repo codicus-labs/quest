@@ -6,8 +6,9 @@ mod common;
 
 use std::time::Duration;
 
+use chrono::{NaiveDate, Utc};
 use common::{TestServer, TestStore};
-use quest_domain::Command;
+use quest_domain::{Command, EntityId, Position};
 use quest_store::{StoreError, SyncOutcome, SyncStatus};
 
 const PATIENCE: Duration = Duration::from_secs(20);
@@ -111,6 +112,62 @@ async fn offline_edits_on_two_devices_converge_to_the_later_one() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn offline_checklist_edits_and_postponements_on_two_devices_converge() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut server = TestServer::new(dir.path());
+    server.start().await;
+    let mut a = TestStore::open(&dir.path().join("a"));
+    let mut b = TestStore::open(&dir.path().join("b"));
+    a.sign_in(&server, "anna").await.unwrap();
+    a.wait_live_and_drained();
+    b.sign_in(&server, "anna").await.unwrap();
+    let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
+    let (task, item) = (EntityId::new(), EntityId::new());
+    let create = Command::CreateTask {
+        id: task,
+        title: "Pack".into(),
+        quest_id: None,
+        planned_on: Some(day(23)),
+        due_on: None,
+        position: Position::Bottom,
+    };
+    a.store().dispatch(create).unwrap();
+    a.store()
+        .dispatch(Command::AddChecklistItem {
+            id: item,
+            task_id: task,
+            text: "Tent".into(),
+            position: Position::Bottom,
+        })
+        .unwrap();
+    b.wait_for("the checklist from A", |s| s.snapshot().checklist_item(item).is_some());
+
+    server.stop().await;
+    a.wait_offline();
+    b.wait_offline();
+    let move_to =
+        |d| Command::MoveTask { id: task, planned_on: Some(day(d)), position: Position::Bottom, at: Utc::now() };
+    a.store().dispatch(Command::SetChecklistItemDone { id: item, done: true }).unwrap();
+    a.store().dispatch(move_to(24)).unwrap();
+    std::thread::sleep(Duration::from_millis(5));
+    b.store().dispatch(Command::RenameChecklistItem { id: item, text: "Tent and pegs".into() }).unwrap();
+    b.store().dispatch(move_to(25)).unwrap();
+
+    server.start().await;
+    for store in [&a, &b] {
+        store.wait_for("both devices' edits", |s| {
+            let snapshot = s.snapshot();
+            let item = snapshot.checklist_item(item);
+            item.is_some_and(|i| i.done && i.text == "Tent and pegs")
+                && snapshot.task(task).is_some_and(|t| t.planned_on == Some(day(25)))
+                && snapshot.postponements_of(task).count() == 2
+        });
+        store.wait_live_and_drained();
+    }
+    server.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_store_opened_while_the_server_is_down_drains_its_outbox_once_it_is_back() {
     let dir = tempfile::tempdir().unwrap();
     let mut server = TestServer::new(dir.path());
@@ -128,7 +185,7 @@ async fn a_store_opened_while_the_server_is_down_drains_its_outbox_once_it_is_ba
     assert_eq!(a.store().account().map(|a| a.info.subject.is_empty()), Some(false), "still signed in");
     a.wait_offline();
     let task = a.create_task("Written offline");
-    a.wait_for("the offline change to be pending", |s| matches!(s.status(), SyncStatus::Offline { pending: 5, .. }));
+    a.wait_for("the offline change to be pending", |s| matches!(s.status(), SyncStatus::Offline { pending: 6, .. }));
 
     server.start().await;
     a.wait_live_and_drained();

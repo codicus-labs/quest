@@ -161,7 +161,7 @@ fn the_timer_runs_on_in_its_workspace_and_starting_elsewhere_stops_it() {
     core.start_timer(here.clone(), later(100)).unwrap();
     assert_eq!(core.workspaces(later(101)).unwrap().timer_elsewhere, None);
     let session = core.running_session(later(101)).unwrap().unwrap();
-    assert_eq!((session.task_id, session.workspace_name), (here, None));
+    assert_eq!((session.task_id, session.workspace_name), (Some(here), None));
 
     core.switch_workspace(default_id()).unwrap();
     assert_eq!(core.workspaces(later(102)).unwrap().timer_elsewhere.map(|t| t.workspace_id), Some(work));

@@ -51,7 +51,8 @@ fn create_task(store: &Store, title: &str) -> EntityId {
             id,
             title: title.into(),
             quest_id: None,
-            day: None,
+            planned_on: None,
+            due_on: None,
             position: Position::Bottom,
         })
         .unwrap();

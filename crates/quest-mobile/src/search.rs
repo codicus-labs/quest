@@ -1,11 +1,10 @@
 //! The search, pure: the desktop palette's entries (`quest_view::palette`, same matching and
 //! order) as records, and the commands an entry saves. Keyboard hints become words on touch.
 
-use chrono::{NaiveDate, NaiveTime};
-use quest_domain::{Command, EntityId, Position, Snapshot, TimeBlock};
+use chrono::{DateTime, NaiveDate, Utc};
+use quest_domain::{Command, EntityId, Position, Snapshot};
 use quest_view::nav::View;
 use quest_view::palette::{self, Action, Entry, Mode};
-use quest_view::timescale::DEFAULT_BLOCK_MINUTES;
 use quest_view::undo::Deletable;
 
 use crate::error::MobileError;
@@ -31,7 +30,6 @@ pub(crate) fn placeholder(mode: &SearchMode) -> String {
     let mode = match mode {
         SearchMode::Commands => Mode::Commands,
         SearchMode::MoveTo { .. } => Mode::MoveTo(EntityId::SETTINGS),
-        SearchMode::ScheduleAt { .. } => Mode::ScheduleAt(EntityId::SETTINGS),
         SearchMode::SwitchWorkspace => Mode::SwitchWorkspace,
     };
     palette::placeholder(mode).to_owned()
@@ -41,7 +39,6 @@ fn palette_mode(mode: &SearchMode) -> Result<Mode, MobileError> {
     Ok(match mode {
         SearchMode::Commands => Mode::Commands,
         SearchMode::MoveTo { task_id } => Mode::MoveTo(parse_id(task_id)?),
-        SearchMode::ScheduleAt { task_id } => Mode::ScheduleAt(parse_id(task_id)?),
         SearchMode::SwitchWorkspace => Mode::SwitchWorkspace,
     })
 }
@@ -60,20 +57,9 @@ fn result(entry: Entry) -> Option<SearchResult> {
         Action::Choose(Mode::MoveTo(task)) => {
             (SearchKind::Action, SearchToken::Choose { mode: SearchMode::MoveTo { task_id: task.to_string() } })
         }
-        Action::Choose(Mode::ScheduleAt(task)) => {
-            (SearchKind::Action, SearchToken::Choose { mode: SearchMode::ScheduleAt { task_id: task.to_string() } })
+        Action::MoveTask { task, planned_on } => {
+            (SearchKind::Choice, SearchToken::MoveTask { task_id: task.to_string(), day: planned_on.map(iso_day) })
         }
-        Action::MoveTask { task, day } => {
-            (SearchKind::Choice, SearchToken::MoveTask { task_id: task.to_string(), day: day.map(iso_day) })
-        }
-        Action::Schedule { task, day, start } => (
-            SearchKind::Choice,
-            SearchToken::Schedule {
-                task_id: task.to_string(),
-                day: iso_day(day),
-                start_minute: u32::try_from(start).ok()?,
-            },
-        ),
         Action::Choose(Mode::SwitchWorkspace) => {
             (SearchKind::Action, SearchToken::Choose { mode: SearchMode::SwitchWorkspace })
         }
@@ -105,7 +91,6 @@ fn app_view(view: View) -> Option<AppView> {
     Some(match view {
         View::Home => AppView::Home,
         View::Plan => AppView::Plan,
-        View::Calendar => AppView::Calendar,
         View::Focus => AppView::Focus,
         View::Quests => AppView::Quests,
         View::Review => AppView::Review,
@@ -117,29 +102,14 @@ fn app_view(view: View) -> Option<AppView> {
 /// Desktop palette "Create task": today, no quest, at the top.
 pub(crate) fn create_task(id: EntityId, title: &str, today: NaiveDate) -> Result<Command, MobileError> {
     let title = crate::quests::new_title(title)?;
-    Ok(Command::CreateTask { id, title, quest_id: None, day: Some(today), position: Position::Top })
+    let planned_on = Some(today);
+    Ok(Command::CreateTask { id, title, quest_id: None, planned_on, due_on: None, position: Position::Top })
 }
 
-/// "Move to…": the day (None: the backlog), at the bottom.
-pub(crate) fn move_task(id: EntityId, day: Option<&str>) -> Result<Command, MobileError> {
-    let day = day.map(parse_iso_day).transpose()?;
-    Ok(Command::MoveTask { id, day, position: Position::Bottom })
-}
-
-/// "Schedule at…": a block on `day` at `start_minute`, keeping the length of one it has.
-pub(crate) fn schedule(
-    snapshot: &Snapshot,
-    id: EntityId,
-    day: &str,
-    start_minute: u32,
-) -> Result<Command, MobileError> {
-    let day = parse_iso_day(day)?;
-    if start_minute >= 24 * 60 {
-        return Err(MobileError::InvalidForm { reason: "Pick a time within the day.".into() });
-    }
-    let start = NaiveTime::MIN + chrono::Duration::minutes(i64::from(start_minute));
-    let minutes = snapshot.task(id).and_then(|t| t.block).map_or(DEFAULT_BLOCK_MINUTES as u32, |b| b.minutes);
-    Ok(Command::ScheduleTask { id, day, block: TimeBlock { start, minutes } })
+/// "Move to…": the plan date (None: unplanned), at the bottom.
+pub(crate) fn move_task(id: EntityId, day: Option<&str>, at: DateTime<Utc>) -> Result<Command, MobileError> {
+    let planned_on = day.map(parse_iso_day).transpose()?;
+    Ok(Command::MoveTask { id, planned_on, position: Position::Bottom, at })
 }
 
 #[cfg(test)]

@@ -47,7 +47,7 @@ impl QuestCore {
         guard(|| Ok(quick_add::form(&self.store().snapshot(), shared_text.as_deref(), Now::parse(&now)?)))
     }
 
-    /// Creates the task at the bottom of `day` ("2026-11-24"; None: the backlog) with `quest_id`
+    /// Creates the task at the bottom of `day` ("2026-11-24"; None: unplanned) with `quest_id`
     /// (None: no quest) and `description`. Returns its id.
     pub fn quick_add(
         &self,

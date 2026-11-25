@@ -1,5 +1,5 @@
 //! Motion: Later glides the planner's day columns with their cards as one board, and
-//! switching views (or calendar weeks) flies nothing from one place to another.
+//! switching views flies nothing from one place to another.
 
 use chrono::Days;
 use quest_domain::EntityId;
@@ -79,32 +79,18 @@ fn switching_views_flies_no_card() {
         .flat_map(|id| ["home", "plan"].map(|prefix| [format!("{prefix}-face-{id}"), format!("{prefix}-task-{id}")]))
         .flatten()
         .collect();
-    for from in '1'..='6' {
-        for to in '1'..='6' {
+    for from in '1'..='5' {
+        for to in '1'..='5' {
             if from == to {
                 continue;
             }
             command(&mut rt, from);
             settle(&mut rt);
             command(&mut rt, to);
-            let page_key =
-                |key: char| ["home", "plan", "calendar", "focus", "quests", "review"][(key as usize) - ('1' as usize)];
+            let page_key = |key: char| ["home", "plan", "focus", "quests", "review"][(key as usize) - ('1' as usize)];
             assert_eq!(rt.presented(page_key(to)).map(|(_, opacity)| opacity), Some(1.0));
             assert!(rt.presented(page_key(from)).is_none());
             assert_nothing_flies(&mut rt, &keys);
         }
     }
-}
-
-#[test]
-fn switching_calendar_weeks_flies_nothing() {
-    let (mut rt, _dir) = app();
-    command(&mut rt, '3');
-    settle(&mut rt);
-    let keys: Vec<String> =
-        rt.state.snap.time_entries.iter().map(|e| format!("calendar-grid-entry-{}", e.id)).collect();
-    click(&mut rt, "calendar-next");
-    settle(&mut rt);
-    click(&mut rt, "calendar-prev");
-    assert_nothing_flies(&mut rt, &keys);
 }

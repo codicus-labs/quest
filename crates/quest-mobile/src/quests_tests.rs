@@ -1,15 +1,11 @@
-use quest_domain::{Milestone, QuestColor, QuestStatus, Snapshot};
+use quest_domain::{QuestColor, QuestStatus, Snapshot};
 
 use super::*;
-use crate::test_support::{at, berlin, day, entry, id, quest, task};
+use crate::test_support::{at, berlin, entry, quest, task};
 
 /// Wednesday, 25 Nov 2026, 10:00 in Berlin.
 fn now() -> Now {
     berlin("2026-11-25T10:00:00+01:00")
-}
-
-fn milestone(n: u128, quest: u128, title: &str, on: &str) -> Milestone {
-    Milestone { id: id(n), quest_id: id(quest), title: title.into(), achieved_on: day(on) }
 }
 
 fn snapshot() -> Snapshot {
@@ -23,12 +19,6 @@ fn snapshot() -> Snapshot {
             task(11, "Scout", Some(1), None),
             done,
             task(13, "Mail", None, Some("2026-11-25")),
-        ],
-        milestones: vec![
-            milestone(30, 1, "First roll", "2026-11-01"),
-            milestone(31, 1, "Darkroom", "2026-11-10"),
-            milestone(32, 1, "Contact sheet", "2026-11-20"),
-            milestone(33, 1, "Show", "2026-11-24"),
         ],
         time_entries: vec![
             // This week (Monday 23 Nov): 1 h; three weeks ago: 2 h; the other quest 30 min.
@@ -70,7 +60,7 @@ fn a_quest_archived_by_an_older_version_is_not_counted_as_completed() {
 }
 
 #[test]
-fn the_detail_has_stats_groups_read_only_milestones_and_colours() {
+fn the_detail_has_stats_groups_and_colours() {
     let snap = snapshot();
     let detail = quest_detail(&snap, &snap.quests[0], now(), None);
     assert_eq!((detail.week_hours.as_str(), detail.total_hours.as_str()), ("1h", "3h"));
@@ -78,19 +68,14 @@ fn the_detail_has_stats_groups_read_only_milestones_and_colours() {
     assert_eq!((detail.completed, detail.status_action.as_str(), detail.badge), (false, "Complete quest", None));
     assert_eq!(detail.summary, "1h this week · 3h total · 2 open tasks");
     let groups: Vec<(&str, usize)> = detail.task_groups.iter().map(|g| (g.label.as_str(), g.tasks.len())).collect();
-    assert_eq!(groups, [("Today", 1), ("Backlog", 1), ("Done", 1)]);
+    assert_eq!(groups, [("Today", 1), ("Not planned", 1), ("Done", 1)]);
     assert_eq!(detail.task_groups[0].tasks[0].tracked.as_deref(), Some("1:00:00"));
-    let milestones: Vec<&str> = detail.milestones.iter().map(|m| m.title.as_str()).collect();
-    assert_eq!(milestones, ["Show", "Contact sheet", "Darkroom", "First roll"], "newest first");
-    assert_eq!(detail.milestones[0].date_label, "Nov 24, 2026");
-    assert_eq!(detail.milestones[0].a11y_label, "Show, Nov 24, 2026");
     assert_eq!(detail.hues.len(), 9);
     assert_eq!(detail.hues.iter().filter(|h| h.selected).map(|h| h.hue).collect::<Vec<_>>(), [QuestHue::Blue]);
 
     let completed = quest_detail(&snap, &snap.quests[1], now(), None);
     assert_eq!((completed.completed, completed.status_action.as_str()), (true, "Reopen quest"));
     assert_eq!(completed.badge.as_deref(), Some("Completed"));
-    assert!(completed.milestones.is_empty(), "no milestones: the page leaves the section out");
 }
 
 #[test]

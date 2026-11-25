@@ -1,5 +1,5 @@
 use chrono::{NaiveDate, NaiveTime, Weekday};
-use quest_domain::{Frequency, MonthDay, TimeBlock};
+use quest_domain::{Frequency, MonthDay};
 use quest_protocol::{
     CaptureProposal, ProposedQuest, ProposedRepeat, ProposedTask, ProposedWork, QuestRef, TempKey, WorkTarget,
 };
@@ -26,8 +26,8 @@ fn task(title: &str, on: Option<&str>) -> ProposedTask {
         description: String::new(),
         quest: None,
         quest_uncertain: false,
-        day: on.map(day),
-        block: None,
+        planned_on: on.map(day),
+        due_on: None,
         repeat: None,
     }
 }
@@ -38,15 +38,15 @@ fn proposal(tasks: Vec<ProposedTask>) -> CaptureProposal {
 
 #[test]
 fn a_matching_task_is_a_hit() {
-    let expected = expect(r#"{ "tasks": [{ "title": ["rechnung"], "day": "2026-11-25", "block": null }] }"#);
+    let expected = expect(r#"{ "tasks": [{ "title": ["rechnung"], "planned_on": "2026-11-25", "due_on": null }] }"#);
     let result = score(&expected, &proposal(vec![task("Rechnung Müller schreiben", Some("2026-11-25"))]));
     assert!(result.is_hit(), "{result:?}");
-    assert_eq!(result.total, 5, "found, day, block, no extras, clean titles");
+    assert_eq!(result.total, 5, "found, plan date, deadline, no extras, clean titles");
 }
 
 #[test]
 fn wrong_fields_extra_items_and_filler_cost_points() {
-    let expected = expect(r#"{ "tasks": [{ "title": ["rechnung"], "day": "2026-11-25" }] }"#);
+    let expected = expect(r#"{ "tasks": [{ "title": ["rechnung"], "planned_on": "2026-11-25" }] }"#);
     let actual = proposal(vec![task("Äh Rechnung", Some("2026-11-26")), task("Test", None)]);
     let result = score(&expected, &actual);
     assert_eq!((result.passed, result.total), (1, 4), "{result:?}");
@@ -55,18 +55,23 @@ fn wrong_fields_extra_items_and_filler_cost_points() {
 
 #[test]
 fn a_missing_task_fails_all_its_checks() {
-    let expected = expect(r#"{ "tasks": [{ "title": ["blumen"], "day": "2026-11-25", "quest": null }] }"#);
+    let expected = expect(r#"{ "tasks": [{ "title": ["blumen"], "planned_on": "2026-11-25", "quest": null }] }"#);
     let result = score(&expected, &proposal(vec![]));
     assert_eq!((result.passed, result.total), (2, 5), "missing item and its two fields; no extras; clean");
 }
 
 #[test]
-fn alternatives_and_null_days_are_accepted() {
+fn alternatives_and_null_dates_are_accepted() {
     let expected = expect(
-        r#"{ "tasks": [{ "title": ["a"], "day": ["2026-11-25", "2026-12-02"] }, { "title": ["b"], "day": null }] }"#,
+        r#"{ "tasks": [{ "title": ["a"], "planned_on": ["2026-11-25", "2026-12-02"] },
+                       { "title": ["b"], "planned_on": null, "due_on": "2026-11-27" }] }"#,
     );
-    let result = score(&expected, &proposal(vec![task("A", Some("2026-12-02")), task("B", None)]));
+    let mut b = task("B", None);
+    b.due_on = Some(day("2026-11-27"));
+    let result = score(&expected, &proposal(vec![task("A", Some("2026-12-02")), b.clone()]));
     assert!(result.is_hit(), "{result:?}");
+    b.due_on = None;
+    assert!(!score(&expected, &proposal(vec![task("A", Some("2026-12-02")), b])).is_hit());
 }
 
 #[test]
@@ -78,25 +83,19 @@ fn quests_are_checked_by_fixture_key_or_as_new() {
     let mut b = task("B", None);
     b.quest = Some(QuestRef::New { key: TempKey("q1".into()) });
     let mut actual = proposal(vec![a, b]);
-    actual.quests.push(ProposedQuest {
-        key: TempKey("q1".into()),
-        title: "Umzug".into(),
-        description: String::new(),
-        milestones: vec![],
-    });
+    actual.quests.push(ProposedQuest { key: TempKey("q1".into()), title: "Umzug".into() });
     assert!(score(&expected, &actual).is_hit());
     actual.tasks[0].quest = Some(QuestRef::Existing { id: EvalSet::id("marathon") });
     assert!(!score(&expected, &actual).is_hit());
 }
 
 #[test]
-fn blocks_and_repeats_compare_their_fields() {
+fn repeats_compare_their_fields() {
     let expected = expect(
-        r#"{ "tasks": [{ "title": ["planung"], "block": { "start": "08:00", "minutes": 30 },
+        r#"{ "tasks": [{ "title": ["planung"],
              "repeat": { "every": 1, "frequency": "week", "weekdays": ["wed", "mon"] } }] }"#,
     );
     let mut planning = task("Wochenplanung", Some("2026-11-30"));
-    planning.block = Some(TimeBlock { start: at(8, 0), minutes: 30 });
     planning.repeat = Some(ProposedRepeat {
         every: 1,
         frequency: Frequency::Week,

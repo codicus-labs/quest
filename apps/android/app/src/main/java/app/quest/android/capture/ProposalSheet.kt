@@ -38,8 +38,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.quest.android.R
-import app.quest.android.ui.calendar.DateField
-import app.quest.android.ui.calendar.TimeField
+import app.quest.android.ui.logwork.DateField
+import app.quest.android.ui.logwork.TimeField
 import app.quest.android.ui.components.Dot
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.components.QuestPickerChip
@@ -222,7 +222,6 @@ private fun QuestItem(quest: DraftQuest, view: DraftQuestView?, expanded: Boolea
                 Dot(view?.let { questColor(it.colorHex) } ?: QuestTheme.colors.textFaint, QuestSpacing.small)
                 Box(Modifier.padding(start = QuestSpacing.small)) { ItemTitle(quest.title, quest.selected) }
             }
-            Detail(view?.detail.orEmpty())
             ItemError(view?.error)
         },
         fields = { TitleField(stringResource(R.string.capture_quest_title), quest.title, "capture-quest-title") { actions.editQuestTitle(quest.key, it) } },
@@ -243,7 +242,7 @@ private fun TaskItem(task: DraftTask, view: DraftTaskView?, options: List<DraftQ
             if (task.questUncertain) Unsure(R.string.capture_unsure_quest)
             ItemError(view?.error)
         },
-        fields = { TaskFields(task, view, options, actions) },
+        fields = { TaskFields(task, options, actions) },
     )
 }
 
@@ -251,22 +250,13 @@ private fun TaskItem(task: DraftTask, view: DraftTaskView?, options: List<DraftQ
 private fun RepeatIcon() = Icon(QuestIcons.Repeat, contentDescription = null, tint = QuestTheme.colors.textMuted, modifier = Modifier.size(16.dp).padding(end = 4.dp))
 
 @Composable
-private fun TaskFields(task: DraftTask, view: DraftTaskView?, options: List<DraftQuestOption>, actions: ProposalActions) {
+private fun TaskFields(task: DraftTask, options: List<DraftQuestOption>, actions: ProposalActions) {
     val key = task.key
     TitleField(stringResource(R.string.task_title), task.title, "capture-task-title") { actions.editTaskTitle(key, it) }
     Caps(stringResource(R.string.task_quest))
     QuestChoice(options, task.quest, "capture-task-quest") { actions.setTaskQuest(key, it) }
     Caps(stringResource(R.string.task_date))
     TaskDay(task, actions)
-    val block = task.block
-    if (block != null && view?.blockStartLabel != null && view.blockEndLabel != null) {
-        Caps(stringResource(R.string.capture_block))
-        Row(horizontalArrangement = Arrangement.spacedBy(QuestSpacing.medium), verticalAlignment = Alignment.Bottom) {
-            TimeField(stringResource(R.string.form_start), view.blockStartLabel, block.startMinutes, { actions.setTaskBlockStart(key, it) }, "capture-block-start", Modifier.weight(1f))
-            TimeField(stringResource(R.string.form_end), view.blockEndLabel, block.endMinutes, { actions.setTaskBlockEnd(key, it) }, "capture-block-end", Modifier.weight(1f))
-        }
-        TextButton(onClick = { actions.removeTaskBlock(key) }, modifier = Modifier.testTag("capture-block-remove")) { Text(stringResource(R.string.capture_remove_block)) }
-    }
     if (task.repeat != null) {
         TextButton(onClick = { actions.openRepeat(key) }, modifier = Modifier.testTag("capture-repeat")) {
             RepeatIcon()
@@ -275,11 +265,11 @@ private fun TaskFields(task: DraftTask, view: DraftTaskView?, options: List<Draf
     }
 }
 
-/** The day (picker) or Someday. */
+/** The plan date (picker) or Someday. */
 @Composable
 private fun TaskDay(task: DraftTask, actions: ProposalActions) {
     var picking by rememberSaveable { mutableStateOf(false) }
-    val day = task.day
+    val day = task.plannedOn
     FlowRow(horizontalArrangement = Arrangement.spacedBy(QuestSpacing.small), modifier = Modifier.selectableGroup()) {
         FilterChip(
             selected = day != null,

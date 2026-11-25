@@ -51,7 +51,8 @@ fn series(replica: &mut Replica, starts: NaiveDate) -> EntityId {
         id,
         title: "Write".to_owned(),
         quest_id: None,
-        day: Some(starts),
+        planned_on: Some(starts),
+        due_on: None,
         position: Position::Bottom,
     });
     replica.run(Command::SetTaskRepeat { id, rule: Some(rule(starts, Frequency::Day)), now: at(starts, 9) });
@@ -69,12 +70,12 @@ fn due_generation_observes_the_series_time_zone_and_preserves_moved_or_deleted_o
     replica.run(Command::GenerateDueTasks { now: at(starts, 21) });
     assert_eq!(replica.snapshot.tasks.len(), 1);
     replica.run(Command::GenerateDueTasks { now: at(starts, 22) });
-    assert_eq!(replica.snapshot.task(generated).unwrap().day, Some(next));
+    assert_eq!(replica.snapshot.task(generated).unwrap().planned_on, Some(next));
     assert!(!replica.snapshot.task(generated).unwrap().sort_key.is_empty());
 
-    replica.run(Command::MoveTask { id: generated, day: None, position: Position::Top });
+    replica.run(Command::MoveTask { id: generated, planned_on: None, position: Position::Top, at: at(next, 9) });
     replica.run(Command::GenerateDueTasks { now: at(next, 9) });
-    assert_eq!(replica.snapshot.task(generated).unwrap().day, None);
+    assert_eq!(replica.snapshot.task(generated).unwrap().planned_on, None);
     replica.run(Command::DeleteTask { id: generated, at: at(next, 9) });
     replica.run(Command::GenerateDueTasks { now: at(next, 10) });
     assert_eq!(replica.snapshot.tasks.len(), 1);
@@ -184,7 +185,7 @@ fn monthly_rules_can_choose_a_day_number_or_the_last_day() {
 }
 
 #[test]
-fn generated_tasks_respect_pin_and_keep_a_time_block_if_the_source_has_one() {
+fn generated_tasks_respect_pin_and_get_the_sources_checklist_unticked_without_a_deadline() {
     let mut replica = Replica::new();
     let starts = day(2026, 11, 23);
     let id = series(&mut replica, starts);
@@ -195,11 +196,16 @@ fn generated_tasks_respect_pin_and_keep_a_time_block_if_the_source_has_one() {
         id: sibling,
         title: "Existing task".into(),
         quest_id: None,
-        day: Some(next),
+        planned_on: Some(next),
+        due_on: None,
         position: Position::Top,
     });
-    let block = TimeBlock { start: chrono::NaiveTime::from_hms_opt(13, 0, 0).unwrap(), minutes: 30 };
-    replica.run(Command::SetTaskBlock { id, block: Some(block) });
+    let (step, ticked) = (EntityId::new(), EntityId::new());
+    for (item, text) in [(step, "Pack"), (ticked, "Go")] {
+        replica.run(Command::AddChecklistItem { id: item, task_id: id, text: text.into(), position: Position::Bottom });
+    }
+    replica.run(Command::SetChecklistItemDone { id: ticked, done: true });
+    replica.run(Command::SetTaskDue { id, due_on: Some(starts), at: at(starts, 8) });
     for (id, pin) in [(id, RepeatPin::Top), (bottom, RepeatPin::Bottom)] {
         replica.run(Command::SetTaskRepeat {
             id,
@@ -212,7 +218,37 @@ fn generated_tasks_respect_pin_and_keep_a_time_block_if_the_source_has_one() {
         replica.snapshot.tasks_on(next).map(|task| task.id).collect::<Vec<_>>(),
         [occurrence_id(id, next), sibling, occurrence_id(bottom, next)]
     );
-    assert_eq!(replica.snapshot.task(occurrence_id(id, next)).unwrap().block, Some(block));
+    let occurrence = occurrence_id(id, next);
+    assert_eq!(replica.snapshot.task(occurrence).unwrap().due_on, None);
+    let copied: Vec<(&str, bool)> =
+        replica.snapshot.checklist_of(occurrence).map(|item| (item.text.as_str(), item.done)).collect();
+    assert_eq!(copied, [("Pack", false), ("Go", false)]);
+}
+
+#[test]
+fn two_devices_copy_the_same_checklist_offline_and_keep_later_edits() {
+    let mut a = Replica::on_node(1);
+    let starts = day(2026, 11, 23);
+    let id = series(&mut a, starts);
+    a.run(Command::AddChecklistItem {
+        id: EntityId::new(),
+        task_id: id,
+        text: "Pack".into(),
+        position: Position::Bottom,
+    });
+    let mut b = Replica::on_node(2);
+    b.merge(&a);
+    let next = day(2026, 11, 24);
+    a.run(Command::GenerateDueTasks { now: at(next, 9) });
+    let item = a.snapshot.checklist_of(occurrence_id(id, next)).next().unwrap().id;
+    a.run(Command::SetChecklistItemDone { id: item, done: true });
+    b.run(Command::GenerateDueTasks { now: at(next, 10) });
+    b.run(Command::GenerateDueTasks { now: at(next, 11) });
+    a.merge(&b);
+    b.merge(&a);
+    assert_eq!(a.snapshot.checklist, b.snapshot.checklist);
+    assert_eq!(a.snapshot.checklist_of(occurrence_id(id, next)).count(), 1);
+    assert!(a.snapshot.checklist_item(item).unwrap().done, "the tick outlives the other device's copy");
 }
 
 #[test]

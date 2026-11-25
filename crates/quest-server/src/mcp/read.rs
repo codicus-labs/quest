@@ -5,12 +5,12 @@ use quest_domain::{QuestStatus, Snapshot, WeeklyReview};
 
 use super::error::ToolError;
 use super::types::{
-    DayMinutesOut, DoneFilter, EntriesOut, ListEntriesInput, ListQuestsInput, ListTasksInput, QuestDetailOut,
-    QuestFilter, QuestMinutesOut, QuestsOut, RefOut, SearchInput, SearchOut, TaskOut, TaskResult, TasksOut, TimerOut,
-    WeekInput, WeekReviewOut,
+    ChecklistOut, DayMinutesOut, DoneFilter, EntriesOut, ListEntriesInput, ListQuestsInput, ListTasksInput,
+    QuestDetailOut, QuestFilter, QuestMinutesOut, QuestsOut, RefOut, SearchInput, SearchOut, TaskOut, TaskResult,
+    TasksOut, TimerOut, WeekInput, WeekReviewOut,
 };
 use super::view::{
-    Clock, all_archived, day_bounds, day_range, day_tasks, entry_out, milestone_out, overlap_ms, parse_day, parse_id,
+    Clock, all_archived, checklist_out, day_bounds, day_range, day_tasks, entry_out, overlap_ms, parse_day, parse_id,
     quest_out, require_quest, require_task, task_out, workspace_ref,
 };
 
@@ -24,11 +24,11 @@ pub fn list_tasks(snapshot: &Snapshot, input: &ListTasksInput, clock: &Clock) ->
     if let Some(quest) = quest {
         require_quest(snapshot, quest)?;
     }
-    let candidates: Vec<(quest_domain::Task, bool)> = if input.someday {
+    let candidates: Vec<(quest_domain::Task, bool)> = if input.unplanned {
         if input.day.is_some() || input.from.is_some() || input.to.is_some() {
-            return Err(ToolError::invalid("Use either someday or day/from/to, not both"));
+            return Err(ToolError::invalid("Use either unplanned or day/from/to, not both"));
         }
-        snapshot.backlog().map(|task| (task.clone(), false)).collect()
+        snapshot.tasks.iter().filter(|task| task.planned_on.is_none()).map(|task| (task.clone(), false)).collect()
     } else {
         let days = match (&input.day, &input.from, &input.to) {
             (Some(_), Some(_), _) | (Some(_), _, Some(_)) => {
@@ -61,6 +61,11 @@ pub fn get_task(snapshot: &Snapshot, task_id: &str, clock: &Clock) -> Result<Tas
     Ok(TaskResult { time_zone: clock.zone_name(), task: task_out(snapshot, &task, planned, clock) })
 }
 
+pub fn get_checklist(snapshot: &Snapshot, task_id: &str, clock: &Clock) -> Result<ChecklistOut, ToolError> {
+    let (task, _) = require_task(snapshot, parse_id(task_id, "task_id")?, clock)?;
+    Ok(checklist_out(snapshot, &task))
+}
+
 pub fn list_quests(snapshot: &Snapshot, input: &ListQuestsInput, clock: &Clock) -> QuestsOut {
     let quests = snapshot
         .quests
@@ -79,15 +84,14 @@ pub fn get_quest(snapshot: &Snapshot, quest_id: &str, clock: &Clock) -> Result<Q
     let quest = require_quest(snapshot, parse_id(quest_id, "quest_id")?)?;
     let mine = || snapshot.tasks.iter().filter(|task| task.quest_id == Some(quest.id));
     let mut open: Vec<_> = mine().filter(|task| !task.is_done()).collect();
-    // By day, the backlog last; the snapshot's order (sort keys) within a day.
-    open.sort_by_key(|task| (task.day.is_none(), task.day));
+    // By plan date, unplanned last; the snapshot's order (sort keys) within a day.
+    open.sort_by_key(|task| (task.planned_on.is_none(), task.planned_on));
     let mut done: Vec<_> = mine().filter(|task| task.is_done()).collect();
     done.sort_by_key(|task| std::cmp::Reverse(task.completed_at));
     done.truncate(RECENT_DONE);
     Ok(QuestDetailOut {
         time_zone: clock.zone_name(),
         quest: quest_out(snapshot, quest, clock.now),
-        milestones: snapshot.milestones_of(quest.id).map(milestone_out).collect(),
         tasks: open.into_iter().chain(done).map(|task| task_out(snapshot, task, false, clock)).collect(),
     })
 }
@@ -104,7 +108,7 @@ pub fn search(snapshot: &Snapshot, input: &SearchInput, clock: &Clock) -> Result
     let quests = snapshot
         .quests
         .iter()
-        .filter(|quest| hit(&[&quest.title, &quest.description]))
+        .filter(|quest| hit(&[&quest.title]))
         .take(MAX_HITS)
         .map(|quest| quest_out(snapshot, quest, clock.now))
         .collect();
@@ -112,13 +116,6 @@ pub fn search(snapshot: &Snapshot, input: &SearchInput, clock: &Clock) -> Result
     tasks.sort_by_key(|task| (task.is_done(), std::cmp::Reverse(task.completed_at)));
     let tasks: Vec<TaskOut> =
         tasks.into_iter().take(MAX_HITS).map(|task| task_out(snapshot, task, false, clock)).collect();
-    let milestones = snapshot
-        .milestones
-        .iter()
-        .filter(|milestone| hit(&[&milestone.title]))
-        .take(MAX_HITS)
-        .map(milestone_out)
-        .collect();
     let archived = if input.include_archived {
         all_archived(snapshot, clock)
             .filter(|item| hit(&[item.title.as_deref().unwrap_or_default()]))
@@ -127,7 +124,7 @@ pub fn search(snapshot: &Snapshot, input: &SearchInput, clock: &Clock) -> Result
     } else {
         Vec::new()
     };
-    Ok(SearchOut { time_zone: clock.zone_name(), quests, tasks, milestones, archived })
+    Ok(SearchOut { time_zone: clock.zone_name(), quests, tasks, archived })
 }
 
 pub fn week_review(snapshot: &Snapshot, input: &WeekInput, clock: &Clock) -> Result<WeekReviewOut, ToolError> {
@@ -158,6 +155,7 @@ pub fn week_review(snapshot: &Snapshot, input: &WeekInput, clock: &Clock) -> Res
         time_zone: clock.zone_name(),
         week_start: review.week_start.to_string(),
         quest_minutes: minutes(review.quest_ms),
+        organizing_minutes: minutes(review.organizing_ms),
         other_minutes: minutes(review.other_ms),
         target_minutes: minutes(review.target_ms),
         quest_share_percent: review.quest_share_percent(),

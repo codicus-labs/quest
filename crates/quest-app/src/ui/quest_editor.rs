@@ -1,5 +1,4 @@
-//! The quest dialog over the Quests page: title, description (Markdown, as in the task dialog)
-//! and colour; Complete quest / Reopen quest, Open quest page and Delete. A new quest shows
+//! The quest dialog over the Quests page: title and colour; Complete quest / Reopen quest, Open quest page and Delete. A new quest shows
 //! Create quest instead. Esc, the close button and a click outside return to the page as it was.
 
 use quest_domain::{Quest, QuestColor, QuestStatus};
@@ -72,10 +71,10 @@ fn close(s: &mut State, tx: &mut Tx) {
 
 /// Whether everything typed is stored (an empty title is not).
 fn is_saved(quest: &Quest, form: &QuestEditor) -> bool {
-    form.title.text.trim() == quest.title && form.description.text == quest.description
+    form.title.text.trim() == quest.title
 }
 
-/// The colour dot, the title (one line however it wraps) and the description.
+/// The colour dot and the title (one line however it wraps).
 fn main(form: &QuestEditor, p: &Pal) -> El {
     let title = text_input(&form.title, TITLE)
         .key("quest-editor-title")
@@ -99,15 +98,6 @@ fn main(form: &QuestEditor, p: &Pal) -> El {
             s.save_quest_title();
             true
         });
-    let description = super::notes::field(
-        "quest-editor-description",
-        &form.description,
-        p,
-        |s| &mut s.quest_editor_fields().description,
-        State::save_quest_description,
-    )
-    .grow(1.0)
-    .min_h(0.0);
     col()
         .grow(1.0)
         .min_w(0.0)
@@ -115,8 +105,6 @@ fn main(form: &QuestEditor, p: &Pal) -> El {
         .padding(28.0)
         .gap(20.0)
         .child(row().w_full().gap(14.0).center_y().child(parts::dot(quest_color(form.color), 14.0)).child(title))
-        .child(el().w_full().h(1.0).fill(p.border))
-        .child(description)
 }
 
 fn side(s: &State, quest: Option<&Quest>, form: &QuestEditor, p: &Pal) -> El {

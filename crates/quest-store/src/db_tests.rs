@@ -90,33 +90,6 @@ fn the_guest_queues_nothing_for_the_server() {
 }
 
 #[test]
-fn a_legacy_database_is_copied_as_guest_without_sync_state() {
-    let dir = tempfile::tempdir().unwrap();
-    let mut db = Db::open(dir.path()).unwrap();
-    let node = db.load().unwrap().node;
-    db.persist_local(&[change(json!("a"), 1)], true).unwrap();
-    db.welcome(epoch(1), false, node).unwrap();
-    db.apply_remote(&[], Cursor(5)).unwrap();
-    db.write(|tx| set_meta(tx, "session", r#"{"token":"old"}"#)).unwrap();
-    let target = dir.path().join("copy.sqlite");
-
-    copy_as_guest(&dir.path().join(FILE_NAME), &target).unwrap();
-
-    let copy = Connection::open(&target).unwrap();
-    let meta: Vec<String> = copy
-        .prepare("SELECT key FROM meta")
-        .unwrap()
-        .query_map([], |row| row.get(0))
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-    assert_eq!(meta, [NODE_KEY]);
-    let outbox: i64 = copy.query_row("SELECT COUNT(*) FROM outbox", [], |row| row.get(0)).unwrap();
-    let fields: i64 = copy.query_row("SELECT COUNT(*) FROM fields", [], |row| row.get(0)).unwrap();
-    assert_eq!((outbox, fields), (0, 1));
-}
-
-#[test]
 fn equal_timestamps_pick_the_same_winner_in_any_order() {
     let dir = tempfile::tempdir().unwrap();
     let mut forward = Db::open(&dir.path().join("f")).unwrap();
@@ -191,18 +164,30 @@ fn the_chosen_workspace_is_remembered_until_the_local_data_is_reset() {
 }
 
 #[test]
-fn a_store_from_before_workspaces_catches_up_from_the_start_once() {
+fn a_store_of_the_previous_model_opens_empty_and_keeps_its_profile() {
     let dir = tempfile::tempdir().unwrap();
     let mut db = Db::open(dir.path()).unwrap();
+    let node = db.load().unwrap().node;
+    db.persist_local(&[change(json!("a"), 1)], true).unwrap();
+    db.welcome(epoch(1), false, node).unwrap();
     db.apply_remote(&[], Cursor(5)).unwrap();
+    db.set_workspace(EntityId::new()).unwrap();
+    let info = account_info();
+    db.set_account_info(&info).unwrap();
     let db = Db::open(dir.path()).unwrap();
-    assert_eq!(db.sync_position().unwrap().0, Cursor(5), "a current store keeps its cursor");
+    assert_eq!(db.sync_position().unwrap(), (Cursor(5), Some(epoch(1))), "the current model keeps its data");
 
-    // An earlier version skipped the workspaces it did not know and moved past them.
-    db.conn.execute("DELETE FROM meta WHERE key = ?1", [KINDS_KEY]).unwrap();
+    // A store written by the previous model, with the fields of its kinds.
+    db.conn.execute("DELETE FROM meta WHERE key = ?1", [MODEL_KEY]).unwrap();
+    db.conn
+        .execute(
+            "INSERT INTO fields VALUES ('task', ?1, 'day', '\"2026-11-23\"', ?2)",
+            [EntityId::new().to_string(), "0".repeat(32)],
+        )
+        .unwrap();
     let mut db = Db::open(dir.path()).unwrap();
-    assert_eq!(db.sync_position().unwrap().0, Cursor(0));
-    db.apply_remote(&[], Cursor(7)).unwrap();
-    let db = Db::open(dir.path()).unwrap();
-    assert_eq!(db.sync_position().unwrap().0, Cursor(7), "only once");
+    let loaded = db.load().unwrap();
+    assert_eq!((loaded.node, loaded.account_info), (node, Some(info)));
+    assert_eq!((loaded.fields.highest_hlc(), loaded.pending, loaded.workspace), (None, 0, EntityId::DEFAULT_WORKSPACE));
+    assert_eq!(db.sync_position().unwrap(), (Cursor(0), None));
 }

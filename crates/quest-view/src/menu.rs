@@ -15,7 +15,6 @@ pub enum TaskAction {
     Focus,
     ToggleDone,
     MoveTo,
-    ScheduleAt,
     AssignQuest,
     Repeat,
     OpenQuest,
@@ -30,7 +29,6 @@ impl TaskAction {
             TaskAction::ToggleDone if task.is_done() => "Reopen",
             TaskAction::ToggleDone => "Complete",
             TaskAction::MoveTo => "Move to…",
-            TaskAction::ScheduleAt => "Schedule at…",
             TaskAction::AssignQuest => "Assign quest…",
             TaskAction::Repeat => "Repeat…",
             TaskAction::OpenQuest => "Open quest",
@@ -57,9 +55,6 @@ pub fn task_actions(task: &Task, has_quest: bool) -> Vec<Option<TaskAction>> {
         rows.push(Some(TaskAction::Focus));
     }
     rows.extend([Some(TaskAction::ToggleDone), None, Some(TaskAction::MoveTo)]);
-    if !task.is_done() {
-        rows.push(Some(TaskAction::ScheduleAt));
-    }
     rows.extend([Some(TaskAction::Repeat), Some(TaskAction::AssignQuest)]);
     if has_quest {
         rows.push(Some(TaskAction::OpenQuest));
@@ -88,7 +83,6 @@ pub fn task_step(action: TaskAction, task: &Task) -> Option<Step> {
         TaskAction::Focus => Step::Focus(id),
         TaskAction::ToggleDone => Step::ToggleDone(id),
         TaskAction::MoveTo => Step::Palette(Mode::MoveTo(id)),
-        TaskAction::ScheduleAt => Step::Palette(Mode::ScheduleAt(id)),
         TaskAction::AssignQuest => Step::Palette(Mode::AssignQuest(id)),
         TaskAction::OpenQuest => Step::OpenQuest(task.quest_id?),
         TaskAction::Delete => Step::Delete(Deletable::Task(id)),

@@ -117,7 +117,8 @@ fn signing_out_locks_edits_until_it_is_done() {
         id: quest_domain::EntityId::new(),
         title: "Lost".into(),
         quest_id: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: quest_domain::Position::Top,
     });
     assert_eq!(rt.state.snap.tasks.len(), tasks, "no change while signing out");

@@ -3,7 +3,7 @@
 //! (shared with the desktop).
 
 use chrono::Days;
-use quest_domain::{EntityId, Milestone, Quest, QuestColor, QuestStatus, Snapshot, week_start};
+use quest_domain::{EntityId, Quest, QuestColor, QuestStatus, Snapshot, week_start};
 use quest_view::format;
 use quest_view::home::one_line;
 use quest_view::quests::{
@@ -12,7 +12,7 @@ use quest_view::quests::{
 
 use crate::error::MobileError;
 use crate::home::{color_hex, home_task};
-use crate::quest_types::{HueOption, MilestoneRow, QuestCard, QuestDetail, QuestHue, QuestTaskGroup, QuestsData};
+use crate::quest_types::{HueOption, QuestCard, QuestDetail, QuestHue, QuestTaskGroup, QuestsData};
 use crate::time::Now;
 use crate::types::UndoToast;
 
@@ -60,16 +60,6 @@ fn week_ms(snapshot: &Snapshot, quest: EntityId, now: Now) -> i64 {
     quest_ms(snapshot, quest, now.midnight(monday), now.midnight(monday + Days::new(7)), now.at)
 }
 
-fn milestone_row(milestone: &Milestone) -> MilestoneRow {
-    let date_label = milestone.achieved_on.format("%b %-d, %Y").to_string();
-    MilestoneRow {
-        id: milestone.id.to_string(),
-        title: milestone.title.clone(),
-        a11y_label: format!("{}, {date_label}", milestone.title),
-        date_label,
-    }
-}
-
 /// All nine colours, `selected` selected.
 fn hue_options(selected: QuestColor) -> Vec<HueOption> {
     QuestColor::ALL
@@ -105,7 +95,6 @@ pub(crate) fn quest_detail(snapshot: &Snapshot, quest: &Quest, now: Now, toast: 
     QuestDetail {
         id: id.to_string(),
         title: quest.title.clone(),
-        description: quest.description.clone(),
         color_hex: color_hex(quest.color).to_owned(),
         hues: hue_options(quest.color),
         completed: quest.status == QuestStatus::Completed,
@@ -120,10 +109,9 @@ pub(crate) fn quest_detail(snapshot: &Snapshot, quest: &Quest, now: Now, toast: 
             .into_iter()
             .map(|(label, tasks)| QuestTaskGroup {
                 label,
-                tasks: tasks.into_iter().map(|t| home_task(snapshot, t, now.at)).collect(),
+                tasks: tasks.into_iter().map(|t| home_task(snapshot, t, now.at, now.today())).collect(),
             })
             .collect(),
-        milestones: snapshot.milestones_of(id).collect::<Vec<_>>().into_iter().rev().map(milestone_row).collect(),
         toast,
     }
 }

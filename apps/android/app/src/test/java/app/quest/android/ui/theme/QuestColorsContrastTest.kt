@@ -38,13 +38,9 @@ class QuestColorsContrastTest {
                 put("$name on $surface", contrast(ink, background))
             }
         }
-        // The calendar grid carries hour labels and today's accent, no errors.
-        for ((name, ink) in listOf("text" to c.text, "textMuted" to c.textMuted, "accent" to c.accent)) {
-            put("$name on grid", contrast(ink, c.grid))
-        }
         val scheme = colorScheme(c, dark)
         put("onPrimary on primary", contrast(scheme.onPrimary, scheme.primary))
-        // Quests' and Calendar's FABs and filled buttons put `card` on the accent.
+        // Quests' FABs and filled buttons put `card` on the accent.
         put("card on accent (FABs, filled buttons)", contrast(c.card, c.accent))
         put("onError on error", contrast(scheme.onError, scheme.error))
         put("inverseOnSurface on inverseSurface (snackbar)", contrast(scheme.inverseOnSurface, scheme.inverseSurface))

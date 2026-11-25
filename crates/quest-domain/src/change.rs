@@ -13,17 +13,19 @@ use crate::hlc::Hlc;
 pub enum EntityKind {
     Quest,
     Task,
-    Milestone,
+    ChecklistItem,
+    Postponement,
     TimeEntry,
     Settings,
     Workspace,
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 6] = [
+    pub const ALL: [EntityKind; 7] = [
         EntityKind::Quest,
         EntityKind::Task,
-        EntityKind::Milestone,
+        EntityKind::ChecklistItem,
+        EntityKind::Postponement,
         EntityKind::TimeEntry,
         EntityKind::Settings,
         EntityKind::Workspace,
@@ -33,7 +35,8 @@ impl EntityKind {
         match self {
             EntityKind::Quest => "quest",
             EntityKind::Task => "task",
-            EntityKind::Milestone => "milestone",
+            EntityKind::ChecklistItem => "checklist_item",
+            EntityKind::Postponement => "postponement",
             EntityKind::TimeEntry => "time_entry",
             EntityKind::Settings => "settings",
             EntityKind::Workspace => "workspace",
@@ -49,7 +52,8 @@ impl FromStr for EntityKind {
     }
 }
 
-/// UUIDv7 for new records and UUIDv5 for occurrences shared across replicas.
+/// UUIDv7 for new records; UUIDv5 for records several replicas derive alike (a repeat's
+/// occurrences and their checklists, postponements).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct EntityId(pub Uuid);
@@ -59,8 +63,8 @@ impl EntityId {
     pub const SETTINGS: EntityId = EntityId::DEFAULT_WORKSPACE;
 
     /// The workspace every account and guest profile has, with the same id everywhere, so devices
-    /// that upgrade offline agree on it without syncing first. Records without a workspace (from
-    /// before workspaces, or from older clients) belong to it.
+    /// agree on it without syncing first. Records without a workspace and without a parent
+    /// belong to it.
     pub const DEFAULT_WORKSPACE: EntityId = EntityId(Uuid::nil());
 
     pub fn new() -> Self {

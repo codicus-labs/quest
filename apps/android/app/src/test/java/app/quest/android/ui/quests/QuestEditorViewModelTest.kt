@@ -27,19 +27,18 @@ class QuestEditorViewModelTest {
     private val QuestEditorViewModel.new get() = state.value as QuestEditorState.New
 
     @Test
-    fun aNewQuestIsCreatedFromItsTitleDescriptionAndColourThenEdited() = runTest(main.dispatcher) {
+    fun aNewQuestIsCreatedFromItsTitleAndColourThenEdited() = runTest(main.dispatcher) {
         val vm = viewModel()
         vm.openNew()
-        assertEquals(QuestEditorState.New("", "", QuestSamples.quests.newQuestHues, null), vm.state.value)
+        assertEquals(QuestEditorState.New("", QuestSamples.quests.newQuestHues, null), vm.state.value)
 
         vm.editTitle("Learn\npiano")
-        vm.editDescription("Scales first")
         vm.setHue(QuestHue.PINK)
         assertEquals(QuestHue.PINK, vm.new.hues.single { it.selected }.hue)
         core.questDetails["q-new"] = QuestSamples.detail.copy(id = "q-new", title = "Learn piano")
         vm.create()
 
-        assertEquals(listOf("create-quest Learn piano|Scales first|PINK"), core.calls)
+        assertEquals(listOf("create-quest Learn piano|PINK"), core.calls)
         assertEquals("q-new", vm.editing.detail.id)
     }
 
@@ -69,18 +68,18 @@ class QuestEditorViewModelTest {
     }
 
     @Test
-    fun titleAndDescriptionSaveOnCommitAndOnClose() = runTest(main.dispatcher) {
+    fun theTitleSavesOnCommitAndOnClose() = runTest(main.dispatcher) {
         val vm = viewModel()
         vm.open("q1")
         assertEquals(QuestSamples.detail, vm.editing.detail)
         vm.editTitle("The book")
         vm.titleDone()
-        vm.editDescription("Draft")
         vm.setHue(QuestHue.TEAL)
+        vm.editTitle("The novel")
 
         vm.close()
 
-        assertEquals(listOf("rename-quest q1 The book", "hue q1 TEAL", "describe-quest q1 Draft"), core.calls)
+        assertEquals(listOf("rename-quest q1 The book", "hue q1 TEAL", "rename-quest q1 The novel"), core.calls)
         assertEquals(QuestEditorState.Closed, vm.state.value)
     }
 
@@ -125,10 +124,10 @@ class QuestEditorViewModelTest {
     fun openQuestPageSavesClosesAndNamesTheQuest() = runTest(main.dispatcher) {
         val vm = viewModel()
         vm.open("q1")
-        vm.editDescription("Draft")
+        vm.editTitle("Draft")
 
         assertEquals("q1", vm.openPage())
-        assertEquals(listOf("describe-quest q1 Draft"), core.calls)
+        assertEquals(listOf("rename-quest q1 Draft"), core.calls)
         assertEquals(QuestEditorState.Closed, vm.state.value)
     }
 
@@ -137,11 +136,11 @@ class QuestEditorViewModelTest {
         val saved = SavedStateHandle()
         val vm = viewModel(saved)
         vm.open("q1")
-        vm.editDescription("Draft")
+        vm.editTitle("Draft")
 
         val restored = viewModel(saved)
 
-        assertEquals("Draft", restored.editing.description)
+        assertEquals("Draft", restored.editing.title)
     }
 
     @Test
@@ -150,7 +149,7 @@ class QuestEditorViewModelTest {
         val holder = holder()
         QuestEditorViewModel(holder, saved).apply {
             open("q1")
-            editDescription("Draft")
+            editTitle("Draft")
         }
 
         core.questDetailFailure = MobileException.ServerUnreachable("could not reach your Quest server (timed out).")
@@ -158,8 +157,8 @@ class QuestEditorViewModelTest {
         assertEquals(QuestEditorState.Closed, restored.state.value)
 
         core.questDetailFailure = null
-        restored.editTitle("Read again")
-        assertEquals("Draft", restored.editing.description)
+        restored.editTitle("Draft again")
+        assertEquals("Draft again", restored.editing.title)
     }
 
     @Test

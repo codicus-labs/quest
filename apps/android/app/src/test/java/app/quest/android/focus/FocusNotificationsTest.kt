@@ -50,6 +50,16 @@ class FocusNotificationsTest {
     }
 
     @Test
+    fun organizingShowsItsTitleWithoutTaskButtons() {
+        val content = runningContent(Samples.organizing)
+        val notification = FocusNotifications.build(app, content)
+
+        assertNull(content.taskId)
+        assertEquals("Organizing", notification.extras.getString(Notification.EXTRA_TITLE))
+        assertNull(notification.actions)
+    }
+
+    @Test
     fun thePlaceholderHasNothingPrivateAndIsPublic() {
         assertEquals(Notification.VISIBILITY_PUBLIC, FocusNotifications.placeholder(app).visibility)
     }

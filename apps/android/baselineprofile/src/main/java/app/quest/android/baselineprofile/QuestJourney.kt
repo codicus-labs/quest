@@ -17,7 +17,7 @@ fun MacrobenchmarkScope.awaitHome() {
     waitFor("tab-home")
 }
 
-/** What a user does most: scroll Home, open the plan and scroll it, open the calendar and turn a page. */
+/** What a user does most: scroll Home, and open the plan and scroll it. */
 fun MacrobenchmarkScope.everydayJourney() {
     awaitHome()
     device.findObject(By.scrollable(true))?.apply {
@@ -32,12 +32,6 @@ fun MacrobenchmarkScope.everydayJourney() {
         fling(Direction.DOWN)
         fling(Direction.UP)
     }
-    waitFor("tab-calendar").click()
-    device.waitForIdle()
-    device.swipe(device.displayWidth * 4 / 5, device.displayHeight / 2, device.displayWidth / 5, device.displayHeight / 2, 20)
-    device.waitForIdle()
-    device.swipe(device.displayWidth / 5, device.displayHeight / 2, device.displayWidth * 4 / 5, device.displayHeight / 2, 20)
-    device.waitForIdle()
     waitFor("tab-home").click()
     device.waitForIdle()
 }

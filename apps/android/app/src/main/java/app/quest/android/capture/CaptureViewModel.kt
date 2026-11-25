@@ -293,17 +293,11 @@ class CaptureViewModel(
         }
     }
 
-    /** An ISO day from the picker; null: Someday. */
+    /** The plan date as an ISO day from the picker; null: Someday (not planned). */
     fun setTaskDay(key: String, iso: String?) {
         val day = iso?.let { pickedDay(it) ?: return }
-        editDraft { d -> d.withTask(key) { it.copy(day = day) } }
+        editDraft { d -> d.withTask(key) { it.copy(plannedOn = day) } }
     }
-
-    fun setTaskBlockStart(key: String, minute: Int) = editDraft { d -> d.withTask(key) { t -> t.copy(block = t.block?.copy(startMinutes = minute)) } }
-
-    fun setTaskBlockEnd(key: String, minute: Int) = editDraft { d -> d.withTask(key) { t -> t.copy(block = t.block?.copy(endMinutes = minute)) } }
-
-    fun removeTaskBlock(key: String) = editDraft { d -> d.withTask(key) { it.copy(block = null) } }
 
     fun setWorkDay(key: String, iso: String) {
         val day = pickedDay(iso) ?: return

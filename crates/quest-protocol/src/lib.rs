@@ -91,7 +91,7 @@ pub struct BatchId(pub Uuid);
 pub struct Epoch(pub Uuid);
 
 /// Bumped on incompatible protocol changes; the server rejects other versions.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Upper bounds both sides enforce. A client splits pushes to stay below them.
 pub const MAX_PUSH_CHANGES: usize = 1000;
@@ -165,7 +165,7 @@ mod tests {
         let hello =
             ClientMessage::Hello { protocol: PROTOCOL_VERSION, node: NodeId(7), cursor: Cursor(42), epoch: None };
         let json = serde_json::to_string(&hello).unwrap();
-        assert_eq!(json, r#"{"type":"hello","protocol":1,"node":7,"cursor":42,"epoch":null}"#);
+        assert_eq!(json, r#"{"type":"hello","protocol":2,"node":7,"cursor":42,"epoch":null}"#);
         assert_eq!(serde_json::from_str::<ClientMessage>(&json).unwrap(), hello);
     }
 }

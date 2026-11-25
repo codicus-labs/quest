@@ -72,11 +72,11 @@ const EPOCH_KEY: &str = "epoch";
 const ACCOUNT_INFO_KEY: &str = "account_info";
 /// The workspace this device last showed for this profile.
 const WORKSPACE_KEY: &str = "workspace";
-/// Which entity kinds the stored cursor's catch-up understood. Earlier versions skipped
-/// workspaces they did not know yet, so a store from before them catches up from the start
-/// once (merging is idempotent).
-const KINDS_KEY: &str = "known_kinds";
-const KINDS_WITH_WORKSPACES: &str = "workspaces";
+/// The data model the stored fields belong to. A store of another one is emptied on open: the
+/// model changed without a migration path. Profile and sign-in (the account info here, tokens
+/// in the vault) stay.
+const MODEL_KEY: &str = "model";
+const MODEL: &str = "2";
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -109,10 +109,13 @@ impl Db {
         db.conn.pragma_update(None, "journal_mode", "WAL").map_err(|e| db.error(e))?;
         db.conn.pragma_update(None, "synchronous", "NORMAL").map_err(|e| db.error(e))?;
         db.conn.execute_batch(SCHEMA).map_err(|e| db.error(e))?;
-        if db.meta(KINDS_KEY)?.as_deref() != Some(KINDS_WITH_WORKSPACES) {
+        if db.meta(MODEL_KEY)?.as_deref() != Some(MODEL) {
             db.write(|tx| {
-                set_meta(tx, CURSOR_KEY, "0")?;
-                set_meta(tx, KINDS_KEY, KINDS_WITH_WORKSPACES)
+                tx.execute_batch("DELETE FROM fields; DELETE FROM outbox; DELETE FROM outbox_rejected;")?;
+                for key in [CURSOR_KEY, EPOCH_KEY, WORKSPACE_KEY] {
+                    tx.execute("DELETE FROM meta WHERE key = ?1", [key])?;
+                }
+                set_meta(tx, MODEL_KEY, MODEL)
             })?;
         }
         Ok(db)
@@ -284,11 +287,11 @@ impl Db {
         self.write(|tx| set_meta(tx, ACCOUNT_INFO_KEY, &to_json(info)?))
     }
 
-    /// Deletes all user data and sync state. Keeps the node id.
+    /// Deletes all user data and sync state. Keeps the node id and the model.
     pub fn reset_local_data(&mut self) -> Result<(), StoreError> {
         self.write(|tx| {
             tx.execute_batch("DELETE FROM fields; DELETE FROM outbox; DELETE FROM outbox_rejected;")?;
-            tx.execute("DELETE FROM meta WHERE key <> ?1", [NODE_KEY])?;
+            tx.execute("DELETE FROM meta WHERE key NOT IN (?1, ?2)", [NODE_KEY, MODEL_KEY])?;
             Ok(())
         })
     }
@@ -304,21 +307,6 @@ impl Db {
         let Some(raw) = self.meta(key)? else { return Ok(None) };
         serde_json::from_str(&raw).map(Some).map_err(|e| self.error(format!("corrupt {key}: {e}")))
     }
-}
-
-/// Copies the database at `legacy` (including its write-ahead log) to `target` as a guest store:
-/// the data stays, the sync state, session and account binding of earlier versions do not.
-pub(crate) fn copy_as_guest(legacy: &Path, target: &Path) -> Result<(), StoreError> {
-    let conn = Connection::open(legacy).map_err(|e| storage_error(legacy, e))?;
-    conn.busy_timeout(BUSY_TIMEOUT).map_err(|e| storage_error(legacy, e))?;
-    let target_text = target.to_str().ok_or_else(|| storage_error(target, "the path is not valid UTF-8"))?;
-    conn.execute("VACUUM INTO ?1", [target_text]).map_err(|e| storage_error(legacy, e))?;
-    drop(conn);
-    let copy = Connection::open(target).map_err(|e| storage_error(target, e))?;
-    copy.execute_batch(SCHEMA).map_err(|e| storage_error(target, e))?;
-    copy.execute_batch("DELETE FROM outbox; DELETE FROM outbox_rejected;").map_err(|e| storage_error(target, e))?;
-    copy.execute("DELETE FROM meta WHERE key <> ?1", [NODE_KEY]).map_err(|e| storage_error(target, e))?;
-    Ok(())
 }
 
 fn storage_error(path: &Path, error: impl std::fmt::Display) -> StoreError {

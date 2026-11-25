@@ -16,7 +16,8 @@ fn tasks_insert_at_top_bottom_and_before() {
         id,
         title: title.into(),
         quest_id: None,
-        day: Some(day(15)),
+        planned_on: Some(day(15)),
+        due_on: None,
         position,
     };
     r.run(create(a, "a", Position::Bottom));
@@ -37,7 +38,8 @@ fn starting_focus_stops_the_running_session_and_completing_stops_its_own() {
             id: t,
             title: "t".into(),
             quest_id: Some(quest),
-            day: None,
+            planned_on: None,
+            due_on: None,
             position: Position::Bottom,
         });
     }
@@ -62,14 +64,16 @@ fn weekly_review_splits_quest_and_other_time_per_day() {
         id: quest_task,
         title: "5k".into(),
         quest_id: Some(quest),
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Bottom,
     });
     r.run(Command::CreateTask {
         id: chore,
         title: "mail".into(),
         quest_id: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Bottom,
     });
     // Thursday 2026-10-15, 23:00–01:00 spans into Friday.
@@ -100,7 +104,8 @@ fn a_days_quest_work_is_split_by_quest_in_the_weeks_order() {
             id: task,
             title: "t".into(),
             quest_id: Some(quest),
-            day: None,
+            planned_on: None,
+            due_on: None,
             position: Position::Bottom,
         });
     }
@@ -119,27 +124,17 @@ fn a_days_quest_work_is_split_by_quest_in_the_weeks_order() {
 }
 
 #[test]
-fn a_quest_description_is_plain_text_and_can_be_cleared() {
-    let mut r = Replica::new();
-    let quest = EntityId::new();
-    r.run(Command::CreateQuest { id: quest, title: "Run".into(), color: QuestColor::Lime });
-    assert_eq!(r.snapshot.quest(quest).unwrap().description, "");
-    r.run(Command::SetQuestDescription { id: quest, description: "Line one\nline two".into() });
-    assert_eq!(r.snapshot.quest(quest).unwrap().description, "Line one\nline two");
-    r.run(Command::SetQuestDescription { id: quest, description: String::new() });
-    assert_eq!(r.snapshot.quest(quest).unwrap().description, "");
-    let missing = EntityId::new();
-    assert_eq!(
-        plan(&Command::SetQuestDescription { id: missing, description: "x".into() }, &r.snapshot),
-        Err(CommandError::UnknownQuest(missing))
-    );
-}
-
-#[test]
 fn deleted_and_incomplete_records_are_not_materialised() {
     let mut r = Replica::new();
     let task = EntityId::new();
-    r.run(Command::CreateTask { id: task, title: "x".into(), quest_id: None, day: None, position: Position::Bottom });
+    r.run(Command::CreateTask {
+        id: task,
+        title: "x".into(),
+        quest_id: None,
+        planned_on: None,
+        due_on: None,
+        position: Position::Bottom,
+    });
     r.run(Command::DeleteTask { id: task, at: Utc::now() });
     assert!(r.snapshot.tasks.is_empty());
 
@@ -169,14 +164,22 @@ fn sessions_can_be_logged_moved_reassigned_and_deleted() {
         id: task,
         title: "Essay".into(),
         quest_id: Some(quest),
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Bottom,
     });
     let at = |h| Utc.with_ymd_and_hms(2026, 11, 23, h, 0, 0).unwrap();
 
     r.run(Command::LogTime { entry_id: entry, task_id: None, started_at: at(9), ended_at: at(10) });
     assert_eq!(r.snapshot.time_entries[0].quest_id, None);
-    r.run(Command::AssignEntry { id: entry, task_id: Some(task) });
+    let edit = |task| Command::EditEntry {
+        id: entry,
+        task: Some(WorkTask::Existing(task)),
+        quest_id: Some(quest),
+        started_at: at(9),
+        ended_at: Some(at(10)),
+    };
+    r.run(edit(task));
     assert_eq!(r.snapshot.time_entries[0].quest_id, Some(quest));
     r.run(Command::SetEntryTimes { id: entry, started_at: at(11), ended_at: Some(at(13)) });
     assert_eq!(r.snapshot.task_tracked_ms(task, at(14)), 2 * 3_600_000);
@@ -188,7 +191,14 @@ fn sessions_can_be_logged_moved_reassigned_and_deleted() {
 fn session_edits_are_validated() {
     let mut r = Replica::new();
     let (task, entry) = (EntityId::new(), EntityId::new());
-    r.run(Command::CreateTask { id: task, title: "t".into(), quest_id: None, day: None, position: Position::Bottom });
+    r.run(Command::CreateTask {
+        id: task,
+        title: "t".into(),
+        quest_id: None,
+        planned_on: None,
+        due_on: None,
+        position: Position::Bottom,
+    });
     let at = |h| Utc.with_ymd_and_hms(2026, 11, 23, h, 0, 0).unwrap();
     let backwards = Command::LogTime { entry_id: entry, task_id: None, started_at: at(10), ended_at: at(9) };
     assert_eq!(plan(&backwards, &r.snapshot), Err(CommandError::InvalidTimeRange));
@@ -204,80 +214,72 @@ fn session_edits_are_validated() {
 }
 
 #[test]
-fn scheduling_onto_another_day_moves_the_task_to_the_bottom_of_that_day() {
+fn moving_onto_another_day_puts_the_task_at_the_bottom_of_that_day() {
     let mut r = Replica::new();
     let (existing, moved) = (EntityId::new(), EntityId::new());
     r.run(Command::CreateTask {
         id: existing,
         title: "a".into(),
         quest_id: None,
-        day: Some(day(16)),
+        planned_on: Some(day(16)),
+        due_on: None,
         position: Position::Bottom,
     });
     r.run(Command::CreateTask {
         id: moved,
         title: "b".into(),
         quest_id: None,
-        day: Some(day(15)),
+        planned_on: Some(day(15)),
+        due_on: None,
         position: Position::Bottom,
     });
-    let block = TimeBlock { start: chrono::NaiveTime::from_hms_opt(9, 30, 0).unwrap(), minutes: 45 };
-    r.run(Command::ScheduleTask { id: moved, day: day(16), block });
+    let at = Utc.with_ymd_and_hms(2026, 10, 15, 9, 0, 0).unwrap();
+    r.run(Command::MoveTask { id: moved, planned_on: Some(day(16)), position: Position::Bottom, at });
     let titles: Vec<&str> = r.snapshot.tasks_on(day(16)).map(|t| t.title.as_str()).collect();
     assert_eq!(titles, ["a", "b"]);
-    assert_eq!(r.snapshot.task(moved).unwrap().block, Some(block));
 }
 
 #[test]
-fn deleting_a_quest_keeps_its_work_and_restoring_brings_back_its_milestones() {
+fn deleting_a_quest_keeps_its_work_and_restore_requires_a_trashed_record() {
     let mut r = Replica::new();
-    let (quest, other, task, kept, with_quest) =
-        (EntityId::new(), EntityId::new(), EntityId::new(), EntityId::new(), EntityId::new());
+    let (quest, other, task) = (EntityId::new(), EntityId::new(), EntityId::new());
     r.run(Command::CreateQuest { id: quest, title: "Launch".into(), color: QuestColor::Red });
     r.run(Command::CreateQuest { id: other, title: "Run".into(), color: QuestColor::Lime });
     r.run(Command::CreateTask {
         id: task,
         title: "t".into(),
         quest_id: Some(quest),
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Bottom,
     });
-    r.run(Command::AddMilestone { id: with_quest, quest_id: quest, title: "Shipped".into(), achieved_on: day(1) });
-    r.run(Command::AddMilestone { id: kept, quest_id: quest, title: "Old".into(), achieved_on: day(2) });
     let at = |h| Utc.with_ymd_and_hms(2026, 11, 23, h, 0, 0).unwrap();
-    r.run(Command::DeleteMilestone { id: kept, at: at(8) });
+    let live = Command::Restore { kind: EntityKind::Quest, id: quest };
+    assert_eq!(plan(&live, &r.snapshot), Err(CommandError::NotInTrash { kind: EntityKind::Quest, id: quest }));
+    r.run(Command::DeleteQuest { id: other, at: at(8) });
     r.run(Command::DeleteQuest { id: quest, at: at(9) });
 
     assert!(r.snapshot.quest(quest).is_none());
     assert_eq!(r.snapshot.task(task).unwrap().quest_id, Some(quest), "work stays");
-    assert!(r.snapshot.milestones.is_empty());
-    assert_eq!(r.snapshot.trash.len(), 3);
-    assert_eq!(r.snapshot.trash[0].kind, EntityKind::Quest, "most recent first");
+    assert_eq!(r.snapshot.trash.len(), 2);
+    assert_eq!(r.snapshot.trash[0].id, quest, "most recent first");
 
     r.run(Command::Restore { kind: EntityKind::Quest, id: quest });
     assert!(r.snapshot.quest(quest).is_some());
-    let restored: Vec<EntityId> = r.snapshot.milestones.iter().map(|m| m.id).collect();
-    assert_eq!(restored, vec![with_quest], "only milestones deleted with the quest come back");
-}
-
-#[test]
-fn milestones_can_be_edited_and_restore_requires_a_trashed_record() {
-    let mut r = Replica::new();
-    let (quest, milestone) = (EntityId::new(), EntityId::new());
-    r.run(Command::CreateQuest { id: quest, title: "Q".into(), color: QuestColor::Blue });
-    r.run(Command::AddMilestone { id: milestone, quest_id: quest, title: "a".into(), achieved_on: day(1) });
-    r.run(Command::RenameMilestone { id: milestone, title: "b".into() });
-    r.run(Command::SetMilestoneDate { id: milestone, achieved_on: day(3) });
-    assert_eq!((r.snapshot.milestones[0].title.as_str(), r.snapshot.milestones[0].achieved_on), ("b", day(3)));
-    let live = Command::Restore { kind: EntityKind::Milestone, id: milestone };
-    assert_eq!(plan(&live, &r.snapshot), Err(CommandError::NotInTrash { kind: EntityKind::Milestone, id: milestone }));
 }
 
 #[test]
 fn deleting_a_running_task_stops_its_session() {
     let mut r = Replica::new();
     let task = EntityId::new();
-    r.run(Command::CreateTask { id: task, title: "t".into(), quest_id: None, day: None, position: Position::Bottom });
+    r.run(Command::CreateTask {
+        id: task,
+        title: "t".into(),
+        quest_id: None,
+        planned_on: None,
+        due_on: None,
+        position: Position::Bottom,
+    });
     let at = |h| Utc.with_ymd_and_hms(2026, 11, 23, h, 0, 0).unwrap();
     r.run(Command::StartFocus { entry_id: EntityId::new(), task_id: task, at: at(9) });
     r.run(Command::DeleteTask { id: task, at: at(10) });
@@ -318,7 +320,8 @@ fn completing_and_reopening_a_quest_keeps_its_tracked_time() {
         id: task,
         title: "Long run".into(),
         quest_id: Some(quest),
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Bottom,
     });
     let start = Utc.with_ymd_and_hms(2026, 10, 15, 9, 0, 0).unwrap();

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use quest_domain::{Command, EntityId, QuestStatus};
+use quest_domain::{Command, QuestStatus};
 
 use super::*;
 use crate::core::ChangeListener;
@@ -26,24 +26,23 @@ fn now() -> Moment {
 }
 
 fn create(core: &QuestCore, title: &str) -> String {
-    core.create_quest(title.into(), String::new(), None).unwrap()
+    core.create_quest(title.into(), None).unwrap()
 }
 
 #[test]
 fn a_new_quest_needs_a_title_and_takes_a_free_colour_or_the_picked_one() {
     let (_dir, core) = open();
-    assert_eq!(core.create_quest("  ".into(), "Notes".into(), None), Err(MobileError::EmptyTitle));
+    assert_eq!(core.create_quest("  ".into(), None), Err(MobileError::EmptyTitle));
     assert!(core.quests(now()).unwrap().active.is_empty(), "nothing without a title");
     let photo = create(&core, " Photo series ");
     assert_eq!(core.quests(now()).unwrap().new_quest_hues.iter().find(|h| h.selected).unwrap().hue, QuestHue::Orange);
     create(&core, "Garden");
-    let teal = core.create_quest("Reading".into(), "Twelve books\n**by spring**".into(), Some(QuestHue::Teal)).unwrap();
+    let teal = core.create_quest("Reading".into(), Some(QuestHue::Teal)).unwrap();
     let data = core.quests(now()).unwrap();
     assert_eq!(data.active.iter().map(|c| c.title.as_str()).collect::<Vec<_>>(), ["Photo series", "Garden", "Reading"]);
     assert_eq!(data.active[1].color_hex, "#d98a4e", "red is taken, so orange");
-    let reading = core.quest_detail(teal, now()).unwrap();
-    assert_eq!((reading.color_hex.as_str(), reading.description.as_str()), ("#4cb5a8", "Twelve books\n**by spring**"));
-    assert_eq!(core.quest_detail(photo, now()).unwrap().description, "");
+    assert_eq!(core.quest_detail(teal, now()).unwrap().color_hex, "#4cb5a8");
+    assert_eq!(core.quest_detail(photo, now()).unwrap().title, "Photo series");
     assert_eq!(data.in_progress, "03");
 }
 
@@ -84,21 +83,19 @@ fn completing_and_reopening_moves_tabs_keeps_hours_and_undoes() {
 }
 
 #[test]
-fn the_page_edits_title_description_and_colour() {
+fn the_page_edits_title_and_colour() {
     let (_dir, core) = open();
     let id = create(&core, "Photo");
     core.rename_quest(id.clone(), " Photo\nseries ".into()).unwrap();
     core.rename_quest(id.clone(), "   ".into()).unwrap();
-    core.set_quest_description(id.clone(), "Twelve prints\nby spring".into()).unwrap();
     core.set_quest_hue(id.clone(), QuestHue::Teal).unwrap();
     let detail = core.quest_detail(id, now()).unwrap();
     assert_eq!(detail.title, "Photo series");
-    assert_eq!(detail.description, "Twelve prints\nby spring");
     assert_eq!(detail.color_hex, "#4cb5a8");
 }
 
 #[test]
-fn tasks_added_on_the_page_go_to_today_or_the_backlog() {
+fn tasks_added_on_the_page_go_to_today_or_unplanned() {
     let (_dir, core) = open();
     let id = create(&core, "Photo");
     core.add_quest_task(id.clone(), "Shoot".into(), false, AddPosition::Bottom, now()).unwrap();
@@ -109,7 +106,7 @@ fn tasks_added_on_the_page_go_to_today_or_the_backlog() {
     );
     let detail = core.quest_detail(id, now()).unwrap();
     let groups: Vec<&str> = detail.task_groups.iter().map(|g| g.label.as_str()).collect();
-    assert_eq!(groups, ["Today", "Backlog"]);
+    assert_eq!(groups, ["Today", "Not planned"]);
     assert_eq!(detail.open_count, 2);
 }
 
@@ -157,10 +154,6 @@ fn unarchive_on_the_quest_page_reopens_and_undo_archives_again() {
 fn a_deleted_quest_closes_its_page_and_comes_back_from_the_archive() {
     let (_dir, core) = open();
     let quest = create(&core, "Photo");
-    let quest_id = parse_id(&quest).unwrap();
-    let achieved_on = chrono::NaiveDate::from_ymd_opt(2026, 11, 20).unwrap();
-    core.dispatch(Command::AddMilestone { id: EntityId::new(), quest_id, title: "First roll".into(), achieved_on })
-        .unwrap();
     core.delete_quest(quest.clone(), now()).unwrap();
     assert!(matches!(core.quest_detail(quest.clone(), now()), Err(MobileError::UnknownQuest { .. })));
     let quests = core.quests(now()).unwrap();
@@ -173,8 +166,6 @@ fn a_deleted_quest_closes_its_page_and_comes_back_from_the_archive() {
     assert_eq!(core.quests(now()).unwrap().toast, None, "the delete toast is gone");
     core.undo(now()).unwrap();
     let detail = core.quest_detail(quest, now()).unwrap();
-    assert_eq!(detail.milestones.len(), 1, "its milestones come back with it");
-    assert_eq!(detail.milestones[0].date_label, "Nov 20, 2026");
     assert!(core.archive(now()).unwrap().groups.is_empty());
     assert!(matches!(core.restore(TrashKind::Task, detail.id, now()), Err(MobileError::Rejected { .. })));
 }

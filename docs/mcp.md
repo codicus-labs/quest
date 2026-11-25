@@ -102,31 +102,39 @@ one. While it is deleted, a tool call without `workspace` answers `workspace_not
 `workspace` (see `list_workspaces`) or to restore the default workspace; nothing is written elsewhere. Data an older
 app version still writes then stays in the deleted default workspace and reappears when it is restored.
 
-The focus timer is one per account, across workspaces: `start_timer` stops a timer running in any workspace,
+The timer is one per account, across workspaces: `start_timer` stops a timer running in any workspace,
 `get_running_timer` and `stop_timer` ignore `workspace` and report the session together with its `workspace`
-(id and title).
+(id and title). A session has a `kind`: `task` (work on a task, or other work) or `organizing` (sorting out lists
+between tasks; `origin_task` is the task to go back to).
+
+A task has an optional plan date (`planned_on`) and deadline (`due_on`); the plan date is never after the deadline
+(the domain rule `quest_domain::set_planned`/`set_due`). Giving one date moves the other along when needed
+(planning past the deadline moves the deadline, a deadline before the plan date moves the plan date); giving both
+with the plan date after the deadline answers `invalid_input`. `"none"` clears a date. Moving a date later records a
+postponement, as in the apps. `create_task` without `planned_on` leaves the task unplanned.
 
 | Tool | What it does | readOnly | destructive | idempotent |
 |---|---|---|---|---|
-| `list_tasks` | Tasks of a day, range (≤ 62 days) or the backlog, incl. planned repeats | ✓ | | |
+| `list_tasks` | Tasks planned for a day or range (≤ 62 days), incl. planned repeats, or `unplanned` ones | ✓ | | |
 | `get_task` | One task | ✓ | | |
+| `get_checklist` | A task's checklist items | ✓ | | |
 | `list_quests` | Active / completed / all quests | ✓ | | |
-| `get_quest` | Quest with milestones and tasks | ✓ | | |
-| `search` | Words in titles/descriptions; optionally the archive | ✓ | | |
-| `get_week_review` | Weekly review: minutes per day and quest, target, share | ✓ | | |
+| `get_quest` | Quest with its tasks | ✓ | | |
+| `search` | Words in quest titles and task titles/descriptions; optionally the archive | ✓ | | |
+| `get_week_review` | Weekly review: minutes per day and quest, organizing, other, target, share | ✓ | | |
 | `get_running_timer` | The running session, in any workspace, and its workspace | ✓ | | |
 | `list_time_entries` | Sessions of days, task or quest | ✓ | | |
 | `list_workspaces` | Live workspaces: id, name, `is_default`, quest and task counts, `tracked_hours` | ✓ | | |
-| `create_task` | Day/backlog, quest, block, repeat | | – | – |
-| `update_task` | Title, description, day, quest, block, repeat (overwrites) | | ✓ | ✓ |
+| `create_task` | Plan date, deadline, quest, repeat | | – | – |
+| `update_task` | Title, description, plan date, deadline, quest, repeat (overwrites) | | ✓ | ✓ |
 | `complete_task` / `reopen_task` | Done / open again | | – | ✓ |
-| `move_task` | Top/bottom of a day or backlog | | – | – |
+| `move_task` | Plan for a day (top/bottom) or unplan | | – | – |
 | `archive_task` | Soft delete; `restore` undoes it | | ✓ | ✓ |
-| `restore` | Task, quest, milestone or time entry from the archive | | – | ✓ |
-| `create_quest` / `update_quest` | Title, description, color, status | | – / ✓ | – / ✓ |
+| `restore` | Task, quest, checklist item or time entry from the archive | | – | ✓ |
+| `create_quest` / `update_quest` | Title, color, status | | – / ✓ | – / ✓ |
 | `complete_quest` | Quest done (the apps show it under archived quests) | | – | ✓ |
-| `add_milestone` / `update_milestone` / `archive_milestone` | Milestones of a quest | | – / ✓ / ✓ | – / ✓ / ✓ |
-| `start_timer` / `stop_timer` | Track time on a task now | | – | – / ✓ |
+| `add_checklist_item` / `check_checklist_item` / `rename_checklist_item` / `delete_checklist_item` | A task's checklist; each answers the whole checklist | | – / – / ✓ / ✓ | – / ✓ / ✓ / ✓ |
+| `start_timer` / `stop_timer` | Track a task or organizing now / stop | | – | – / ✓ |
 | `log_work` | Finished session for an existing or new (done) task | | – | – |
 | `capture_text` | AI capture in the call's workspace (its quests and tasks as context): proposal, or with `apply: true` creates it all or nothing. Only when AI is configured (`QUEST_AI_*`) and the account turned AI features on in the app settings (otherwise hidden; a call answers `ai_disabled`); same rate limit, validation and commands as the apps | | – | – |
 
@@ -139,7 +147,7 @@ Planned repeats (`planned_repeat: true`) have stable ids; editing one saves it f
 ### Errors
 
 Tool errors come back as a result with `isError: true` and the text `{"code": "...", "message": "..."}`. Codes:
-`invalid_input`, `task_not_found`, `quest_not_found`, `workspace_not_found`, `milestone_not_found`, `entry_not_found`, `not_in_archive`,
+`invalid_input`, `task_not_found`, `quest_not_found`, `workspace_not_found`, `checklist_item_not_found`, `entry_not_found`, `not_in_archive`,
 `invalid_time_range`, `invalid_repeat_rule`, `empty_title`, `ai_not_configured`, `ai_disabled`, `insufficient_scope`, `ai_unavailable`,
 `ai_invalid_response`, `rate_limited`, `text_too_long`, `proposal_not_applicable`, `internal`. Messages say what to do
 next (e.g. "find ids with list_tasks or search").
@@ -147,8 +155,8 @@ next (e.g. "find ids with list_tasks or search").
 ### Examples
 
 "What's on today?" → `list_tasks {"time_zone": "Europe/Berlin"}`.
-"Plan writing the offer tomorrow 9–10:30 in Website relaunch" → `search {"query": "relaunch"}`, then
-`create_task {"title": "Write offer", "day": "2026-11-25", "block": {"start": "09:00", "minutes": 90}, "quest_id": "…"}`.
+"Write the offer tomorrow, due Friday, in Website relaunch" → `search {"query": "relaunch"}`, then
+`create_task {"title": "Write offer", "planned_on": "2026-11-25", "due_on": "2026-11-27", "quest_id": "…"}`.
 "I worked on the concept from 9 to 11" → `log_work {"new_task_title": "Concept", "start": "09:00", "end": "11:00"}`.
 
 ## Security and privacy

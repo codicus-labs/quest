@@ -43,7 +43,7 @@ import app.quest.android.ui.QuestApp
 import app.quest.android.ui.account.AccountViewModel
 import app.quest.android.ui.focus.FocusViewModel
 import app.quest.android.ui.home.HomeViewModel
-import app.quest.android.ui.calendar.CalendarViewModel
+import app.quest.android.ui.logwork.LogWorkViewModel
 import app.quest.android.ui.plan.PlanViewModel
 import app.quest.android.ui.settings.SettingsViewModel
 import app.quest.android.ui.task.TaskSheetViewModel
@@ -84,8 +84,8 @@ class MainActivity : ComponentActivity() {
         viewModelFactory { initializer { PlanViewModel(app.core, createSavedStateHandle(), app.homePreferences, RustPlanRules, SystemClock) } }
     }
 
-    private val calendar: CalendarViewModel by viewModels {
-        viewModelFactory { initializer { CalendarViewModel(app.core, createSavedStateHandle()) } }
+    private val logWork: LogWorkViewModel by viewModels {
+        viewModelFactory { initializer { LogWorkViewModel(app.core, createSavedStateHandle()) } }
     }
     private val quests: QuestsViewModel by viewModels {
         viewModelFactory { initializer { QuestsViewModel(app.core, createSavedStateHandle()) } }
@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
         // A restored activity already shows what it showed; only a fresh launch follows the link.
         if (savedInstanceState == null) handleIntent(intent)
         openBrowserPages()
-        val viewModels = AppViewModels(home, taskSheet, account, settings, focus, plan, calendar, quests, questEditor, questDetail, review, archive, search, workspaces)
+        val viewModels = AppViewModels(home, taskSheet, account, settings, focus, plan, logWork, quests, questEditor, questDetail, review, archive, search, workspaces)
         var appearanceLoaded = false
         keepSplashUntil { appearanceLoaded }
         setContent {

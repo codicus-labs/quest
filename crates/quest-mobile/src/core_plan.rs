@@ -83,13 +83,14 @@ impl QuestCore {
                 AddPosition::Bottom => Position::Bottom,
             };
             let id = EntityId::new();
-            self.dispatch(Command::CreateTask { id, title, quest_id: None, day: Some(day), position })?;
+            let task = Command::CreateTask { id, title, quest_id: None, planned_on: Some(day), due_on: None, position };
+            self.dispatch(task)?;
             Ok(id.to_string())
         })
     }
 
-    /// A drop: moves the task to `day` (None: the backlog), right before `before_task_id` (a
-    /// card of the same day and section) or, with None, to the end of the day.
+    /// A drop: plans the task for `day` (None: unplanned), right before `before_task_id` (a
+    /// card of the same day and section) or, with None, at the end of the day.
     pub fn plan_move_task(
         &self,
         task_id: String,
@@ -98,12 +99,12 @@ impl QuestCore {
         now: Moment,
     ) -> Result<(), MobileError> {
         guard(|| {
-            Now::parse(&now)?;
+            let now = Now::parse(&now)?;
             let task = self.task(&task_id)?;
             let day = day.as_deref().map(parse_iso_day).transpose()?;
             // An anchor gone meanwhile (deleted, synced away) leaves the end of the day.
             let before = before_task_id.as_deref().and_then(|id| self.task(id).ok());
-            plan::drop_move(&task, day, before.as_ref()).map_or(Ok(()), |command| self.dispatch(command))
+            plan::drop_move(&task, day, before.as_ref(), now.at).map_or(Ok(()), |command| self.dispatch(command))
         })
     }
 
@@ -114,7 +115,7 @@ impl QuestCore {
             let now = Now::parse(&now)?;
             let task = self.task(&task_id)?;
             let (at, choice) = self.plan_memory().map_or((now.at, Choice::default()), |m| (m.at, m.choice));
-            let command = plan::nudge_move(&self.store().snapshot(), at, choice, &task, up);
+            let command = plan::nudge_move(&self.store().snapshot(), at, choice, &task, up, now.at);
             command.map_or(Ok(()), |command| self.dispatch(command))
         })
     }
@@ -124,7 +125,7 @@ impl QuestCore {
         guard(|| {
             let now = Now::parse(&now)?;
             let task = self.task(&task_id)?;
-            self.dispatch(plan::shift_move(&task, later, now.today()))
+            self.dispatch(plan::shift_move(&task, later, now))
         })
     }
 

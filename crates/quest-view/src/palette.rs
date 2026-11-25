@@ -1,23 +1,20 @@
 //! The ⌘K command palette's entries for a query. Pure: the view lists them, `run` acts on one.
-//! Besides commands, the palette picks a task for a new session, a day to move a task to, and a
-//! time to schedule it at: the keyboard way to do what drag and drop does.
+//! Besides commands, the palette picks a task for a new session and a day to plan a task for:
+//! the keyboard way to do what drag and drop does.
 
-use chrono::{DateTime, Datelike, Days, NaiveDate, NaiveDateTime, Timelike, Utc};
+use chrono::{DateTime, Datelike, Days, NaiveDate, NaiveDateTime, Utc};
 use quest_domain::{EntityId, Snapshot, Workspace};
 
 use crate::nav::View;
 use crate::quest_picker;
-use crate::timescale::SNAP_MINUTES;
 use crate::undo::Deletable;
 
 /// What the palette is choosing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     Commands,
-    /// A day (or the backlog) for a task.
+    /// A plan date (or none) for a task.
     MoveTo(EntityId),
-    /// A time today for a task's block.
-    ScheduleAt(EntityId),
     /// A quest (or none) for a task.
     AssignQuest(EntityId),
     /// The quest Quest Work is filtered to (or all).
@@ -39,13 +36,7 @@ pub enum Action {
     Choose(Mode),
     MoveTask {
         task: EntityId,
-        day: Option<NaiveDate>,
-    },
-    /// Plans `task` on `day` at `start` (minutes after midnight).
-    Schedule {
-        task: EntityId,
-        day: NaiveDate,
-        start: i32,
+        planned_on: Option<NaiveDate>,
     },
     AssignQuest {
         task: EntityId,
@@ -81,7 +72,6 @@ pub fn entries(mode: Mode, query: &str, snapshot: &Snapshot, now: NaiveDateTime,
     match mode {
         Mode::Commands => commands(query, snapshot),
         Mode::MoveTo(task) => move_to(task, query, now.date()),
-        Mode::ScheduleAt(task) => schedule_at(task, query, now),
         Mode::AssignQuest(task) => assign_quest(task, query, snapshot, at),
         Mode::FilterQuest => filter_quest(query, snapshot),
         Mode::SwitchWorkspace => switch_workspace(query, snapshot),
@@ -93,15 +83,14 @@ pub fn placeholder(mode: Mode) -> &'static str {
     match mode {
         Mode::Commands => "Search tasks and quests, or jump to…",
         Mode::MoveTo(_) => "Move to which day?",
-        Mode::ScheduleAt(_) => "Schedule at what time today? (e.g. 9:30)",
         Mode::AssignQuest(_) => "Which quest is this task for?",
         Mode::FilterQuest => "Show quest work for which quest?",
         Mode::SwitchWorkspace => "Switch to which workspace?",
     }
 }
 
-/// Create actions first when there is text, then jumps, open tasks to focus on (and to move or
-/// schedule, when searching), and quests.
+/// Create actions first when there is text, then jumps, open tasks to focus on (and to move,
+/// when searching), and quests.
 fn commands(query: &str, snapshot: &Snapshot) -> Vec<Entry> {
     let mut out = Vec::new();
     for (i, view) in View::ALL.iter().enumerate() {
@@ -117,7 +106,7 @@ fn commands(query: &str, snapshot: &Snapshot) -> Vec<Entry> {
     for (title, hint, action) in [
         ("Switch workspace…", "Workspace", Action::Choose(Mode::SwitchWorkspace)),
         ("Manage workspaces", "Workspace", Action::ManageWorkspaces),
-        ("Log work", "Calendar", Action::LogWork),
+        ("Log work", "Time", Action::LogWork),
         ("Capture with AI", "AI", Action::CaptureWithAi),
         ("Toggle light / dark theme", "Theme", Action::ToggleTheme),
         ("Account and sync", "⌘,", Action::Account),
@@ -145,11 +134,6 @@ fn commands(query: &str, snapshot: &Snapshot) -> Vec<Entry> {
                 action: Action::Choose(Mode::MoveTo(t.id)),
             });
             out.push(Entry {
-                title: format!("Schedule “{}” at…", t.title),
-                hint: "Calendar".into(),
-                action: Action::Choose(Mode::ScheduleAt(t.id)),
-            });
-            out.push(Entry {
                 title: format!("Delete task “{}”", t.title),
                 hint: "⌫".into(),
                 action: Action::Delete(Deletable::Task(t.id)),
@@ -174,13 +158,13 @@ fn commands(query: &str, snapshot: &Snapshot) -> Vec<Entry> {
     out
 }
 
-/// Where "Move to…" offers to move a task, labelled: today, tomorrow, the five days after, and
-/// the backlog (no day).
+/// Where "Move to…" offers to plan a task, labelled: today, tomorrow, the five days after, and
+/// no plan date.
 pub fn move_days(today: NaiveDate) -> Vec<(String, Option<NaiveDate>)> {
     let mut days: Vec<(String, Option<NaiveDate>)> = vec![("Today".into(), Some(today))];
     days.push(("Tomorrow".into(), Some(today + Days::new(1))));
     days.extend((2..7).map(|i| today + Days::new(i)).map(|d| (d.format("%A, %b %-d").to_string(), Some(d))));
-    days.push(("Backlog · someday".into(), None));
+    days.push(("Not planned".into(), None));
     days
 }
 
@@ -188,7 +172,7 @@ fn move_to(task: EntityId, query: &str, today: NaiveDate) -> Vec<Entry> {
     move_days(today)
         .into_iter()
         .filter(|(title, _)| matches(title, query))
-        .map(|(title, day)| Entry { title, hint: "Move".into(), action: Action::MoveTask { task, day } })
+        .map(|(title, planned_on)| Entry { title, hint: "Move".into(), action: Action::MoveTask { task, planned_on } })
         .collect()
 }
 
@@ -249,22 +233,6 @@ pub fn parse_date(text: &str, today: NaiveDate) -> Option<NaiveDate> {
         .or_else(|| NaiveDate::parse_from_str(&format!("{text} {}", today.year()), "%b %d %Y").ok())
 }
 
-fn schedule_at(task: EntityId, query: &str, now: NaiveDateTime) -> Vec<Entry> {
-    let today = now.date();
-    let entry = |start: i32| Entry {
-        title: format!("Today at {}", crate::format::hh_mm(start as u32)),
-        hint: "Schedule".into(),
-        action: Action::Schedule { task, day: today, start },
-    };
-    if let Some(start) = parse_time(query) {
-        return vec![entry(start)];
-    }
-    // The next quarter hour, then every half hour until late evening.
-    let minute = (now.hour() * 60 + now.minute()) as i32;
-    let next = (minute + SNAP_MINUTES - 1) / SNAP_MINUTES * SNAP_MINUTES;
-    (0..8).map(|i| next + i * 30).filter(|m| *m < 24 * 60).map(entry).collect()
-}
-
 /// "9", "9:30", "0930", "17.15" → minutes after midnight, on the quarter hour it names.
 pub fn parse_time(text: &str) -> Option<i32> {
     let digits: String = text.chars().filter(char::is_ascii_digit).collect();
@@ -306,15 +274,14 @@ mod tests {
             color: QuestColor::Red,
             status: QuestStatus::Active,
             sort_key: "a".into(),
-            description: String::new(),
         };
         let task = |title: &str, done: bool| Task {
             id: EntityId::new(),
             title: title.into(),
             quest_id: Some(quest.id),
-            day: None,
+            planned_on: None,
+            due_on: None,
             sort_key: "a".into(),
-            block: None,
             completed_at: done.then(|| "2026-10-15T14:40:00Z".parse().unwrap()),
             description: String::new(),
             repeat: None,
@@ -345,7 +312,6 @@ mod tests {
             [
                 "Focus on “Design the next chapter”",
                 "Move “Design the next chapter” to…",
-                "Schedule “Design the next chapter” at…",
                 "Delete task “Design the next chapter”",
                 "Create task “design”",
                 "Create quest “design”"
@@ -366,25 +332,14 @@ mod tests {
     }
 
     #[test]
-    fn moving_offers_the_coming_week_and_the_backlog() {
+    fn moving_offers_the_coming_week_and_no_plan_date() {
         let task = EntityId::new();
         let days = super::entries(Mode::MoveTo(task), "", &snapshot(), now(), at());
         assert_eq!(days.len(), 8);
-        assert_eq!(days[1].action, Action::MoveTask { task, day: Some(now().date() + Days::new(1)) });
-        assert_eq!(days[7].action, Action::MoveTask { task, day: None });
-        let filtered = super::entries(Mode::MoveTo(task), "back", &snapshot(), now(), at());
+        assert_eq!(days[1].action, Action::MoveTask { task, planned_on: Some(now().date() + Days::new(1)) });
+        assert_eq!(days[7].action, Action::MoveTask { task, planned_on: None });
+        let filtered = super::entries(Mode::MoveTo(task), "not pl", &snapshot(), now(), at());
         assert_eq!(filtered.len(), 1);
-    }
-
-    #[test]
-    fn scheduling_offers_upcoming_times_or_the_typed_one() {
-        let task = EntityId::new();
-        let day = now().date();
-        let times = super::entries(Mode::ScheduleAt(task), "", &snapshot(), now(), at());
-        assert_eq!(times[0].action, Action::Schedule { task, day, start: 14 * 60 + 45 });
-        assert_eq!(times[1].action, Action::Schedule { task, day, start: 15 * 60 + 15 });
-        let typed = super::entries(Mode::ScheduleAt(task), "9:30", &snapshot(), now(), at());
-        assert_eq!(typed[0].action, Action::Schedule { task, day, start: 570 });
     }
 
     #[test]

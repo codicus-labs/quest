@@ -1,6 +1,6 @@
 use chrono::{NaiveTime, Weekday};
-use quest_domain::{Frequency, TimeBlock};
-use quest_protocol::{ProposedMilestone, ProposedQuest, ProposedTask};
+use quest_domain::Frequency;
+use quest_protocol::{ProposedQuest, ProposedTask};
 
 use super::*;
 use crate::review::Draft;
@@ -15,7 +15,7 @@ fn key(text: &str) -> TempKey {
 }
 
 fn new_quest(k: &str, title: &str) -> ProposedQuest {
-    ProposedQuest { key: key(k), title: title.into(), description: String::new(), milestones: Vec::new() }
+    ProposedQuest { key: key(k), title: title.into() }
 }
 
 fn new_task(k: &str, title: &str, quest: Option<QuestRef>) -> ProposedTask {
@@ -25,8 +25,8 @@ fn new_task(k: &str, title: &str, quest: Option<QuestRef>) -> ProposedTask {
         description: String::new(),
         quest,
         quest_uncertain: false,
-        day: Some(day("2026-11-25")),
-        block: None,
+        planned_on: Some(day("2026-11-25")),
+        due_on: None,
         repeat: None,
     }
 }
@@ -47,21 +47,19 @@ fn apply(world: &mut World, proposal: &CaptureProposal) -> CapturePlan {
 fn a_new_quest_and_its_task_are_created_together() {
     let mut world = World::new();
     world.quest("Existing");
-    let mut quest = new_quest("q1", "Steuererklärung");
-    quest.description = "Für 2025".into();
-    quest.milestones = vec![ProposedMilestone { title: "Belege komplett".into(), achieved_on: day("2026-11-24") }];
+    let mut task = new_task("t1", "Belege sammeln", Some(QuestRef::New { key: key("q1") }));
+    task.due_on = Some(day("2026-11-30"));
     let proposal = CaptureProposal {
-        quests: vec![quest, new_quest("q2", "Garten")],
-        tasks: vec![new_task("t1", "Belege sammeln", Some(QuestRef::New { key: key("q1") }))],
+        quests: vec![new_quest("q1", "Steuererklärung"), new_quest("q2", "Garten")],
+        tasks: vec![task],
         ..CaptureProposal::default()
     };
     let plan = apply(&mut world, &proposal);
     let snapshot = world.snapshot();
     let tax = snapshot.quests.iter().find(|q| q.title == "Steuererklärung").unwrap();
-    assert_eq!(tax.description, "Für 2025");
-    assert_eq!(snapshot.milestones_of(tax.id).count(), 1);
     let task = snapshot.tasks.iter().find(|t| t.title == "Belege sammeln").unwrap();
-    assert_eq!((task.quest_id, task.day), (Some(tax.id), Some(day("2026-11-25"))));
+    assert_eq!(task.quest_id, Some(tax.id));
+    assert_eq!((task.planned_on, task.due_on), (Some(day("2026-11-25")), Some(day("2026-11-30"))));
     let colors: Vec<_> = snapshot.quests.iter().map(|q| q.color).collect();
     assert_eq!(colors, [QuestColor::Red, QuestColor::Orange, QuestColor::Yellow], "each new quest gets a free colour");
     assert_eq!(plan.created, [Created::Quest(tax.id), Created::Quest(snapshot.quests[2].id), Created::Task(task.id)]);
@@ -84,10 +82,9 @@ fn a_task_of_a_deselected_new_quest_gets_no_quest() {
 }
 
 #[test]
-fn blocks_and_repeats_are_planned_on_the_tasks_day() {
+fn repeats_start_on_the_plan_date() {
     let mut world = World::new();
     let mut weekly = new_task("t1", "Standup", None);
-    weekly.block = Some(TimeBlock { start: time(9, 0), minutes: 15 });
     weekly.repeat = Some(ProposedRepeat {
         every: 1,
         frequency: Frequency::Week,
@@ -95,18 +92,17 @@ fn blocks_and_repeats_are_planned_on_the_tasks_day() {
         month_day: None,
         ends: None,
     });
-    let mut backlog = new_task("t2", "Someday", None);
-    backlog.day = None;
-    backlog.block = weekly.block;
-    apply(&mut world, &CaptureProposal { tasks: vec![weekly, backlog], ..CaptureProposal::default() });
+    let mut unplanned = new_task("t2", "Someday", None);
+    unplanned.planned_on = None;
+    unplanned.repeat = weekly.repeat.clone();
+    apply(&mut world, &CaptureProposal { tasks: vec![weekly, unplanned], ..CaptureProposal::default() });
     let snapshot = world.snapshot();
     let standup = &snapshot.tasks.iter().find(|t| t.title == "Standup").unwrap();
-    assert_eq!(standup.block, Some(TimeBlock { start: time(9, 0), minutes: 15 }));
     let rule = standup.repeat.unwrap().rule;
     assert_eq!((rule.starts, rule.time_zone, rule.every), (day("2026-11-25"), BERLIN, 1));
     assert!(rule.weekdays.contains(Weekday::Mon) && rule.weekdays.contains(Weekday::Wed));
     let someday = &snapshot.tasks.iter().find(|t| t.title == "Someday").unwrap();
-    assert_eq!((someday.day, someday.block), (None, None), "a backlog task has no block");
+    assert_eq!((someday.planned_on, someday.repeat), (None, None), "an unplanned task does not repeat");
 }
 
 #[test]
@@ -147,7 +143,7 @@ fn work_on_a_new_task_creates_it_done_in_the_new_quest() {
     let snapshot = world.snapshot();
     let (quest, task, entry) = (&snapshot.quests[0], &snapshot.tasks[0], &snapshot.time_entries[0]);
     assert!(task.is_done());
-    assert_eq!((task.quest_id, task.day), (Some(quest.id), Some(day("2026-11-24"))));
+    assert_eq!((task.quest_id, task.planned_on), (Some(quest.id), Some(day("2026-11-24"))));
     assert_eq!((entry.task_id, entry.quest_id), (Some(task.id), Some(quest.id)));
     assert_eq!(plan.created.len(), 3);
 }
@@ -214,10 +210,8 @@ fn stale_references_and_empty_titles_are_refused() {
 fn undo_takes_everything_back_and_skips_what_is_gone() {
     let mut world = World::new();
     let target = WorkTarget::New { title: "Konzept".into(), quest: Some(QuestRef::New { key: key("q1") }) };
-    let mut quest = new_quest("q1", "Relaunch");
-    quest.milestones = vec![ProposedMilestone { title: "Kickoff".into(), achieved_on: day("2026-11-24") }];
     let proposal = CaptureProposal {
-        quests: vec![quest],
+        quests: vec![new_quest("q1", "Relaunch")],
         tasks: vec![new_task("t1", "Angebot", Some(QuestRef::New { key: key("q1") }))],
         work: vec![session("w1", target, "2026-11-24", time(9, 0), time(10, 0))],
         ..CaptureProposal::default()
@@ -230,5 +224,4 @@ fn undo_takes_everything_back_and_skips_what_is_gone() {
     world.run(&commands).unwrap();
     let snapshot = world.snapshot();
     assert!(snapshot.quests.is_empty() && snapshot.tasks.is_empty() && snapshot.time_entries.is_empty());
-    assert!(snapshot.milestones.is_empty());
 }

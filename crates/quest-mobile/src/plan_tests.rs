@@ -117,15 +117,16 @@ fn a_drop_moves_before_the_card_or_to_the_end() {
     let open = task(11, "Open", None, Some("2026-11-27"));
     let mut done = task(12, "Done", None, Some("2026-11-27"));
     done.completed_at = Some(at("2026-11-25T09:00:00+01:00"));
-    let moved = |position| Some(Command::MoveTask { id: id(10), day: to, position });
-    assert_eq!(drop_move(&card, to, Some(&open)), moved(Position::Before(id(11))));
-    assert_eq!(drop_move(&card, to, None), moved(Position::Bottom));
-    assert_eq!(drop_move(&card, to, Some(&card)), None, "dropped back where it was");
-    assert_eq!(drop_move(&card, to, Some(&done)), moved(Position::Bottom), "after the open cards");
+    let at = now().at;
+    let moved = |position| Some(Command::MoveTask { id: id(10), planned_on: to, position, at });
+    assert_eq!(drop_move(&card, to, Some(&open), at), moved(Position::Before(id(11))));
+    assert_eq!(drop_move(&card, to, None, at), moved(Position::Bottom));
+    assert_eq!(drop_move(&card, to, Some(&card), at), None, "dropped back where it was");
+    assert_eq!(drop_move(&card, to, Some(&done), at), moved(Position::Bottom), "after the open cards");
     let mut finished = card.clone();
     finished.completed_at = done.completed_at;
-    let finished_moved = Some(Command::MoveTask { id: id(10), day: to, position: Position::Before(id(12)) });
-    assert_eq!(drop_move(&finished, to, Some(&done)), finished_moved, "done among done");
+    let finished_moved = Some(Command::MoveTask { id: id(10), planned_on: to, position: Position::Before(id(12)), at });
+    assert_eq!(drop_move(&finished, to, Some(&done), at), finished_moved, "done among done");
 }
 
 #[test]
@@ -139,46 +140,49 @@ fn nudges_step_within_the_section_as_shown() {
         task(13, "C", Some(1), Some("2026-11-25")),
     ]);
     let c = snapshot.task(id(13)).unwrap().clone();
-    let up = |choice| nudge_move(&snapshot, now().at, choice, &c, true);
-    let on_today = |position| Some(Command::MoveTask { id: id(13), day: Some(today()), position });
+    let at = now().at;
+    let up = |choice| nudge_move(&snapshot, at, choice, &c, true, at);
+    let on_today = |position| Some(Command::MoveTask { id: id(13), planned_on: Some(today()), position, at });
     assert_eq!(up(Choice::default()), on_today(Position::Before(id(12))), "skips the other section");
     assert_eq!(up(Choice { filter: Some(id(1)), pick: None }), on_today(Position::Before(id(10))), "as filtered");
     let a = snapshot.task(id(10)).unwrap().clone();
-    assert_eq!(nudge_move(&snapshot, now().at, Choice::default(), &a, true), None, "first stays");
-    let backlog = task(20, "Someday", None, None);
-    assert_eq!(nudge_move(&snapshot, now().at, Choice::default(), &backlog, false), None);
+    assert_eq!(nudge_move(&snapshot, at, Choice::default(), &a, true, at), None, "first stays");
+    let unplanned = task(20, "Someday", None, None);
+    assert_eq!(nudge_move(&snapshot, at, Choice::default(), &unplanned, false, at), None);
 }
 
 #[test]
 fn shifts_go_to_the_bottom_of_the_next_or_previous_day() {
     let card = task(10, "Card", None, Some("2026-11-30"));
-    let bottom = |on: &str| Command::MoveTask { id: id(10), day: Some(day(on)), position: Position::Bottom };
-    assert_eq!(shift_move(&card, true, today()), bottom("2026-12-01"));
-    assert_eq!(shift_move(&card, false, today()), bottom("2026-11-29"));
-    assert_eq!(shift_move(&task(10, "Card", None, None), true, today()), bottom("2026-11-26"), "from today");
+    let at = now().at;
+    let bottom = |on: &str| Command::MoveTask { id: id(10), planned_on: Some(day(on)), position: Position::Bottom, at };
+    assert_eq!(shift_move(&card, true, now()), bottom("2026-12-01"));
+    assert_eq!(shift_move(&card, false, now()), bottom("2026-11-29"));
+    assert_eq!(shift_move(&task(10, "Card", None, None), true, now()), bottom("2026-11-26"), "from today");
 }
 
 #[test]
 fn moves_to_a_day_go_through_the_plan_other_edits_stay() {
     let snapshot = Snapshot::default();
-    let to_day = Command::MoveTask { id: id(10), day: Some(today()), position: Position::Bottom };
+    let at = memory().at;
+    let to_day = Command::MoveTask { id: id(10), planned_on: Some(today()), position: Position::Bottom, at };
     assert_eq!(
         plan_edit(&snapshot, memory(), to_day.clone()),
         Command::EditPlan { occurrence: None, now: memory().at, edit: Box::new(to_day) },
         "sorts among the day's previews"
     );
-    let to_backlog = Command::MoveTask { id: id(10), day: None, position: Position::Bottom };
-    assert_eq!(plan_edit(&snapshot, memory(), to_backlog.clone()), to_backlog);
+    let unplan = Command::MoveTask { id: id(10), planned_on: None, position: Position::Bottom, at };
+    assert_eq!(plan_edit(&snapshot, memory(), unplan.clone()), unplan);
     let rename = Command::RenameTask { id: id(10), title: "New".into() };
     assert_eq!(plan_edit(&snapshot, memory(), rename.clone()), rename, "no preview: unchanged");
 }
 
 #[test]
-fn move_to_offers_the_coming_week_and_the_backlog() {
+fn move_to_offers_the_coming_week_and_not_planned() {
     let targets = move_targets(today());
     let labels: Vec<&str> = targets.iter().map(|t| t.label.as_str()).collect();
     assert_eq!(labels[..3], ["Today", "Tomorrow", "Friday, Nov 27"]);
     assert_eq!(targets.len(), 8);
     assert_eq!(targets[1].day_iso.as_deref(), Some("2026-11-26"));
-    assert_eq!(targets[7], MoveTarget { label: "Backlog · someday".into(), day_iso: None });
+    assert_eq!(targets[7], MoveTarget { label: "Not planned".into(), day_iso: None });
 }

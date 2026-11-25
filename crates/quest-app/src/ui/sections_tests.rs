@@ -62,7 +62,11 @@ fn the_filter_shows_one_quests_work_and_adds_to_it() {
     type_text(&mut rt, "Essay intro");
     press(&mut rt, Key::Enter, Mods::default());
     let added = task(&rt, "Essay intro");
-    assert_eq!((added.quest_id, added.day), (Some(writing), Some(rt.state.today())), "the filtered quest, today");
+    assert_eq!(
+        (added.quest_id, added.planned_on),
+        (Some(writing), Some(rt.state.today())),
+        "the filtered quest, today"
+    );
 
     click(&mut rt, "home-filter-chip");
     assert_eq!(rt.state.quest_filter, None, "the chip clears the filter");
@@ -89,5 +93,9 @@ fn add_quest_work_uses_the_chips_quest_and_add_a_task_none() {
     type_text(&mut rt, "Water the plants");
     press(&mut rt, Key::Enter, Mods::default());
     let other = task(&rt, "Water the plants");
-    assert_eq!((other.quest_id, other.day), (None, Some(rt.state.today())), "OTHER's field adds without a quest");
+    assert_eq!(
+        (other.quest_id, other.planned_on),
+        (None, Some(rt.state.today())),
+        "OTHER's field adds without a quest"
+    );
 }

@@ -238,11 +238,11 @@ fn add_task(s: &mut State, list: ListId) {
     if title.is_empty() {
         return;
     }
-    let day = list.day(s.today());
+    let planned_on = list.day(s.today());
     let position = match s.add_at {
         AddAt::Top => Position::Top,
         AddAt::Bottom => Position::Bottom,
     };
-    s.dispatch(Command::CreateTask { id: EntityId::new(), title, quest_id: None, day, position });
+    s.dispatch(Command::CreateTask { id: EntityId::new(), title, quest_id: None, planned_on, due_on: None, position });
     s.plan_add.remove(&list);
 }

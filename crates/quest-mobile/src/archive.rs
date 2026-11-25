@@ -1,5 +1,5 @@
 //! The archive, pure, like the desktop's: quests an older version archived (to unarchive), then
-//! everything deleted, grouped (quests, tasks, milestones, sessions), newest first, each
+//! everything deleted, grouped (quests, tasks, checklist items, sessions), newest first, each
 //! restorable. Completed quests are on the Quests page instead.
 
 use quest_domain::{EntityId, EntityKind, QuestStatus, Snapshot, Trashed};
@@ -13,7 +13,7 @@ use crate::time::Now;
 const GROUPS: [(TrashKind, &str); 4] = [
     (TrashKind::Quest, "Deleted quests"),
     (TrashKind::Task, "Deleted tasks"),
-    (TrashKind::Milestone, "Deleted milestones"),
+    (TrashKind::ChecklistItem, "Deleted checklist items"),
     (TrashKind::Session, "Deleted sessions"),
 ];
 
@@ -68,7 +68,7 @@ fn entity_kind(kind: TrashKind) -> EntityKind {
     match kind {
         TrashKind::Quest => EntityKind::Quest,
         TrashKind::Task => EntityKind::Task,
-        TrashKind::Milestone => EntityKind::Milestone,
+        TrashKind::ChecklistItem => EntityKind::ChecklistItem,
         TrashKind::Session => EntityKind::TimeEntry,
     }
 }
@@ -78,7 +78,7 @@ pub(crate) fn deletable(kind: TrashKind, id: EntityId) -> Deletable {
     match kind {
         TrashKind::Quest => Deletable::Quest(id),
         TrashKind::Task => Deletable::Task(id),
-        TrashKind::Milestone => Deletable::Milestone(id),
+        TrashKind::ChecklistItem => Deletable::ChecklistItem(id),
         TrashKind::Session => Deletable::Entry(id),
     }
 }

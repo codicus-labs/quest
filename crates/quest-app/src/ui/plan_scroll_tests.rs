@@ -190,7 +190,7 @@ fn a_drag_resting_at_the_left_edge_scrolls_earlier_and_esc_stops_it() {
     hold(&mut rt, 0.5);
     assert!(!dragging(&rt), "Esc ends the drag");
     assert_eq!(rt.state.plan.offset(), offset, "and the scroll with it");
-    assert_eq!(task(&rt, MOVING).day, Some(rt.state.today() + Days::new(1)), "the card went back");
+    assert_eq!(task(&rt, MOVING).planned_on, Some(rt.state.today() + Days::new(1)), "the card went back");
 }
 
 #[test]
@@ -214,6 +214,6 @@ fn a_drop_after_an_edge_scroll_lands_on_the_day_under_the_pointer() {
     assert!(under >= target - Days::new(1), "a day that wasn't on screen is under the pointer: {under}");
     rt.pointer_up(x + w / 2.0, y + h / 2.0);
     settle(&mut rt);
-    assert_eq!(task(&rt, MOVING).day, Some(under), "it lands on the day under the pointer");
+    assert_eq!(task(&rt, MOVING).planned_on, Some(under), "it lands on the day under the pointer");
     assert!((column_x(&rt, under) - (x + rt.state.plan.strip.x_of(under) - rt.state.plan.offset())).abs() < 0.5);
 }

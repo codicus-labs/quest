@@ -1,5 +1,5 @@
-//! Deleting with undo: a task (card menu, ⌫, ⌘K), a quest with its milestones and a session each
-//! go to the archive with a toast; Undo or ⌘Z brings them back, and the archive restores them.
+//! Deleting with undo: a task (card menu, ⌫, ⌘K) and a quest each go to the archive with a
+//! toast; Undo or ⌘Z brings them back, and the archive restores them.
 
 use quest_domain::{EntityId, EntityKind};
 use rune::{Key, Mods, Runtime};
@@ -86,49 +86,25 @@ fn the_palette_deletes_a_task() {
     let id = task_id(&rt, DRAFT);
     command(&mut rt, 'k');
     type_text(&mut rt, "draft this");
-    for _ in 0..3 {
+    for _ in 0..2 {
         press(&mut rt, Key::Down, Mods::default());
     }
     press(&mut rt, Key::Enter, Mods::default());
     assert_eq!(rt.state.overlay, Overlay::None);
-    assert!(rt.state.snap.task(id).is_none(), "the fourth entry deletes it");
+    assert!(rt.state.snap.task(id).is_none(), "the third entry deletes it");
 }
 
 #[test]
-fn a_deleted_quest_takes_its_milestones_and_undo_brings_both_back() {
+fn a_deleted_quest_comes_back_with_undo() {
     let (mut rt, _dir) = app();
     let quest = rt.state.snap.quests[0].id;
-    let milestones = rt.state.snap.milestones_of(quest).count();
-    assert!(milestones > 0, "the demo quest has milestones");
     rt.state.go(View::Quest(quest));
     rt.frame(0.0);
     click(&mut rt, "quest-delete");
     assert_eq!(rt.state.view, View::Quests, "its page closes");
     assert!(rt.state.snap.quest(quest).is_none());
-    assert_eq!(rt.state.snap.milestones_of(quest).count(), 0);
     click(&mut rt, "toast-action");
     assert!(rt.state.snap.quest(quest).is_some());
-    assert_eq!(rt.state.snap.milestones_of(quest).count(), milestones);
-}
-
-#[test]
-fn a_focused_session_is_deleted_with_backspace_and_undone() {
-    let (mut rt, _dir) = app();
-    let today = rt.state.today();
-    let entry = rt
-        .state
-        .snap
-        .time_entries
-        .iter()
-        .find(|e| !e.is_running() && crate::clock::local_day(e.started_at) == today)
-        .map(|e| e.id)
-        .expect("a session today");
-    rt.update(|_, tx| tx.focus_when_shown(format!("home-grid-entry-{entry}"), true));
-    rt.frame(0.0);
-    press(&mut rt, Key::Backspace, Mods::default());
-    assert!(in_trash(&rt, EntityKind::TimeEntry, entry));
-    undo(&mut rt);
-    assert!(rt.state.snap.time_entries.iter().any(|e| e.id == entry));
 }
 
 #[test]
@@ -138,7 +114,7 @@ fn the_archive_restores_deleted_things_and_unarchives_quests() {
     rt.state.delete(crate::undo::Deletable::Task(id));
     let quest = quest_id(&rt, &rt.state.snap.quests[1].title.clone());
     rt.state.dispatch(quest_domain::Command::SetQuestStatus { id: quest, status: quest_domain::QuestStatus::Archived });
-    command(&mut rt, '5');
+    command(&mut rt, '4');
     click(&mut rt, "quests-archive");
     assert_eq!(rt.state.view, View::Archive);
     assert!(rt.find(&format!("archive-item-{id}")).is_some(), "the deleted task is listed");

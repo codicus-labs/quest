@@ -79,9 +79,6 @@ class ProposalActions(
     val setWorkQuest: (key: String, DraftQuestRef?) -> Unit,
     /** null: Someday. */
     val setTaskDay: (key: String, String?) -> Unit,
-    val setTaskBlockStart: (key: String, Int) -> Unit,
-    val setTaskBlockEnd: (key: String, Int) -> Unit,
-    val removeTaskBlock: (key: String) -> Unit,
     val setWorkDay: (key: String, String) -> Unit,
     val setWorkStart: (key: String, Int) -> Unit,
     val setWorkEnd: (key: String, Int) -> Unit,
@@ -92,7 +89,7 @@ class ProposalActions(
     companion object {
         val None = ProposalActions(
             {}, {}, { _, _ -> }, { _, _ -> }, { _, _ -> }, { _, _ -> }, { _, _ -> }, { _, _ -> }, { _, _ -> }, { _, _ -> },
-            { _, _ -> }, { _, _ -> }, { _, _ -> }, {}, { _, _ -> }, { _, _ -> }, { _, _ -> }, {},
+            { _, _ -> }, { _, _ -> }, { _, _ -> }, { _, _ -> }, {},
             RepeatEditorActions({}, {}, {}, {}, {}), {},
         )
     }

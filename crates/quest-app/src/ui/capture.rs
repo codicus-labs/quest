@@ -125,19 +125,15 @@ fn review_body(s: &State, r: &Review, p: &Pal) -> El {
     if !draft.proposal.quests.is_empty() {
         list = list.child(parts::caps("New quests", p).mt(6.0));
         for quest in &draft.proposal.quests {
-            let mut meta = vec![quest.description.clone()];
-            if !quest.milestones.is_empty() {
-                meta.push(format!("{} milestone(s)", quest.milestones.len()));
-            }
             let empty = quest.title.trim().is_empty();
             let error = (draft.is_selected(&quest.key) && empty).then_some("Type a title.");
-            list = list.child(item(r, &quest.key, Body::Title, join(meta), None, error, p));
+            list = list.child(item(r, &quest.key, Body::Title, String::new(), None, error, p));
         }
     }
     if !draft.proposal.tasks.is_empty() {
         list = list.child(parts::caps("Tasks", p).mt(6.0));
         for task in &draft.proposal.tasks {
-            let mut meta = vec![review::task_when(task.day, task.block, today)];
+            let mut meta = vec![review::task_when(task.planned_on, task.due_on, today)];
             meta.extend(task.repeat.as_ref().map(repeat_label));
             let quest = task_quest(s, r, &task.key, draft.effective_quest(&task.quest), task.quest_uncertain, p);
             let error = draft.is_selected(&task.key).then(|| draft.task_error(task, &s.snap)).flatten();

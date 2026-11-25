@@ -44,11 +44,6 @@ fn review_week_buttons_stay_put() {
 }
 
 #[test]
-fn calendar_week_buttons_stay_put() {
-    buttons_stay_put(View::Calendar, ["calendar-prev", "calendar-range", "calendar-next"]);
-}
-
-#[test]
 fn focus_back_button_starts_past_the_traffic_lights() {
     let (mut rt, _dir) = demo_app();
     let mut insets = ChromeInsets::default();
@@ -79,6 +74,8 @@ fn search_text_shown(rt: &Runtime<State>) -> bool {
 #[test]
 fn a_narrow_bar_with_the_timer_pill_shows_the_search_as_a_magnifier() {
     let (mut rt, _dir) = with_timer_pill();
+    rt.set_viewport((1000.0, 750.0), 1.0);
+    settle(&mut rt);
 
     let [tab_x, _, tab_w, _] = rect(&rt, "tab-review");
     let [pill_x, ..] = rect(&rt, "timer-elsewhere");

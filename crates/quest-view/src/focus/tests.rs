@@ -1,5 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
-use quest_domain::{EntityId, RunningFocus, Snapshot, Task, TimeEntry};
+use quest_domain::{EntityId, EntryKind, RunningFocus, Snapshot, Task, TimeEntry};
 
 use super::*;
 
@@ -16,9 +16,9 @@ fn task(n: u128, done: bool) -> Task {
         id: id(n),
         title: format!("T{n}"),
         quest_id: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         sort_key: format!("{n}"),
-        block: None,
         completed_at: done.then(|| at(0)),
         description: String::new(),
         repeat: None,
@@ -29,6 +29,8 @@ fn task(n: u128, done: bool) -> Task {
 fn entry(n: u128, task: u128, minute: u32, running: bool) -> TimeEntry {
     TimeEntry {
         id: id(n),
+        kind: EntryKind::Task,
+        origin_task_id: None,
         task_id: Some(id(task)),
         quest_id: None,
         started_at: at(minute),

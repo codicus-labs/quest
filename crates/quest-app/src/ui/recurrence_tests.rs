@@ -16,7 +16,8 @@ fn task_repeat_round_trips_through_the_plan_overview() {
         id,
         title: "Check the next recording".into(),
         quest_id: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Top,
     });
     command(&mut rt, '2');
@@ -33,7 +34,7 @@ fn task_repeat_round_trips_through_the_plan_overview() {
     let today = rt.state.today();
     assert_eq!(rt.state.overlay, Overlay::Task);
     let task = rt.state.snap.task(id).unwrap();
-    assert_eq!(task.day, Some(today));
+    assert_eq!(task.planned_on, Some(today));
     let rule = task.repeat.unwrap().rule;
     assert_eq!(rule.frequency, Frequency::Week);
     assert_eq!(rule.pin, RepeatPin::Top);
@@ -81,7 +82,8 @@ fn the_plan_shows_future_occurrences_and_saves_only_the_edited_one() {
         id,
         title: "Rehearse".into(),
         quest_id: None,
-        day: Some(today),
+        planned_on: Some(today),
+        due_on: None,
         position: Position::Top,
     });
     rt.state.dispatch(Command::SetTaskRepeat { id, rule: Some(rule), now: rt.state.now });
@@ -152,7 +154,8 @@ fn moving_one_occurrence_leaves_the_series_alone_and_completing_another_brings_i
         id: source,
         title: "Rehearse".into(),
         quest_id: None,
-        day: Some(today),
+        planned_on: Some(today),
+        due_on: None,
         position: Position::Top,
     });
     rt.state.dispatch(Command::SetTaskRepeat { id: source, rule: Some(rule), now: rt.state.now });
@@ -167,17 +170,17 @@ fn moving_one_occurrence_leaves_the_series_alone_and_completing_another_brings_i
     let [x, y, w, h] = rect(&rt, &format!("plan-task-{finished}"));
     drag(&mut rt, from, (x + w / 2.0, y + h + 12.0));
     settle(&mut rt);
-    assert_eq!(rt.state.snap.task(moved).map(|task| task.day), Some(Some(next)), "{:?}", rt.state.notice);
+    assert_eq!(rt.state.snap.task(moved).map(|task| task.planned_on), Some(Some(next)), "{:?}", rt.state.notice);
     assert!(rt.find(&format!("plan-task-{finished}")).is_some());
 
     click(&mut rt, &format!("plan-check-{finished}"));
-    assert!(rt.state.snap.task(finished).is_some_and(|task| task.day == Some(today) && task.is_done()));
-    assert!(rt.state.snap.task(moved).is_some_and(|task| task.day == Some(next) && !task.is_done()));
+    assert!(rt.state.snap.task(finished).is_some_and(|task| task.planned_on == Some(today) && task.is_done()));
+    assert!(rt.state.snap.task(moved).is_some_and(|task| task.planned_on == Some(next) && !task.is_done()));
     assert!(rt.state.snap.planned_occurrences(following, rt.state.now).any(|task| task.id == other));
     assert_eq!(rt.state.snap.task(source).unwrap().repeat.unwrap().rule, rule);
 
     click(&mut rt, &format!("plan-check-{finished}"));
-    assert!(rt.state.snap.task(finished).is_some_and(|task| task.day == Some(today) && !task.is_done()));
+    assert!(rt.state.snap.task(finished).is_some_and(|task| task.planned_on == Some(today) && !task.is_done()));
     rt.state.clock = clock::Clock::Fixed(clock::at_local(next, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()));
     rt.frame(0.0);
     assert_eq!(
@@ -194,7 +197,8 @@ fn unpicking_the_only_weekday_keeps_it_following_the_start() {
         id,
         title: "Water".into(),
         quest_id: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Top,
     });
     rt.update(move |s, _| s.open_repeat_editor(id));

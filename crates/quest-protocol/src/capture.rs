@@ -10,22 +10,21 @@
 //! the (possibly edited) proposal with ordinary domain commands.
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc, Weekday};
-use quest_domain::{EntityId, Frequency, MonthDay, TimeBlock};
+use quest_domain::{EntityId, Frequency, MonthDay};
 use serde::{Deserialize, Serialize};
 
 pub const AI_CAPTURE_PATH: &str = "/v1/ai/capture";
 
 /// Bumped on incompatible changes to the capture types; the server rejects other versions.
-pub const CAPTURE_VERSION: u32 = 1;
+pub const CAPTURE_VERSION: u32 = 2;
 
 /// Longest text the server accepts, in characters (about five minutes of dictation).
 pub const MAX_CAPTURE_TEXT_CHARS: usize = 4000;
 /// Context limits, enforced by the server and respected by the clients' context builder.
 pub const MAX_CONTEXT_QUESTS: usize = 50;
 pub const MAX_CONTEXT_TASKS: usize = 150;
-/// Longest title or description in the context, in characters; clients shorten longer ones.
+/// Longest title in the context, in characters; clients shorten longer ones.
 pub const MAX_CONTEXT_TITLE_CHARS: usize = 120;
-pub const MAX_CONTEXT_DESCRIPTION_CHARS: usize = 200;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CaptureRequest {
@@ -54,8 +53,6 @@ pub struct CaptureContext {
 pub struct ContextQuest {
     pub id: EntityId,
     pub title: String,
-    /// Shortened to [`MAX_CONTEXT_DESCRIPTION_CHARS`].
-    pub description: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -63,7 +60,8 @@ pub struct ContextTask {
     pub id: EntityId,
     pub title: String,
     pub quest_id: Option<EntityId>,
-    pub day: Option<NaiveDate>,
+    pub planned_on: Option<NaiveDate>,
+    pub due_on: Option<NaiveDate>,
     pub done: bool,
 }
 
@@ -93,14 +91,6 @@ pub struct CaptureProposal {
 pub struct ProposedQuest {
     pub key: TempKey,
     pub title: String,
-    pub description: String,
-    pub milestones: Vec<ProposedMilestone>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ProposedMilestone {
-    pub title: String,
-    pub achieved_on: NaiveDate,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,15 +108,15 @@ pub struct ProposedTask {
     pub quest: Option<QuestRef>,
     /// The quest was guessed (or the AI named one that does not exist): the UI marks it.
     pub quest_uncertain: bool,
-    /// `None`: backlog.
-    pub day: Option<NaiveDate>,
-    /// Only with a `day`.
-    pub block: Option<TimeBlock>,
-    /// Only with a `day`; the series starts on it.
+    /// When to work on it; `None` leaves it unplanned.
+    pub planned_on: Option<NaiveDate>,
+    /// The deadline; never before `planned_on` (validation applies the domain's rule).
+    pub due_on: Option<NaiveDate>,
+    /// Only with a `planned_on`; the series starts on it.
     pub repeat: Option<ProposedRepeat>,
 }
 
-/// A repeat rule without its start (the task's day) and time zone (the client's).
+/// A repeat rule without its start (the task's plan date) and time zone (the client's).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProposedRepeat {
     pub every: u32,
@@ -174,7 +164,7 @@ pub enum DropReason {
     Incomplete,
     /// A date or time that does not exist or lies too far away.
     InvalidDate,
-    /// The end of a session is not after its start, or the block runs past midnight.
+    /// The end of a session is not after its start.
     InvalidTimeRange,
     /// A title or description is too long, or the proposal has too many items.
     TooLong,

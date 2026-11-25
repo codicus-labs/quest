@@ -27,7 +27,7 @@ fn a_delete_shows_a_toast_for_six_seconds() {
 #[test]
 fn undo_restores_the_last_delete_once() {
     let first = Deletable::Quest(EntityId::new());
-    let second = Deletable::Milestone(EntityId::new());
+    let second = Deletable::ChecklistItem(EntityId::new());
     let (state, _) = UndoState::default().step(deleted(first), t0());
     let (state, _) = state.step(deleted(second), t0());
     let (state, effect) = state.step(UndoEvent::Undo, t0());
@@ -50,7 +50,7 @@ fn deletables_map_to_commands() {
     let id = EntityId::new();
     assert_eq!(Deletable::Entry(id).delete(t0()), Command::DeleteEntry { id, at: t0() });
     assert_eq!(Deletable::Quest(id).restore(), Command::Restore { kind: EntityKind::Quest, id });
-    assert_eq!(Deletable::from_kind(EntityKind::Milestone, id), Some(Deletable::Milestone(id)));
+    assert_eq!(Deletable::from_kind(EntityKind::ChecklistItem, id), Some(Deletable::ChecklistItem(id)));
     assert_eq!(Deletable::from_kind(EntityKind::Settings, id), None);
 }
 

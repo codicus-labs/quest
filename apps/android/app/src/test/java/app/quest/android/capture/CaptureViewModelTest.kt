@@ -261,8 +261,6 @@ class CaptureViewModelTest {
         vm.editTaskTitle("t1", "Offer\nfor Miller")
         vm.setTaskQuest("t2", DraftQuestRef.Existing("q-relaunch"))
         vm.setTaskDay("t1", "2026-11-30")
-        vm.setTaskBlockStart("t1", 600)
-        vm.setTaskBlockEnd("t1", 0)
         vm.editQuestTitle("q1", "Taxes 2025")
         vm.editWorkTitle("w1", "Concept")
         vm.setWorkQuest("w1", null)
@@ -273,9 +271,9 @@ class CaptureViewModelTest {
         val draft = vm.proposal().draft
         val t1 = draft.tasks[0]
         assertEquals("Offer for Miller", t1.title)
-        assertEquals(DraftDay("2026-11-30", "Label 2026-11-30"), t1.day)
-        // Picker values go in unchanged; the core reads an end of 0 as midnight.
-        assertEquals(DraftBlock(600, 0), t1.block)
+        assertEquals(DraftDay("2026-11-30", "Label 2026-11-30"), t1.plannedOn)
+        // The deadline stays as proposed; the core checks plan ≤ deadline.
+        assertEquals(CaptureSamples.draft.tasks[0].dueOn, t1.dueOn)
         val t2 = draft.tasks[1]
         assertEquals(DraftQuestRef.Existing("q-relaunch"), t2.quest)
         assertFalse(t2.questUncertain)
@@ -287,13 +285,10 @@ class CaptureViewModelTest {
     }
 
     @Test
-    fun somedayAndNoBlock() = runTest(main.dispatcher) {
+    fun someday() = runTest(main.dispatcher) {
         val vm = structured()
         vm.setTaskDay("t1", null)
-        vm.removeTaskBlock("t1")
-        val t1 = vm.proposal().draft.tasks[0]
-        assertNull(t1.day)
-        assertNull(t1.block)
+        assertNull(vm.proposal().draft.tasks[0].plannedOn)
     }
 
     @Test
@@ -306,7 +301,7 @@ class CaptureViewModelTest {
         advanceUntilIdle()
         vm.setTaskDay("t1", "2026-13-01")
         assertEquals("not a day.", vm.proposal().error)
-        assertEquals(CaptureSamples.draft.tasks[0].day, vm.proposal().draft.tasks[0].day)
+        assertEquals(CaptureSamples.draft.tasks[0].plannedOn, vm.proposal().draft.tasks[0].plannedOn)
     }
 
     @Test

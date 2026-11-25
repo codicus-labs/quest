@@ -4,12 +4,12 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{Days, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Timelike, Weekday};
+use chrono::{Days, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Weekday};
 use chrono_tz::Tz;
-use quest_domain::{EntityId, Frequency, MonthDay, TimeBlock};
+use quest_domain::{EntityId, Frequency, MonthDay, TaskDates, set_due, set_planned};
 use quest_protocol::{
-    CaptureProposal, CaptureRequest, DropReason, Dropped, ProposedMilestone, ProposedQuest, ProposedRepeat,
-    ProposedTask, ProposedWork, QuestRef, TempKey, WorkTarget,
+    CaptureProposal, CaptureRequest, DropReason, Dropped, ProposedQuest, ProposedRepeat, ProposedTask, ProposedWork,
+    QuestRef, TempKey, WorkTarget,
 };
 use serde_json::{Map, Value};
 
@@ -24,13 +24,11 @@ pub struct InvalidOutput(pub String);
 pub(crate) const MAX_ITEMS: usize = 30;
 pub(crate) const MAX_TITLE_CHARS: usize = 200;
 pub(crate) const MAX_DESCRIPTION_CHARS: usize = 2000;
-const MAX_MILESTONES: usize = 10;
 const MAX_KEY_CHARS: usize = 40;
 /// Dates further away than this are a misunderstanding (or garbage).
 const MAX_DAYS_BACK: u64 = 366;
 const MAX_DAYS_AHEAD: u64 = 3 * 366;
 const MAX_REPEAT_EVERY: u32 = 99;
-const MIN_BLOCK_MINUTES: u32 = 5;
 /// How far past "now" a logged session may end.
 const WORK_END_TOLERANCE_MINUTES: i64 = 60;
 /// How the dropped list names an item without a usable title.
@@ -116,31 +114,9 @@ impl Checker<'_> {
             return Err(Drop(DropReason::Incomplete));
         }
         let title = title(fields, "title")?;
-        let description = description(fields)?;
-        let mut milestones = Vec::new();
-        for item in fields.get("milestones").and_then(Value::as_array).into_iter().flatten() {
-            match self.milestone(item) {
-                Ok(_) if milestones.len() == MAX_MILESTONES => self.drop_item(&title, DropReason::TooLong),
-                Ok(milestone) => milestones.push(milestone),
-                Err(Drop(reason)) => {
-                    let shown = item.as_object().map(shown_title).unwrap_or_else(|| UNTITLED.to_owned());
-                    self.drop_item(&shown, reason);
-                }
-            }
-        }
         let key = key('q', self.quest_keys.len());
         self.quest_keys.insert(raw_key, key.clone());
-        Ok(ProposedQuest { key, title, description, milestones })
-    }
-
-    fn milestone(&self, item: &Value) -> Result<ProposedMilestone, Drop> {
-        let fields = item.as_object().ok_or(Drop(DropReason::Incomplete))?;
-        let title = title(fields, "title")?;
-        let achieved_on = match string(fields, "date") {
-            None => self.today(),
-            Some(text) => self.date(text)?,
-        };
-        Ok(ProposedMilestone { title, achieved_on })
+        Ok(ProposedQuest { key, title })
     }
 
     fn task(&mut self, fields: &Map<String, Value>) -> Result<ProposedTask, Drop> {
@@ -148,31 +124,24 @@ impl Checker<'_> {
         let description = description(fields)?;
         let (quest, mut quest_uncertain) = self.quest_ref(fields);
         quest_uncertain |= low_confidence(fields, "quest_confidence");
-        let day = string(fields, "day").map(|text| self.date(text)).transpose()?;
-        // A faulty block or repeat is left out; the task stays.
-        let block = self.task_block(fields, day).unwrap_or_else(|Drop(reason)| {
+        let planned_on = string(fields, "planned_on").map(|text| self.date(text)).transpose()?;
+        let due_on = string(fields, "due_on").map(|text| self.date(text)).transpose()?;
+        let TaskDates { planned_on, due_on } = set_due(set_planned(TaskDates::default(), planned_on), due_on);
+        // A faulty repeat is left out; the task stays.
+        let repeat = self.task_repeat(fields, planned_on).unwrap_or_else(|Drop(reason)| {
             self.drop_item(&title, reason);
             None
         });
-        let repeat = self.task_repeat(fields, day).unwrap_or_else(|Drop(reason)| {
-            self.drop_item(&title, reason);
-            None
-        });
-        Ok(ProposedTask { key: TempKey(String::new()), title, description, quest, quest_uncertain, day, block, repeat })
-    }
-
-    fn task_block(&self, fields: &Map<String, Value>, day: Option<NaiveDate>) -> Result<Option<TimeBlock>, Drop> {
-        let Some(start) = string(fields, "start_time") else {
-            // A duration without a start is an estimate: there are none.
-            return Ok(None);
-        };
-        if day.is_none() {
-            return Err(Drop(DropReason::Incomplete));
-        }
-        let start = time(start).ok_or(Drop(DropReason::InvalidDate))?;
-        // A start without a length: an hour, like a block dropped on the calendar.
-        let minutes = integer(fields, "duration_minutes").unwrap_or(60);
-        block(start, minutes).map(Some)
+        Ok(ProposedTask {
+            key: TempKey(String::new()),
+            title,
+            description,
+            quest,
+            quest_uncertain,
+            planned_on,
+            due_on,
+            repeat,
+        })
     }
 
     fn task_repeat(&self, fields: &Map<String, Value>, day: Option<NaiveDate>) -> Result<Option<ProposedRepeat>, Drop> {
@@ -279,15 +248,6 @@ impl Checker<'_> {
         }
         Ok(day)
     }
-}
-
-/// A planned block that ends by midnight.
-fn block(start: NaiveTime, minutes: i64) -> Result<TimeBlock, Drop> {
-    let start_minutes = i64::from(start.num_seconds_from_midnight() / 60);
-    if minutes < i64::from(MIN_BLOCK_MINUTES) || start_minutes + minutes > 24 * 60 {
-        return Err(Drop(DropReason::InvalidTimeRange));
-    }
-    Ok(TimeBlock { start, minutes: minutes as u32 })
 }
 
 /// `HH:MM` on a 24-hour clock, whole minutes.

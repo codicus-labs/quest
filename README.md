@@ -1,7 +1,7 @@
 # Quest
 
-Quest is an offline-first planner and time tracker: long-term **quests**, the **tasks** that move them forward, a
-weekly plan, a day calendar with time blocks, a focus timer and a weekly review. Everything works without an account;
+Quest is an offline-first planner and time tracker: long-term **quests**, the **tasks** that move them forward
+(with plan date, deadline and checklist), a weekly plan, a focus timer and a weekly review. Everything works without an account;
 signed in, devices sync live through a server you host yourself. Written in Rust; the macOS client uses the
 [Rune](https://github.com/anomalyco/rune) UI framework. Inspired by [quest.app](https://quest.app).
 

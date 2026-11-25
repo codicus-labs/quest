@@ -2,13 +2,14 @@
 //! them (`quest-app/src/ui/focus.rs`). Pure.
 
 use chrono::TimeDelta;
-use quest_domain::{EntityId, Snapshot, Task};
+use quest_domain::{EntityId, EntryKind, Snapshot, Task};
 use quest_view::focus::{FocusTarget, target};
 use quest_view::format;
 
 use crate::home::{chip, color_hex};
 use crate::time::Now;
 use crate::types::{FocusPickTask, FocusSession, FocusView, RunningSession};
+use crate::work_types::SessionKind;
 
 pub(crate) fn focus(snapshot: &Snapshot, focus_task: Option<EntityId>, now: Now) -> FocusView {
     let (task, running) = match target(snapshot, focus_task) {
@@ -32,11 +33,10 @@ pub(crate) fn focus(snapshot: &Snapshot, focus_task: Option<EntityId>, now: Now)
     }
 }
 
-/// No session: today's open tasks to start one, as the desktop lists them.
+/// No session: Today's tasks to start one, in Today's order.
 fn pick(snapshot: &Snapshot, now: Now) -> Vec<FocusPickTask> {
-    snapshot
-        .tasks_on(now.today())
-        .filter(|t| !t.is_done())
+    quest_view::lists::today(snapshot, now.today())
+        .into_iter()
         .map(|t| FocusPickTask {
             id: t.id.to_string(),
             title: t.title.clone(),
@@ -45,19 +45,37 @@ fn pick(snapshot: &Snapshot, now: Now) -> Vec<FocusPickTask> {
         .collect()
 }
 
-/// The running timer's task, with the chronometer base that makes the notification show the
-/// Focus timer's value (all of the task's tracked time).
+/// The running timer: a task's, with the chronometer base that makes the notification show the
+/// Focus timer's value (all of the task's tracked time), or organizing, counting this session.
 /// `snapshot` shows the timer's workspace; `elsewhere` names it when that is not the shown one.
 pub(crate) fn running_session(snapshot: &Snapshot, now: Now, elsewhere: Option<String>) -> Option<RunningSession> {
-    let task: &Task = snapshot.running_entry()?.task_id.and_then(|id| snapshot.task(id))?;
+    let entry = snapshot.running_entry()?;
+    if entry.kind == EntryKind::Organizing {
+        let origin = entry.origin_task_id.and_then(|id| snapshot.task(id)).filter(|t| !t.is_done());
+        return Some(RunningSession {
+            kind: SessionKind::Organizing,
+            task_id: None,
+            title: "Organizing".to_owned(),
+            quest_name: None,
+            quest_color_hex: None,
+            chronometer_base_ms: entry.started_at.timestamp_millis(),
+            origin_task_id: origin.map(|t| t.id.to_string()),
+            origin_title: origin.map(|t| t.title.clone()),
+            workspace_name: elsewhere,
+        });
+    }
+    let task: &Task = entry.task_id.and_then(|id| snapshot.task(id))?;
     let quest = task.quest_id.and_then(|id| snapshot.quest(id));
     let tracked = TimeDelta::milliseconds(snapshot.task_tracked_ms(task.id, now.at));
     Some(RunningSession {
-        task_id: task.id.to_string(),
+        kind: SessionKind::Task,
+        task_id: Some(task.id.to_string()),
         title: task.title.clone(),
         quest_name: quest.map(|q| q.title.clone()),
         quest_color_hex: quest.map(|q| color_hex(q.color).to_owned()),
         chronometer_base_ms: (now.at - tracked).timestamp_millis(),
+        origin_task_id: None,
+        origin_title: None,
         workspace_name: elsewhere,
     })
 }

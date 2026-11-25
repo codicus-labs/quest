@@ -1,13 +1,14 @@
 //! Home: today's QUEST WORK and OTHER lists and Quest Hours, mapped from the snapshot as the
 //! desktop's Home shows them. Pure.
 
-use chrono::{DateTime, Days, Utc};
-use quest_domain::{EntityId, Quest, QuestColor, Snapshot, Task, week_start};
+use chrono::{DateTime, Days, NaiveDate, Utc};
+use quest_domain::{EntityId, Quest, QuestColor, Snapshot, Task, overdue, week_start};
 use quest_view::format;
 use quest_view::home::new_task_quest;
 
 use crate::error::MobileError;
 use crate::ids::{iso_day, parse_id};
+use crate::task_detail::{day_value, postponed};
 use crate::time::Now;
 use crate::types::{HomeData, HomeQuery, HomeTask, QuestChip, TaskSection, UndoToast};
 
@@ -48,7 +49,8 @@ pub(crate) fn home(snapshot: &Snapshot, now: Now, choice: Choice, toast: Option<
     let today_ms = snapshot.work_between(now.midnight(today), now.midnight(tomorrow), now.at).quest_ms;
     let week_ms = snapshot.work_between(now.midnight(monday), now.midnight(monday + Days::new(7)), now.at).quest_ms;
     let target_ms = i64::from(snapshot.settings.weekly_target_minutes) * 60_000;
-    let list = |section| list(snapshot, now, choice, section).into_iter().map(|t| home_task(snapshot, t, now.at));
+    let list =
+        |section| list(snapshot, now, choice, section).into_iter().map(|t| home_task(snapshot, t, now.at, today));
     HomeData {
         day_label: format::long_day(today),
         day_iso: iso_day(today),
@@ -85,7 +87,7 @@ pub(crate) fn section_of(snapshot: &Snapshot, task: &Task) -> TaskSection {
     if snapshot.is_quest_work(task) { TaskSection::QuestWork } else { TaskSection::Other }
 }
 
-pub(crate) fn home_task(snapshot: &Snapshot, task: &Task, now: DateTime<Utc>) -> HomeTask {
+pub(crate) fn home_task(snapshot: &Snapshot, task: &Task, now: DateTime<Utc>, today: NaiveDate) -> HomeTask {
     let running = snapshot.running_entry().is_some_and(|e| e.task_id == Some(task.id));
     let tracked_ms = snapshot.task_tracked_ms(task.id, now);
     HomeTask {
@@ -96,6 +98,10 @@ pub(crate) fn home_task(snapshot: &Snapshot, task: &Task, now: DateTime<Utc>) ->
         tracked: (running || tracked_ms > 0).then(|| format::timer(tracked_ms)),
         timer_running: running,
         can_start_timer: !task.is_done(),
+        planned_on: task.planned_on.map(day_value),
+        due_on: task.due_on.map(day_value),
+        overdue: overdue(task, today),
+        postponed: postponed(snapshot, task.id),
     }
 }
 

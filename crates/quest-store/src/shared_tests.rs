@@ -85,7 +85,8 @@ fn several_commands_apply_as_one_unit() {
         id: task,
         title: "T".into(),
         quest_id: Some(quest),
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Bottom,
     };
     let refused = Command::RenameTask { id: EntityId::new(), title: "missing".into() };
@@ -128,8 +129,14 @@ fn commands_and_snapshots_follow_the_active_workspace() {
     assert_eq!(shared.switch_workspace(EntityId::new()).map_err(|_| ()), Err(()), "unknown workspace");
     shared.switch_workspace(side).unwrap();
     let task = EntityId::new();
-    let create =
-        |id| Command::CreateTask { id, title: "t".into(), quest_id: None, day: None, position: Position::Bottom };
+    let create = |id| Command::CreateTask {
+        id,
+        title: "t".into(),
+        quest_id: None,
+        planned_on: None,
+        due_on: None,
+        position: Position::Bottom,
+    };
     shared.apply_local_all(&[create(task)]).unwrap();
     shared.apply_local(&Command::SetWeeklyTarget { minutes: 90 }).unwrap();
     assert_eq!((shared.snapshot().workspace, shared.snapshot().tasks.len()), (side, 1));

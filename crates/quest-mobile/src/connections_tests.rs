@@ -40,7 +40,7 @@ fn a_row_names_the_client_its_host_and_when_it_was_used() {
 }
 
 #[test]
-fn last_use_reads_in_local_calendar_days() {
+fn last_use_reads_in_local_days() {
     assert_eq!(detail("2026-11-03T08:00:00Z", None), "Connected Nov 3 · Not used yet");
     // 00:30 in Berlin is still the 24th, though UTC says the 23rd.
     assert_eq!(detail("2026-11-03T08:00:00Z", Some("2026-11-23T23:30:00Z")), "Connected Nov 3 · Last used today");

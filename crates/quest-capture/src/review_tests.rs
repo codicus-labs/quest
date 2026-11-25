@@ -1,5 +1,5 @@
 use chrono::NaiveTime;
-use quest_domain::{EntityId, TimeBlock};
+use quest_domain::EntityId;
 use quest_protocol::{ProposedQuest, WorkTarget};
 
 use super::*;
@@ -16,20 +16,15 @@ fn key(text: &str) -> TempKey {
 fn proposal(existing_task: EntityId) -> CaptureProposal {
     let quest = QuestRef::New { key: key("q1") };
     CaptureProposal {
-        quests: vec![ProposedQuest {
-            key: key("q1"),
-            title: "Tax".into(),
-            description: String::new(),
-            milestones: vec![],
-        }],
+        quests: vec![ProposedQuest { key: key("q1"), title: "Tax".into() }],
         tasks: vec![ProposedTask {
             key: key("t1"),
             title: "Receipts".into(),
             description: String::new(),
             quest: Some(quest.clone()),
             quest_uncertain: false,
-            day: Some(day("2026-11-25")),
-            block: Some(TimeBlock { start: time(9, 0), minutes: 60 }),
+            planned_on: Some(day("2026-11-25")),
+            due_on: Some(day("2026-11-27")),
             repeat: None,
         }],
         work: vec![
@@ -79,8 +74,8 @@ fn errors_block_applying_only_for_selected_items() {
     let snapshot = world.snapshot();
     let mut draft = Draft::new(proposal(existing));
     assert!(draft.can_apply(&snapshot));
-    draft.proposal.tasks[0].block = Some(TimeBlock { start: time(23, 30), minutes: 60 });
-    assert_eq!(draft.task_error(&draft.proposal.tasks[0], &snapshot), Some("The block must end by midnight."));
+    draft.proposal.tasks[0].title = " ".into();
+    assert_eq!(draft.task_error(&draft.proposal.tasks[0], &snapshot), Some("Type a title."));
     assert!(!draft.can_apply(&snapshot));
     draft.set_selected(&key("t1"), false);
     assert!(draft.can_apply(&snapshot));
@@ -107,8 +102,9 @@ fn errors_block_applying_only_for_selected_items() {
 fn labels_read_like_the_rest_of_the_app() {
     let today = day("2026-11-24");
     let p = proposal(EntityId::new());
-    assert_eq!(task_when(p.tasks[0].day, p.tasks[0].block, today), "Tomorrow · 09:00–10:00");
+    assert_eq!(task_when(p.tasks[0].planned_on, p.tasks[0].due_on, today), "Tomorrow · due Fri, Nov 27");
     assert_eq!(task_when(Some(day("2026-11-27")), None, today), "Fri, Nov 27");
+    assert_eq!(task_when(None, Some(day("2026-11-25")), today), "Due Tomorrow");
     assert_eq!(task_when(None, None, today), "Someday");
     assert_eq!(work_when(&p.work[0], today), "Today · 22:30–24:00");
     assert_eq!(work_duration(&p.work[0]), "1:30");

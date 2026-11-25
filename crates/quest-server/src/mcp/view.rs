@@ -4,15 +4,15 @@
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use quest_domain::{
-    EntityId, EntityKind, Milestone, Quest, QuestColor, QuestStatus, Snapshot, Task, TimeBlock, TimeEntry, Workspace,
+    ChecklistItem, EntityId, EntityKind, EntryKind, Quest, QuestColor, QuestStatus, Snapshot, Task, TimeEntry,
+    Workspace,
 };
-use quest_view::format::hh_mm;
 use quest_view::repeat::{cadence, series_of};
 
 use super::error::{ToolCode, ToolError};
 use super::types::{
-    ArchivedOut, BlockInput, BlockOut, ColorInput, EntryOut, ItemKind, MilestoneOut, QuestOut, RefOut, TaskOut,
-    WorkspaceOut,
+    ArchivedOut, ChecklistItemOut, ChecklistOut, ColorInput, EntryKindOut, EntryOut, ItemKind, QuestOut, RefOut,
+    TaskOut, WorkspaceOut,
 };
 
 /// Longest day range a list covers.
@@ -120,9 +120,9 @@ pub fn parse_day(text: &str, field: &str) -> Result<NaiveDate, ToolError> {
         .map_err(|_| ToolError::invalid(format!("{field} must be an ISO date like 2026-11-24")))
 }
 
-/// A day, or `None` for the backlog ("someday").
-pub fn parse_day_or_someday(text: &str, field: &str) -> Result<Option<NaiveDate>, ToolError> {
-    if text.trim().eq_ignore_ascii_case("someday") {
+/// A day, or `None` for "none" (no date).
+pub fn parse_day_or_none(text: &str, field: &str) -> Result<Option<NaiveDate>, ToolError> {
+    if text.trim().eq_ignore_ascii_case("none") {
         return Ok(None);
     }
     parse_day(text, field).map(Some)
@@ -131,18 +131,6 @@ pub fn parse_day_or_someday(text: &str, field: &str) -> Result<Option<NaiveDate>
 pub fn parse_clock(text: &str, field: &str) -> Result<NaiveTime, ToolError> {
     NaiveTime::parse_from_str(text.trim(), "%H:%M")
         .map_err(|_| ToolError::invalid(format!("{field} must be a local time like 09:30 (24-hour HH:MM)")))
-}
-
-pub fn parse_block(block: &BlockInput) -> Result<TimeBlock, ToolError> {
-    let start = parse_clock(&block.start, "block.start")?;
-    let start_minutes = start.signed_duration_since(NaiveTime::MIN).num_minutes();
-    if !(5..=1440).contains(&block.minutes) {
-        return Err(ToolError::invalid("block.minutes must be from 5 to 1440"));
-    }
-    if start_minutes + i64::from(block.minutes) > 1440 {
-        return Err(ToolError::invalid("The block must end by midnight; start earlier or make it shorter"));
-    }
-    Ok(TimeBlock { start, minutes: block.minutes })
 }
 
 /// `[from, to]` (inclusive), at most [`MAX_RANGE_DAYS`] long.
@@ -175,7 +163,7 @@ pub fn entity_kind(kind: ItemKind) -> EntityKind {
     match kind {
         ItemKind::Task => EntityKind::Task,
         ItemKind::Quest => EntityKind::Quest,
-        ItemKind::Milestone => EntityKind::Milestone,
+        ItemKind::ChecklistItem => EntityKind::ChecklistItem,
         ItemKind::TimeEntry => EntityKind::TimeEntry,
     }
 }
@@ -184,9 +172,9 @@ fn item_kind(kind: EntityKind) -> Option<ItemKind> {
     match kind {
         EntityKind::Task => Some(ItemKind::Task),
         EntityKind::Quest => Some(ItemKind::Quest),
-        EntityKind::Milestone => Some(ItemKind::Milestone),
+        EntityKind::ChecklistItem => Some(ItemKind::ChecklistItem),
         EntityKind::TimeEntry => Some(ItemKind::TimeEntry),
-        EntityKind::Settings | EntityKind::Workspace => None,
+        EntityKind::Postponement | EntityKind::Settings | EntityKind::Workspace => None,
     }
 }
 
@@ -231,17 +219,13 @@ fn reference(id: EntityId, title: &str) -> RefOut {
 }
 
 pub fn task_out(snapshot: &Snapshot, task: &Task, planned: bool, clock: &Clock) -> TaskOut {
-    let block = task.block.map(|block| {
-        let start = u32::try_from(block.start.signed_duration_since(NaiveTime::MIN).num_minutes()).unwrap_or(0);
-        BlockOut { start: hh_mm(start), end: hh_mm(start + block.minutes), minutes: block.minutes }
-    });
     TaskOut {
         id: task.id.to_string(),
         title: task.title.clone(),
         description: task.description.clone(),
         quest: task.quest_id.and_then(|id| snapshot.quest(id)).map(|quest| reference(quest.id, &quest.title)),
-        day: task.day.map(|day| day.to_string()),
-        block,
+        planned_on: task.planned_on.map(|day| day.to_string()),
+        due_on: task.due_on.map(|day| day.to_string()),
         done: task.is_done(),
         completed_at: task.completed_at.map(|at| clock.instant(at)),
         repeat: series_of(snapshot, task).repeat.map(|schedule| cadence(schedule.rule.every, schedule.rule.frequency)),
@@ -262,7 +246,6 @@ pub fn quest_out(snapshot: &Snapshot, quest: &Quest, now: DateTime<Utc>) -> Ques
     QuestOut {
         id: quest.id.to_string(),
         title: quest.title.clone(),
-        description: quest.description.clone(),
         color: quest_view::quests::color_name(quest.color).to_lowercase(),
         status: quest_status(quest.status).to_owned(),
         tracked_minutes: quest_view::quests::total_ms(snapshot, quest.id, now) / 60_000,
@@ -270,19 +253,23 @@ pub fn quest_out(snapshot: &Snapshot, quest: &Quest, now: DateTime<Utc>) -> Ques
     }
 }
 
-pub fn milestone_out(milestone: &Milestone) -> MilestoneOut {
-    MilestoneOut {
-        id: milestone.id.to_string(),
-        quest_id: milestone.quest_id.to_string(),
-        title: milestone.title.clone(),
-        achieved_on: milestone.achieved_on.to_string(),
-    }
+pub fn checklist_out(snapshot: &Snapshot, task: &Task) -> ChecklistOut {
+    let item =
+        |item: &ChecklistItem| ChecklistItemOut { id: item.id.to_string(), text: item.text.clone(), done: item.done };
+    ChecklistOut { task: reference(task.id, &task.title), items: snapshot.checklist_of(task.id).map(item).collect() }
 }
 
 pub fn entry_out(snapshot: &Snapshot, entry: &TimeEntry, clock: &Clock) -> EntryOut {
+    let task_ref =
+        |id: Option<EntityId>| id.and_then(|id| snapshot.task(id)).map(|task| reference(task.id, &task.title));
     EntryOut {
         id: entry.id.to_string(),
-        task: entry.task_id.and_then(|id| snapshot.task(id)).map(|task| reference(task.id, &task.title)),
+        kind: match entry.kind {
+            EntryKind::Task => EntryKindOut::Task,
+            EntryKind::Organizing => EntryKindOut::Organizing,
+        },
+        task: task_ref(entry.task_id),
+        origin_task: task_ref(entry.origin_task_id),
         quest: snapshot
             .entry_quest(entry)
             .and_then(|id| snapshot.quest(id))

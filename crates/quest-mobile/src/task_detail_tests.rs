@@ -1,7 +1,7 @@
-use quest_domain::Snapshot;
+use quest_domain::{ChecklistItem, DateField, Postponement, Snapshot};
 
 use super::*;
-use crate::test_support::{berlin, entry, id, quest, task};
+use crate::test_support::{at, berlin, day, entry, id, quest, task};
 
 fn now() -> Now {
     berlin("2026-11-25T10:30:00+01:00")
@@ -10,9 +10,25 @@ fn now() -> Now {
 fn snapshot() -> Snapshot {
     let mut draft = task(10, "Draft", Some(1), Some("2026-11-24"));
     draft.description = "Line one\nLine two".into();
+    draft.due_on = Some(day("2026-11-24"));
     Snapshot {
         quests: vec![quest(1, "Book"), quest(2, "Garden")],
         tasks: vec![draft, task(11, "Someday", None, None)],
+        checklist: vec![ChecklistItem {
+            id: id(30),
+            task_id: id(10),
+            text: "Outline".into(),
+            done: true,
+            sort_key: "a".into(),
+        }],
+        postponements: vec![Postponement {
+            id: id(40),
+            task_id: id(10),
+            field: DateField::Plan,
+            from: day("2026-11-23"),
+            to: day("2026-11-24"),
+            at: at("2026-11-23T18:00:00+01:00"),
+        }],
         time_entries: vec![
             entry(20, Some(10), Some(1), "2026-11-23T09:00:00+01:00", Some("2026-11-23T10:30:00+01:00")),
             entry(21, Some(10), Some(1), "2026-11-25T10:00:00+01:00", None),
@@ -32,7 +48,12 @@ fn shows_the_fields_the_desktop_dialog_shows() {
     );
     assert_eq!(detail.quest.map(|q| q.name), Some("Book".into()));
     assert_eq!(detail.quest_options.iter().map(|q| q.name.as_str()).collect::<Vec<_>>(), ["Book", "Garden"]);
-    assert_eq!(detail.date, Some(DayValue { iso: "2026-11-24".into(), label: "Nov 24, 2026".into() }));
+    let nov_24 = DayValue { iso: "2026-11-24".into(), label: "Nov 24, 2026".into() };
+    assert_eq!((detail.planned_on, detail.due_on), (Some(nov_24.clone()), Some(nov_24)));
+    assert!(detail.overdue);
+    assert_eq!(detail.postponed, PostponedCount { plan: 1, due: 0, total: 1 });
+    let checklist: Vec<_> = detail.checklist.iter().map(|r| (r.text.as_str(), r.done)).collect();
+    assert_eq!(checklist, [("Outline", true)]);
     assert_eq!((detail.repeat_label.as_str(), detail.repeats), ("Does not repeat", false));
 }
 
@@ -60,10 +81,11 @@ fn only_the_newest_four_sessions_show_but_all_count() {
 }
 
 #[test]
-fn a_backlog_task_has_no_date() {
+fn an_unplanned_task_has_no_dates() {
     let snapshot = snapshot();
     let detail = task_detail(&snapshot, snapshot.task(id(11)).unwrap(), now());
-    assert_eq!(detail.date, None);
+    assert_eq!((detail.planned_on, detail.due_on, detail.overdue), (None, None, false));
+    assert!(detail.checklist.is_empty());
     assert_eq!(detail.quest, None);
     assert_eq!(detail.logged_total, "45m total");
 }

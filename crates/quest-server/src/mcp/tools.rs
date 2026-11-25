@@ -12,7 +12,7 @@ use super::account::Scope;
 use super::error::ToolError;
 use super::types::*;
 use super::view::{
-    Clock, archived_out, entry_out, find_task, milestone_out, quest_out, task_out, time_zone, workspace_out,
+    Clock, archived_out, checklist_out, entry_out, find_task, quest_out, task_out, time_zone, workspace_out,
     workspace_ref,
 };
 use super::{QuestMcp, account, capture, read, write};
@@ -65,13 +65,11 @@ fn quest_result(snapshot: &Snapshot, id: EntityId, clock: &Clock) -> Out<QuestRe
     Ok(Json(QuestResult { quest: quest_out(snapshot, quest, clock.now) }))
 }
 
-fn milestone_result(snapshot: &Snapshot, id: EntityId) -> Out<MilestoneResult> {
-    let milestone = snapshot
-        .milestones
-        .iter()
-        .find(|milestone| milestone.id == id)
-        .ok_or_else(|| ToolError::internal("describing the milestone", "milestone missing after change"))?;
-    Ok(Json(MilestoneResult { milestone: milestone_out(milestone) }))
+fn checklist_result(snapshot: &Snapshot, task_id: EntityId) -> Out<ChecklistOut> {
+    let task = snapshot
+        .task(task_id)
+        .ok_or_else(|| ToolError::internal("describing the checklist", "task missing after change"))?;
+    Ok(Json(checklist_out(snapshot, task)))
 }
 
 fn entry_result(snapshot: &Snapshot, id: EntityId, clock: &Clock) -> Out<EntryResult> {
@@ -96,9 +94,9 @@ impl QuestMcp {
 
     #[tool(
         name = "list_tasks",
-        description = "Tasks of one day, a range of days (up to 62) or the backlog (someday), in the apps' order \
-            (open first). Without arguments: today. Includes repeats planned for those days (planned_repeat: \
-            true); their ids work with every task tool.",
+        description = "Tasks planned for one day, a range of days (up to 62) or without a plan date (unplanned), \
+            open first. Without arguments: today. Includes repeats planned for those days (planned_repeat: true); \
+            their ids work with every task tool.",
         annotations(title = "List tasks", read_only_hint = true, open_world_hint = false)
     )]
     async fn list_tasks(
@@ -112,7 +110,7 @@ impl QuestMcp {
 
     #[tool(
         name = "get_task",
-        description = "One task with its quest, day, time block, repeat and tracked minutes.",
+        description = "One task with its quest, plan date, deadline, repeat and tracked minutes.",
         annotations(title = "Get task", read_only_hint = true, open_world_hint = false)
     )]
     async fn get_task(
@@ -140,7 +138,7 @@ impl QuestMcp {
 
     #[tool(
         name = "get_quest",
-        description = "One quest with its milestones, open tasks (by day, backlog last) and the 20 most recently done.",
+        description = "One quest with its open tasks (by plan date, unplanned last) and the 20 most recently done.",
         annotations(title = "Get quest", read_only_hint = true, open_world_hint = false)
     )]
     async fn get_quest(
@@ -154,7 +152,7 @@ impl QuestMcp {
 
     #[tool(
         name = "search",
-        description = "Finds quests, tasks and milestones whose title or description contains all words of the \
+        description = "Finds quests and tasks whose title (or task description) contains all words of the \
             query (case-insensitive); with include_archived also archived items, which restore brings back.",
         annotations(title = "Search", read_only_hint = true, open_world_hint = false)
     )]
@@ -169,8 +167,8 @@ impl QuestMcp {
 
     #[tool(
         name = "get_week_review",
-        description = "The weekly review (Monday to Sunday): minutes of quest work per day and per quest, other \
-            work, the weekly target and the quest share.",
+        description = "The weekly review (Monday to Sunday): minutes of quest work per day and per quest, \
+            organizing, other work, the weekly target and the quest share.",
         annotations(title = "Week review", read_only_hint = true, open_world_hint = false)
     )]
     async fn get_week_review(
@@ -184,8 +182,8 @@ impl QuestMcp {
 
     #[tool(
         name = "get_running_timer",
-        description = "The session the timer is tracking right now, or null. One timer per account: this \
-            ignores `workspace` and names the workspace the session is in.",
+        description = "The session the timer is tracking right now (a task or organizing), or null. One timer \
+            per account: this ignores `workspace` and names the workspace the session is in.",
         annotations(title = "Running timer", read_only_hint = true, open_world_hint = false)
     )]
     async fn get_running_timer(
@@ -234,8 +232,8 @@ impl QuestMcp {
 
     #[tool(
         name = "create_task",
-        description = "Creates a task at the end of a day's list (default today) or in the backlog (day \
-            \"someday\"), optionally in a quest, with a time block and a repeat.",
+        description = "Creates a task, optionally with a plan date, a deadline, a quest and a repeat. A deadline \
+            before the plan date is refused.",
         annotations(
             title = "Create task",
             read_only_hint = false,
@@ -257,8 +255,9 @@ impl QuestMcp {
 
     #[tool(
         name = "update_task",
-        description = "Changes the given fields of a task: title, description, day, quest, time block, repeat. \
-            Overwrites what was there. A repeat applies to the task's whole series.",
+        description = "Changes the given fields of a task: title, description, plan date, deadline, quest, \
+            repeat. A plan date past the deadline moves the deadline along, a deadline before the plan date moves \
+            the plan date. A repeat applies to the task's whole series.",
         annotations(
             title = "Update task",
             read_only_hint = false,
@@ -321,7 +320,8 @@ impl QuestMcp {
 
     #[tool(
         name = "move_task",
-        description = "Moves a task to the top or bottom of a day's list, or to the backlog (day \"someday\").",
+        description = "Plans a task for a day (top or bottom of its list) or unplans it (\"none\"). A plan date \
+            past the deadline moves the deadline along.",
         annotations(
             title = "Move task",
             read_only_hint = false,
@@ -363,7 +363,7 @@ impl QuestMcp {
 
     #[tool(
         name = "restore",
-        description = "Brings an archived task, quest (with its milestones), milestone or time entry back.",
+        description = "Brings an archived task, quest, checklist item or time entry back.",
         annotations(
             title = "Restore",
             read_only_hint = false,
@@ -382,7 +382,7 @@ impl QuestMcp {
         Ok(Json(RestoreResult { restored: input.kind, id: id.to_string() }))
     }
 
-    // Quests and milestones.
+    // Quests.
 
     #[tool(
         name = "create_quest",
@@ -408,8 +408,7 @@ impl QuestMcp {
 
     #[tool(
         name = "update_quest",
-        description = "Changes the given fields of a quest: title, description, color, status (completed or \
-            active). Overwrites what was there.",
+        description = "Changes the given fields of a quest: title, color, status (completed or active).",
         annotations(
             title = "Update quest",
             read_only_hint = false,
@@ -450,75 +449,114 @@ impl QuestMcp {
         quest_result(&after, id, &call.clock)
     }
 
+    // Checklists.
+
     #[tool(
-        name = "add_milestone",
-        description = "Records a milestone (a notable achievement) of a quest, on a day (default today).",
+        name = "get_checklist",
+        description = "A task's checklist: its items (id, text, done) in order.",
+        annotations(title = "Get checklist", read_only_hint = true, open_world_hint = false)
+    )]
+    async fn get_checklist(
+        &self,
+        Parameters(input): Parameters<TaskIdInput>,
+        Extension(parts): Extension<Parts>,
+    ) -> Result<Json<ChecklistOut>, ToolError> {
+        let call = self.call(&parts, &input.context)?;
+        read::get_checklist(&self.snapshot(&call).await?, &input.task_id, &call.clock).map(Json)
+    }
+
+    #[tool(
+        name = "add_checklist_item",
+        description = "Adds an item at the end of a task's checklist.",
         annotations(
-            title = "Add milestone",
+            title = "Add checklist item",
             read_only_hint = false,
             destructive_hint = false,
             idempotent_hint = false,
             open_world_hint = false
         )
     )]
-    async fn add_milestone(
+    async fn add_checklist_item(
         &self,
-        Parameters(input): Parameters<AddMilestoneInput>,
+        Parameters(input): Parameters<AddChecklistItemInput>,
         Extension(parts): Extension<Parts>,
-    ) -> Result<Json<MilestoneResult>, ToolError> {
+    ) -> Result<Json<ChecklistOut>, ToolError> {
         let call = self.call(&parts, &input.context)?;
         let mut ids = EntityId::new;
-        let (after, id) = self.change(&call, |s| write::add_milestone(s, &input, &call.clock, &mut ids)).await?;
-        milestone_result(&after, id)
+        let (after, task) = self.change(&call, |s| write::add_checklist_item(s, &input, &call.clock, &mut ids)).await?;
+        checklist_result(&after, task)
     }
 
     #[tool(
-        name = "update_milestone",
-        description = "Changes a milestone's title or day.",
+        name = "check_checklist_item",
+        description = "Ticks a checklist item off (done true, default) or opens it again (done false).",
         annotations(
-            title = "Update milestone",
+            title = "Check checklist item",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn check_checklist_item(
+        &self,
+        Parameters(input): Parameters<CheckChecklistItemInput>,
+        Extension(parts): Extension<Parts>,
+    ) -> Result<Json<ChecklistOut>, ToolError> {
+        let call = self.call(&parts, &input.context)?;
+        let (after, task) = self.change(&call, |s| write::check_checklist_item(s, &input)).await?;
+        checklist_result(&after, task)
+    }
+
+    #[tool(
+        name = "rename_checklist_item",
+        description = "Changes a checklist item's text.",
+        annotations(
+            title = "Rename checklist item",
             read_only_hint = false,
             destructive_hint = true,
             idempotent_hint = true,
             open_world_hint = false
         )
     )]
-    async fn update_milestone(
+    async fn rename_checklist_item(
         &self,
-        Parameters(input): Parameters<UpdateMilestoneInput>,
+        Parameters(input): Parameters<RenameChecklistItemInput>,
         Extension(parts): Extension<Parts>,
-    ) -> Result<Json<MilestoneResult>, ToolError> {
+    ) -> Result<Json<ChecklistOut>, ToolError> {
         let call = self.call(&parts, &input.context)?;
-        let (after, id) = self.change(&call, |s| write::update_milestone(s, &input)).await?;
-        milestone_result(&after, id)
+        let (after, task) = self.change(&call, |s| write::rename_checklist_item(s, &input)).await?;
+        checklist_result(&after, task)
     }
 
     #[tool(
-        name = "archive_milestone",
-        description = "Removes a milestone into the archive. restore brings it back.",
+        name = "delete_checklist_item",
+        description = "Removes a checklist item into the archive. restore brings it back.",
         annotations(
-            title = "Archive milestone",
+            title = "Delete checklist item",
             read_only_hint = false,
             destructive_hint = true,
             idempotent_hint = true,
             open_world_hint = false
         )
     )]
-    async fn archive_milestone(
+    async fn delete_checklist_item(
         &self,
-        Parameters(input): Parameters<MilestoneIdInput>,
+        Parameters(input): Parameters<ChecklistItemIdInput>,
         Extension(parts): Extension<Parts>,
-    ) -> Result<Json<ArchiveResult>, ToolError> {
+    ) -> Result<Json<ChecklistOut>, ToolError> {
         let call = self.call(&parts, &input.context)?;
-        let (after, id) = self.change(&call, |s| write::delete_milestone(s, &input.milestone_id, &call.clock)).await?;
-        archive_result(&after, EntityKind::Milestone, id, &call.clock)
+        let (after, task) =
+            self.change(&call, |s| write::delete_checklist_item(s, &input.item_id, &call.clock)).await?;
+        checklist_result(&after, task)
     }
 
     // Time.
 
     #[tool(
         name = "start_timer",
-        description = "Starts tracking time on a task now; a running timer is stopped first, in any workspace.",
+        description = "Starts tracking time now on a task, or on organizing (organizing true, task_id optional: \
+            the task to go back to). A running timer is stopped first, in any workspace.",
         annotations(
             title = "Start timer",
             read_only_hint = false,
@@ -529,18 +567,18 @@ impl QuestMcp {
     )]
     async fn start_timer(
         &self,
-        Parameters(input): Parameters<TaskIdInput>,
+        Parameters(input): Parameters<StartTimerInput>,
         Extension(parts): Extension<Parts>,
     ) -> Result<Json<EntryResult>, ToolError> {
         let call = self.call(&parts, &input.context)?;
         let mut ids = EntityId::new;
-        let (after, id) = self.change(&call, |s| write::start_timer(s, &input.task_id, &call.clock, &mut ids)).await?;
+        let (after, id) = self.change(&call, |s| write::start_timer(s, &input, &call.clock, &mut ids)).await?;
         entry_result(&after, id, &call.clock)
     }
 
     #[tool(
         name = "stop_timer",
-        description = "Stops the running timer now, in whichever workspace it runs (this ignores `workspace`). \
+        description = "Stops the running timer (task or organizing) now, in whichever workspace it runs (this ignores `workspace`). \
             None running: no change (stopped is null).",
         annotations(
             title = "Stop timer",

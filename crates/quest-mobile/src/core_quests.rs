@@ -24,26 +24,15 @@ impl QuestCore {
         })
     }
 
-    /// Creates an active quest from the editor: a title (`EmptyTitle` when blank), its
-    /// description and colour (none: the first colour no quest uses, desktop rule). Returns its id.
-    pub fn create_quest(
-        &self,
-        title: String,
-        description: String,
-        hue: Option<QuestHue>,
-    ) -> Result<String, MobileError> {
+    /// Creates an active quest from the editor: a title (`EmptyTitle` when blank) and its colour
+    /// (none: the first colour no quest uses, desktop rule). Returns its id.
+    pub fn create_quest(&self, title: String, hue: Option<QuestHue>) -> Result<String, MobileError> {
         guard(|| {
             let title = quests::new_title(&title)?;
             let id = EntityId::new();
             let color =
                 hue.map_or_else(|| quest_view::quests::new_quest_color(&self.store().snapshot()), quests::color);
-            let mut commands = vec![Command::CreateQuest { id, title, color }];
-            if !description.is_empty() {
-                commands.push(Command::SetQuestDescription { id, description });
-            }
-            self.edit(|store| {
-                store.dispatch_all(&commands).map_err(|e| MobileError::Rejected { reason: e.to_string() })
-            })?;
+            self.dispatch(Command::CreateQuest { id, title, color })?;
             Ok(id.to_string())
         })
     }
@@ -65,15 +54,6 @@ impl QuestCore {
             let rename =
                 quests::retitle(&quest.title, &title).map(|title| Command::RenameQuest { id: quest.id, title });
             self.dispatch_some(rename)
-        })
-    }
-
-    /// Saves the plain text description; unchanged saves nothing.
-    pub fn set_quest_description(&self, quest_id: String, description: String) -> Result<(), MobileError> {
-        guard(|| {
-            let quest = self.quest(&quest_id)?;
-            let changed = quest.description != description;
-            self.dispatch_some(changed.then_some(Command::SetQuestDescription { id: quest.id, description }))
         })
     }
 
@@ -108,7 +88,7 @@ impl QuestCore {
         })
     }
 
-    /// Deletes the quest and its milestones softly; the snackbar offers to undo it. Its tasks
+    /// Deletes the quest softly; the snackbar offers to undo it. Its tasks
     /// and sessions stay and count as other work until it is restored.
     pub fn delete_quest(&self, quest_id: String, now: Moment) -> Result<(), MobileError> {
         guard(|| {
@@ -121,7 +101,8 @@ impl QuestCore {
         })
     }
 
-    /// The page's "Add a task to this quest…": today or the backlog, at the top or bottom.
+    /// The page's "Add a task to this quest…": planned today or (`backlog`) unplanned, at the top
+    /// or bottom.
     /// Returns the new task's id.
     pub fn add_quest_task(
         &self,
@@ -140,8 +121,9 @@ impl QuestCore {
                 AddPosition::Top => Position::Top,
                 AddPosition::Bottom => Position::Bottom,
             };
-            let day = (!backlog).then(|| now.today());
-            self.dispatch(Command::CreateTask { id, title, quest_id: Some(quest.id), day, position })?;
+            let planned_on = (!backlog).then(|| now.today());
+            let quest_id = Some(quest.id);
+            self.dispatch(Command::CreateTask { id, title, quest_id, planned_on, due_on: None, position })?;
             Ok(id.to_string())
         })
     }
@@ -154,7 +136,7 @@ impl QuestCore {
         })
     }
 
-    /// Brings a deleted thing back (a quest with the milestones deleted along with it).
+    /// Brings a deleted thing back.
     pub fn restore(&self, kind: TrashKind, id: String, now: Moment) -> Result<(), MobileError> {
         guard(|| {
             let now = Now::parse(&now)?;

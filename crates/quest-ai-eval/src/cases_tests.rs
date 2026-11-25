@@ -44,10 +44,10 @@ fn expectations_only_name_fixture_quests_and_tasks() {
 #[test]
 fn left_out_and_null_fields_are_told_apart() {
     let expect: Expect =
-        serde_json::from_str(r#"{ "tasks": [{ "title": ["a"], "day": null, "quest": "relaunch" }] }"#).unwrap();
+        serde_json::from_str(r#"{ "tasks": [{ "title": ["a"], "due_on": null, "quest": "relaunch" }] }"#).unwrap();
     let task = &expect.tasks.unwrap()[0];
-    assert!(matches!(task.day, Some(None)), "null: must have no day");
-    assert!(task.block.is_none(), "left out: not checked");
+    assert!(matches!(task.due_on, Some(None)), "null: must have no deadline");
+    assert!(task.planned_on.is_none(), "left out: not checked");
     assert_eq!(task.quest, Some(Some("relaunch".to_owned())));
 }
 

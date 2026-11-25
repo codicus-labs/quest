@@ -2,7 +2,7 @@
 //! commands. Title and description save as they change, the day on Return, when focus leaves
 //! it or when the dialog closes. An empty title is never saved.
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use quest_domain::{Command, EntityId, Position, Task};
 use rune::TextEdit;
 
@@ -43,19 +43,19 @@ pub fn day_label(day: Option<NaiveDate>) -> String {
 
 /// The move the DATE field asks for: none when it names the task's day already or no day at
 /// all (the field then shows the task's day again). Empty means the backlog.
-pub fn move_to(task: &Task, text: &str, today: NaiveDate) -> Option<Command> {
-    let day = if text.trim().is_empty() { None } else { Some(parse_day(text, today)?) };
-    if day == task.day {
+pub fn move_to(task: &Task, text: &str, today: NaiveDate, at: DateTime<Utc>) -> Option<Command> {
+    let planned_on = if text.trim().is_empty() { None } else { Some(parse_day(text, today)?) };
+    if planned_on == task.planned_on {
         return None;
     }
-    Some(Command::MoveTask { id: task.id, day, position: Position::Bottom })
+    Some(Command::MoveTask { id: task.id, planned_on, position: Position::Bottom, at })
 }
 
 /// Whether everything typed is stored: an empty title or a day not yet taken shows "Saving…".
 pub fn is_saved(task: &Task, form: &TaskModal) -> bool {
     form.title.text.trim() == task.title
         && form.description.text == task.description
-        && form.date.text == day_label(task.day)
+        && form.date.text == day_label(task.planned_on)
 }
 
 impl State {
@@ -66,7 +66,7 @@ impl State {
             task,
             title: TextEdit::new(t.title.clone()),
             description: TextEdit::new(t.description.clone()),
-            date: TextEdit::new(day_label(t.day)),
+            date: TextEdit::new(day_label(t.planned_on)),
         });
         self.menu = None;
         self.overlay = Overlay::Task;
@@ -119,10 +119,10 @@ impl State {
         let Some(form) = &self.task_modal else { return };
         let id = form.task;
         let Some(task) = self.plan_task(id) else { return };
-        if let Some(command) = move_to(&task, &form.date.text, today) {
+        if let Some(command) = move_to(&task, &form.date.text, today, self.clock.now()) {
             self.dispatch(command);
         }
-        let label = self.plan_task(id).map(|t| day_label(t.day));
+        let label = self.plan_task(id).map(|t| day_label(t.planned_on));
         if let (Some(form), Some(label)) = (&mut self.task_modal, label) {
             form.date = TextEdit::new(label);
         }
@@ -132,7 +132,7 @@ impl State {
     /// True when it saved.
     pub fn save_task_day_on_blur(&mut self) -> bool {
         let Some(form) = &self.task_modal else { return false };
-        let shown = self.plan_task(form.task).map(|t| day_label(t.day));
+        let shown = self.plan_task(form.task).map(|t| day_label(t.planned_on));
         if form.date.focused || shown.is_none_or(|label| label == form.date.text) {
             return false;
         }

@@ -34,7 +34,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Renaming, read-only milestones and Complete quest on the quest page, through the real screen and view model over a [FakeCore]. */
+/** Renaming and Complete quest on the quest page, through the real screen and view model over a [FakeCore]. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h914dp-port-mdpi")
@@ -77,29 +77,6 @@ class QuestDetailInteractionTest {
 
         assertEquals(listOf("rename-quest q1 The book"), core.calls)
         compose.onNodeWithTag("quest-title").assertExists()
-    }
-
-    @Test
-    fun milestonesAreOnlyToReadAndNothingOffersToAddOne() {
-        showPage()
-        val title = QuestSamples.sprint.title
-
-        compose.onNodeWithTag("milestone:$title").performScrollTo().assertHasNoClickAction()
-        compose.onNodeWithText("Mark as milestone").assertDoesNotExist()
-        compose.onNodeWithText("Add a milestone", substring = true).assertDoesNotExist()
-        compose.onNodeWithTag("milestone:$title").performClick()
-        compose.waitForIdle()
-
-        assertEquals(emptyList<String>(), core.calls)
-    }
-
-    @Test
-    fun aQuestWithoutMilestonesHasNoMilestoneSection() {
-        core.questDetails["q1"] = QuestSamples.detail.copy(milestones = emptyList())
-        showPage()
-
-        compose.onNodeWithTag("quest-milestones").assertDoesNotExist()
-        compose.onNodeWithText("MILESTONES", ignoreCase = true).assertDoesNotExist()
     }
 
     @Test

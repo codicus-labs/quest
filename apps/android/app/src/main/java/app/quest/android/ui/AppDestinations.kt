@@ -66,8 +66,6 @@ internal fun questEditorActions(editor: QuestEditorViewModel, page: QuestDetailV
     editTitle = editor::editTitle,
     titleDone = editor::titleDone,
     commitTitle = editor::commitTitle,
-    editDescription = editor::editDescription,
-    commitDescription = editor::commitDescription,
     setHue = editor::setHue,
     create = editor::create,
     toggleStatus = editor::toggleStatus,
@@ -199,7 +197,6 @@ private fun carryOutSearch(outcome: SearchOutcome, viewModels: AppViewModels, ti
         is SearchOutcome.Show -> when (outcome.view) {
             AppView.HOME -> navigation.goTo(TopDestination.Home)
             AppView.PLAN -> navigation.goTo(TopDestination.Plan)
-            AppView.CALENDAR -> navigation.goTo(TopDestination.Calendar)
             AppView.QUESTS -> navigation.goTo(TopDestination.Quests)
             AppView.REVIEW -> navigation.goTo(TopDestination.Review)
             AppView.FOCUS -> viewModels.focus.open()
@@ -215,10 +212,7 @@ private fun carryOutSearch(outcome: SearchOutcome, viewModels: AppViewModels, ti
         is SearchOutcome.Choose -> Unit
         SearchOutcome.ToggleTheme -> navigation.toggleTheme()
         SearchOutcome.Account -> navigation.openAccount()
-        SearchOutcome.LogWork -> {
-            navigation.goTo(TopDestination.Calendar)
-            viewModels.calendar.openLogWork()
-        }
+        SearchOutcome.LogWork -> viewModels.logWork.open()
         SearchOutcome.ManageWorkspaces -> navigation.openWorkspaces()
         SearchOutcome.Done -> Unit
     }

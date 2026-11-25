@@ -16,16 +16,13 @@ trap 'rm -rf "$data"' EXIT
 fresh() { rm -rf "$data/q"; echo "$data/q"; }
 common="--demo --now 2026-10-15T14:40 --size 1100x750 --scale 2"
 
-for scene in home calendar focus quests quests-completed quests-empty-active quests-empty-completed quest-editor \
-  quest-new review palette account light home-tracked \
-  quest-detail quest-detail-no-milestones quest-rename archive undo-toast card-menu task-modal:task-modal-home log-work shortcuts \
-  entry-editor ai-notice guest-import; do
+for scene in home focus quests quests-completed quests-empty-active quests-empty-completed quest-editor \
+  quest-new review palette account light \
+  quest-detail quest-rename archive undo-toast card-menu task-modal:task-modal-home log-work shortcuts \
+  ai-notice guest-import; do
   # `scene:file` snaps the scene into another file name.
   "$app" $common --data-dir "$(fresh)" --scene "${scene%%:*}" --snap "$here/${scene##*:}.png" >/dev/null 2>&1
 done
-# A session moved over midnight: tall enough to show the grid from 07:00 to 23:00.
-"$app" --demo --now 2026-10-15T14:40 --size 1100x1020 --scale 2 --data-dir "$(fresh)" --scene entry-midnight \
-  --snap "$here/entry-midnight.png" >/dev/null 2>&1
 # The planner puts its strip in place a frame after a scene mounts it: snap a moment later.
 for scene in plan light-plan task-modal-plan repeat-editor; do
   "$app" $common --data-dir "$(fresh)" --scene "${scene%%:*}" --snap "$here/${scene##*:}.png" --at 0.1 >/dev/null 2>&1
@@ -36,12 +33,8 @@ for scene in task-modal-quests task-modal-quests-filtered; do
   "$app" $common --data-dir "$(fresh)" --scene "$scene" --snap "$here/$scene.png" --at 0.3 >/dev/null 2>&1
 done
 
-for script in dnd-list dnd-grid dnd-new-session; do
-  "$app" $common --data-dir "$(fresh)" --scene home --script "$here/scripts/$script.json" \
-    --snap "$here/$script.png" --at mark:end >/dev/null 2>&1
-done
-"$app" $common --data-dir "$(fresh)" --scene calendar --script "$here/scripts/dnd-calendar.json" \
-  --snap "$here/dnd-calendar.png" --at mark:end >/dev/null 2>&1
+"$app" $common --data-dir "$(fresh)" --scene home --script "$here/scripts/dnd-list.json" \
+  --snap "$here/dnd-list.png" --at mark:end >/dev/null 2>&1
 "$app" $common --data-dir "$(fresh)" --scene plan --script "$here/scripts/dnd-plan-scrolled.json" \
   --snap "$here/dnd-plan-scrolled.png" --at mark:end >/dev/null 2>&1
 # A trackpad swipe a few weeks on: the month follows what shows.

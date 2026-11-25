@@ -59,7 +59,7 @@ class ArchiveActions(
 
 /**
  * As on the desktop: quests an older version archived, each with Open and Unarchive, then deleted
- * quests, tasks, milestones and sessions in the core's groups, each with Restore.
+ * quests, tasks, checklist items and sessions in the core's groups, each with Restore.
  * Centred and capped in width on tablets.
  */
 @Composable

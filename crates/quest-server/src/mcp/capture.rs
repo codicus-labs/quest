@@ -77,7 +77,7 @@ fn created_out(created: &Created) -> CreatedOut {
     let (kind, id) = match created {
         Created::Quest(id) => (ItemKind::Quest, id),
         Created::Task(id) => (ItemKind::Task, id),
-        Created::Milestone(id) => (ItemKind::Milestone, id),
+        Created::ChecklistItem(id) => (ItemKind::ChecklistItem, id),
         Created::Entry(id) => (ItemKind::TimeEntry, id),
     };
     CreatedOut { kind, id: id.to_string() }

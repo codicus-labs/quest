@@ -1,5 +1,5 @@
 use chrono::{DateTime, NaiveDate, Utc};
-use quest_domain::{EntityId, Quest, QuestColor, QuestStatus, Snapshot, Task, TimeEntry};
+use quest_domain::{EntityId, EntryKind, Quest, QuestColor, QuestStatus, Snapshot, Task, TimeEntry};
 
 use super::*;
 
@@ -16,14 +16,7 @@ fn day(d: u32) -> NaiveDate {
 }
 
 fn quest(n: u128, color: QuestColor) -> Quest {
-    Quest {
-        id: id(n),
-        title: format!("Q{n}"),
-        color,
-        status: QuestStatus::Active,
-        sort_key: format!("{n}"),
-        description: String::new(),
-    }
+    Quest { id: id(n), title: format!("Q{n}"), color, status: QuestStatus::Active, sort_key: format!("{n}") }
 }
 
 fn task(n: u128, on: Option<NaiveDate>, done: Option<&str>) -> Task {
@@ -31,9 +24,9 @@ fn task(n: u128, on: Option<NaiveDate>, done: Option<&str>) -> Task {
         id: id(n),
         title: format!("T{n}"),
         quest_id: Some(id(1)),
-        day: on,
+        planned_on: on,
+        due_on: None,
         sort_key: format!("{n}"),
-        block: None,
         completed_at: done.map(at),
         description: String::new(),
         repeat: None,
@@ -54,6 +47,8 @@ fn a_new_quest_takes_the_first_free_colour_then_blue() {
 fn quest_time_is_clipped_to_the_window_and_runs_until_now() {
     let entry = |n, start: &str, end: Option<&str>| TimeEntry {
         id: id(n),
+        kind: EntryKind::Task,
+        origin_task_id: None,
         task_id: None,
         quest_id: Some(id(1)),
         started_at: at(start),
@@ -88,7 +83,7 @@ fn tasks_group_by_day_then_backlog_then_done_latest_first() {
     };
     let groups = task_groups(&snap, id(1), day(24));
     let labels: Vec<&str> = groups.iter().map(|(l, _)| l.as_str()).collect();
-    assert_eq!(labels, ["Today", "Tomorrow", "Mon, Nov 30", "Backlog", "Done"]);
+    assert_eq!(labels, ["Today", "Tomorrow", "Mon, Nov 30", "Not planned", "Done"]);
     let done: Vec<EntityId> = groups[4].1.iter().map(|t| t.id).collect();
     assert_eq!(done, [id(14), id(13)]);
     assert_eq!(day_label(day(23), day(24)), "Yesterday");

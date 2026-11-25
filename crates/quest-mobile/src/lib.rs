@@ -9,16 +9,15 @@ mod account;
 #[cfg(target_os = "android")]
 mod android_tls;
 mod archive;
-mod calendar;
-mod calendar_types;
 mod capture;
 mod capture_types;
+mod checklist;
 mod commands;
 mod connections;
 mod core;
 mod core_account;
-mod core_calendar;
 mod core_capture;
+mod core_checklist;
 mod core_connections;
 mod core_focus;
 mod core_plan;
@@ -26,11 +25,10 @@ mod core_platform;
 mod core_quests;
 mod core_search;
 mod core_tasks;
+mod core_work;
 mod core_workspaces;
-mod day_grid;
 mod error;
 mod focus;
-mod grid_drag;
 mod guard;
 mod home;
 mod ids;
@@ -57,15 +55,12 @@ mod types;
 mod undo;
 mod vault;
 mod work_forms;
+mod work_types;
 mod workspaces;
 
-pub use crate::calendar_types::{
-    CalendarData, CalendarDay, CalendarQuery, EntryCheck, EntryDraft, FormError, FormField, GridDrag, GridDragKind,
-    GridPlacement, LogWorkCheck, LogWorkDraft, TaskChoices, TaskOption,
-};
 pub use crate::capture_types::{
-    CaptureApplied, CaptureDraft, CaptureView, DraftBlock, DraftMilestone, DraftQuest, DraftQuestOption, DraftQuestRef,
-    DraftQuestView, DraftTask, DraftTaskView, DraftWork, DraftWorkTask, DraftWorkView,
+    CaptureApplied, CaptureDraft, CaptureView, DraftQuest, DraftQuestOption, DraftQuestRef, DraftQuestView, DraftTask,
+    DraftTaskView, DraftWork, DraftWorkTask, DraftWorkView,
 };
 pub use crate::connections::AiConnectionRow;
 pub use crate::core::{ChangeListener, QuestCore};
@@ -75,13 +70,13 @@ pub use crate::core_tasks::{check_repeat, toggle_repeat_weekday};
 pub use crate::error::MobileError;
 pub use crate::plan_types::{MoveTarget, PlanData, PlanDay, PlanWindow};
 pub use crate::quest_types::{
-    ArchiveData, ArchiveGroup, ArchiveItem, HueOption, MilestoneRow, QuestCard, QuestDetail, QuestHue, QuestTaskGroup,
-    QuestsData, TrashKind,
+    ArchiveData, ArchiveGroup, ArchiveItem, HueOption, QuestCard, QuestDetail, QuestHue, QuestTaskGroup, QuestsData,
+    TrashKind,
 };
 pub use crate::review_types::{ReviewData, ReviewDay, ReviewQuest, ReviewSegment, ReviewWeek};
 pub use crate::search_types::{AppView, SearchKind, SearchMode, SearchOutcome, SearchResult, SearchToken};
 pub use crate::task_types::{
-    DayGrid, DayValue, GridBlock, GridBlockKind, HourMark, LoggedEntry, QuickAddForm, RepeatCheck, RepeatDraft,
+    ChecklistPosition, ChecklistRow, DayValue, LoggedEntry, PostponedCount, QuickAddForm, RepeatCheck, RepeatDraft,
     RepeatFrequency, RepeatPinChoice, RepeatWeekday, TaskDetail,
 };
 pub use crate::types::{
@@ -90,6 +85,9 @@ pub use crate::types::{
 };
 
 pub use crate::vault::{SavedTokens, TokenStore, TokenStoreError};
+pub use crate::work_types::{
+    EntryCheck, EntryDraft, FormError, FormField, LogWorkCheck, LogWorkDraft, SessionKind, TaskChoices, TaskOption,
+};
 pub use crate::workspaces::{TimerElsewhere, WorkspaceRow, WorkspacesData};
 
 /// Checks a server URL before signing in: https always; http only for this device (localhost,

@@ -65,20 +65,6 @@ fn dismissing_hides_the_toast() {
 }
 
 #[test]
-fn a_drag_shows_moved_or_changed_and_undo_puts_it_back() {
-    let mut undo = MobileUndo::default();
-    let before = PutBack::Entry { id: id(1), started_at: t0(), ended_at: None };
-    undo.moved(before, false, "Draft", t0());
-    assert_eq!(undo.toast().unwrap().text, "Moved “Draft”");
-    assert_eq!(undo.undo(t0()), Some(UndoAction::PutBack(before)));
-    undo.moved(before, true, "Draft", t0());
-    assert_eq!(undo.toast().unwrap().text, "Changed “Draft”");
-    undo.tick(t0() + Duration::seconds(7));
-    assert_eq!(undo.toast(), None);
-    assert_eq!(undo.undo(t0() + Duration::seconds(7)), None);
-}
-
-#[test]
 fn a_quest_completion_shows_its_toast_and_undo_puts_the_status_back() {
     use quest_domain::QuestStatus::{Active, Completed};
     let mut undo = MobileUndo::default();

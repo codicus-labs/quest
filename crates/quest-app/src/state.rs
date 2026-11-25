@@ -20,7 +20,6 @@ pub mod capture;
 pub mod capture_draft;
 #[cfg(test)]
 mod capture_tests;
-mod entry_editor;
 mod focus;
 mod log_work;
 mod plan_scroll;
@@ -33,7 +32,6 @@ mod workspaces;
 use ai_connections::AiConnectionsState;
 pub use auth::{AuthState, AuthStep};
 pub use capture::{CaptureState, CaptureStep, CaptureUndo};
-pub use entry_editor::EntryForm;
 pub use focus::{FocusDraft, FocusTarget};
 pub use log_work::LogWorkForm;
 pub use plan_scroll::{BOARD as PLAN_BOARD, PlanScroll};
@@ -62,8 +60,6 @@ pub enum Overlay {
     Shortcuts,
     /// A task's dialog; its fields are `State::task_modal`.
     Task,
-    /// The editor of a stored time entry; its fields are `State::entry_form`.
-    EntryEditor,
     RepeatEditor,
     RecurringTasks,
     /// AI capture; its steps are `State::capture`.
@@ -139,9 +135,6 @@ pub struct State {
     /// Where the planner's day strip is scrolled to.
     pub plan: PlanScroll,
     pub show_backlog: bool,
-    pub calendar_week: NaiveDate,
-    /// The task picked in the calendar's list or on its grid ("Clear time block" acts on it).
-    pub calendar_pick: Option<EntityId>,
     /// The task card under the pointer: the task shortcuts (Space, X, T, D, W, ⌘⌫, ⌫, ↵) act on
     /// it.
     pub hovered_task: Option<EntityId>,
@@ -162,7 +155,6 @@ pub struct State {
     /// Takes edits for a quest picker that already closed (`State::quest_picker_search`).
     closed_quest_search: TextEdit,
     pub log_work: LogWorkForm,
-    pub entry_form: EntryForm,
     pub task_modal: Option<TaskModal>,
     pub repeat_editor: recurrence::RepeatEditor,
     pub repeat_zone: chrono_tz::Tz,
@@ -221,8 +213,6 @@ impl State {
             plan_add: HashMap::new(),
             plan: PlanScroll::new(clock::local_day(now) - Days::new(2), PLAN_BOARD_GUESS_W),
             show_backlog: false,
-            calendar_week: monday,
-            calendar_pick: None,
             hovered_task: None,
             menu: None,
             undo: UndoState::default(),
@@ -236,7 +226,6 @@ impl State {
             quest_picker: None,
             closed_quest_search: TextEdit::new(""),
             log_work: LogWorkForm::default(),
-            entry_form: EntryForm::default(),
             task_modal: None,
             repeat_editor: recurrence::RepeatEditor::default(),
             repeat_zone: chrono_tz::UTC,
@@ -372,7 +361,7 @@ impl State {
         let title = match item {
             Deletable::Task(id) => self.plan_task(id).map(|t| t.title.clone()),
             Deletable::Quest(id) => snap.quest(id).map(|q| q.title.clone()),
-            Deletable::Milestone(id) => snap.milestones.iter().find(|m| m.id == id).map(|m| m.title.clone()),
+            Deletable::ChecklistItem(id) => snap.checklist_item(id).map(|i| i.text.clone()),
             Deletable::Entry(id) => snap
                 .time_entries
                 .iter()
@@ -445,7 +434,7 @@ impl State {
                 tx.wake_after(clock::wake_for(self.now, until));
             }
         }
-        // Running timers tick each second; the calendar's now-line moves each minute. Wake when
+        // Running timers tick each second; times and dates shown move each minute. Wake when
         // the shown second or minute turns, not a fixed time after this poll.
         let ticking = self.snap.running_focus().is_some();
         let step = if ticking { 1 } else { 60 };

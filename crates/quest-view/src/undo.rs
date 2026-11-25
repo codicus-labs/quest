@@ -16,7 +16,7 @@ pub const TOAST_SECONDS: i64 = 6;
 pub enum Deletable {
     Task(EntityId),
     Quest(EntityId),
-    Milestone(EntityId),
+    ChecklistItem(EntityId),
     Entry(EntityId),
 }
 
@@ -25,14 +25,14 @@ impl Deletable {
         match self {
             Deletable::Task(_) => EntityKind::Task,
             Deletable::Quest(_) => EntityKind::Quest,
-            Deletable::Milestone(_) => EntityKind::Milestone,
+            Deletable::ChecklistItem(_) => EntityKind::ChecklistItem,
             Deletable::Entry(_) => EntityKind::TimeEntry,
         }
     }
 
     pub fn id(self) -> EntityId {
         match self {
-            Deletable::Task(id) | Deletable::Quest(id) | Deletable::Milestone(id) | Deletable::Entry(id) => id,
+            Deletable::Task(id) | Deletable::Quest(id) | Deletable::ChecklistItem(id) | Deletable::Entry(id) => id,
         }
     }
 
@@ -40,9 +40,9 @@ impl Deletable {
         match kind {
             EntityKind::Task => Some(Deletable::Task(id)),
             EntityKind::Quest => Some(Deletable::Quest(id)),
-            EntityKind::Milestone => Some(Deletable::Milestone(id)),
+            EntityKind::ChecklistItem => Some(Deletable::ChecklistItem(id)),
             EntityKind::TimeEntry => Some(Deletable::Entry(id)),
-            EntityKind::Settings | EntityKind::Workspace => None,
+            EntityKind::Postponement | EntityKind::Settings | EntityKind::Workspace => None,
         }
     }
 
@@ -50,7 +50,7 @@ impl Deletable {
         match self {
             Deletable::Task(id) => Command::DeleteTask { id, at },
             Deletable::Quest(id) => Command::DeleteQuest { id, at },
-            Deletable::Milestone(id) => Command::DeleteMilestone { id, at },
+            Deletable::ChecklistItem(id) => Command::DeleteChecklistItem { id, at },
             Deletable::Entry(id) => Command::DeleteEntry { id, at },
         }
     }

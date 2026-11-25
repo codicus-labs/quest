@@ -12,10 +12,9 @@ use crate::ui::parts;
 use crate::undo::Deletable;
 
 /// The groups, in the order they show.
-const GROUPS: [(EntityKind, &str); 4] = [
+const GROUPS: [(EntityKind, &str); 3] = [
     (EntityKind::Quest, "Deleted quests"),
     (EntityKind::Task, "Deleted tasks"),
-    (EntityKind::Milestone, "Deleted milestones"),
     (EntityKind::TimeEntry, "Deleted sessions"),
 ];
 

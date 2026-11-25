@@ -3,27 +3,26 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, NaiveTime, Utc, Weekday};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc, Weekday};
 use quest_capture::review::{self, Draft};
 use quest_capture::{CapturePlan, Created};
-use quest_domain::{EntityId, MonthDay, QuestColor, Snapshot, TimeBlock, Weekdays};
+use quest_domain::{EntityId, MonthDay, QuestColor, Snapshot, Weekdays};
 use quest_protocol::{
-    CaptureProposal, ProposedMilestone, ProposedQuest, ProposedRepeat, ProposedTask, ProposedWork, QuestRef, TempKey,
-    WorkTarget,
+    CaptureProposal, ProposedQuest, ProposedRepeat, ProposedTask, ProposedWork, QuestRef, TempKey, WorkTarget,
 };
 use quest_store::CaptureError;
 use quest_view::undo::TOAST_SECONDS;
 
 use crate::capture_types::{
-    CaptureApplied, CaptureDraft, CaptureView, DraftBlock, DraftMilestone, DraftQuest, DraftQuestOption, DraftQuestRef,
-    DraftQuestView, DraftTask, DraftTaskView, DraftWork, DraftWorkTask, DraftWorkView,
+    CaptureApplied, CaptureDraft, CaptureView, DraftQuest, DraftQuestOption, DraftQuestRef, DraftQuestView, DraftTask,
+    DraftTaskView, DraftWork, DraftWorkTask, DraftWorkView,
 };
 use crate::error::MobileError;
 use crate::home::{chip, color_hex};
 use crate::ids::{iso_day, parse_id, parse_iso_day};
 use crate::repeat;
 use crate::task_detail::day_value;
-use crate::task_types::{RepeatDraft, RepeatFrequency, RepeatPinChoice, RepeatWeekday};
+use crate::task_types::{DayValue, RepeatDraft, RepeatFrequency, RepeatPinChoice, RepeatWeekday};
 use crate::time::Now;
 use crate::types::QuestChip;
 
@@ -36,17 +35,7 @@ pub(crate) fn draft(proposal: &CaptureProposal, snapshot: &Snapshot, now: Now) -
         quests: proposal
             .quests
             .iter()
-            .map(|q| DraftQuest {
-                key: q.key.0.clone(),
-                selected: true,
-                title: q.title.clone(),
-                description: q.description.clone(),
-                milestones: q
-                    .milestones
-                    .iter()
-                    .map(|m| DraftMilestone { title: m.title.clone(), day: day_value(m.achieved_on) })
-                    .collect(),
-            })
+            .map(|q| DraftQuest { key: q.key.0.clone(), selected: true, title: q.title.clone() })
             .collect(),
         tasks: proposal
             .tasks
@@ -58,9 +47,9 @@ pub(crate) fn draft(proposal: &CaptureProposal, snapshot: &Snapshot, now: Now) -
                 description: t.description.clone(),
                 quest: quest(&t.quest),
                 quest_uncertain: t.quest_uncertain,
-                day: t.day.map(day_value),
-                block: t.block.map(draft_block),
-                repeat: t.repeat.as_ref().zip(t.day).map(|(r, day)| repeat_draft(r, day, now)),
+                planned_on: t.planned_on.map(day_value),
+                due_on: t.due_on.map(day_value),
+                repeat: t.repeat.as_ref().zip(t.planned_on).map(|(r, day)| repeat_draft(r, day, now)),
             })
             .collect(),
         work: proposal
@@ -103,22 +92,12 @@ fn parse(draft: &CaptureDraft, now: Now) -> Result<Parsed, MobileError> {
     let mut repeat_errors = BTreeMap::new();
     let mut quests = Vec::new();
     for q in &draft.quests {
-        let milestones = q
-            .milestones
-            .iter()
-            .map(|m| Ok(ProposedMilestone { title: m.title.clone(), achieved_on: parse_iso_day(&m.day.iso)? }))
-            .collect::<Result<_, MobileError>>()?;
-        quests.push(ProposedQuest {
-            key: keep(&q.key, q.selected),
-            title: q.title.clone(),
-            description: q.description.clone(),
-            milestones,
-        });
+        quests.push(ProposedQuest { key: keep(&q.key, q.selected), title: q.title.clone() });
     }
     let mut tasks = Vec::new();
     for t in &draft.tasks {
-        let day = t.day.as_ref().map(|d| parse_iso_day(&d.iso)).transpose()?;
-        let repeat = match (&t.repeat, day) {
+        let (planned_on, due_on) = (optional_day(&t.planned_on)?, optional_day(&t.due_on)?);
+        let repeat = match (&t.repeat, planned_on) {
             (Some(draft), Some(day)) => {
                 match repeat::rule(&RepeatDraft { starts: iso_day(day), ..draft.clone() }, now.today()) {
                     Ok(rule) => Some(ProposedRepeat {
@@ -142,8 +121,8 @@ fn parse(draft: &CaptureDraft, now: Now) -> Result<Parsed, MobileError> {
             description: t.description.clone(),
             quest: t.quest.as_ref().map(parse_quest_ref).transpose()?,
             quest_uncertain: t.quest_uncertain,
-            day,
-            block: t.block.map(time_block).transpose()?,
+            planned_on,
+            due_on,
             repeat,
         });
     }
@@ -189,11 +168,6 @@ pub(crate) fn view(draft: &CaptureDraft, snapshot: &Snapshot, now: Now) -> Resul
         .map(|q| DraftQuestView {
             key: q.key.0.clone(),
             color_hex: colors.get(&q.key).map_or_else(|| color_hex(QuestColor::Blue), |c| color_hex(*c)).to_owned(),
-            detail: match q.milestones.len() {
-                0 => String::new(),
-                1 => "1 milestone".to_owned(),
-                n => format!("{n} milestones"),
-            },
             error: q.title.trim().is_empty().then(|| "Type a title.".to_owned()),
         })
         .collect();
@@ -204,15 +178,13 @@ pub(crate) fn view(draft: &CaptureDraft, snapshot: &Snapshot, now: Now) -> Resul
         .map(|t| DraftTaskView {
             key: t.key.0.clone(),
             quest: quest_chip(&t.quest),
-            when: review::task_when(t.day, t.block.filter(|_| t.day.is_some()), today),
-            block_start_label: t.block.map(|b| quest_view::format::hh_mm(review::minutes_of_day(b.start))),
-            block_end_label: t.block.map(|b| quest_view::format::hh_mm(review::minutes_of_day(b.start) + b.minutes)),
+            when: review::task_when(t.planned_on, t.due_on, today),
             repeat_summary: draft
                 .tasks
                 .iter()
                 .find(|d| d.key == t.key.0)
                 .and_then(|d| d.repeat.as_ref())
-                .filter(|_| t.day.is_some())
+                .filter(|_| t.planned_on.is_some())
                 .map(|r| repeat::check(r, today).summary),
             error: review.task_error(t, snapshot).map(str::to_owned).or_else(|| repeat_errors.get(&t.key.0).cloned()),
         })
@@ -348,17 +320,8 @@ fn parse_quest_ref(quest: &DraftQuestRef) -> Result<QuestRef, MobileError> {
     })
 }
 
-fn draft_block(block: TimeBlock) -> DraftBlock {
-    let start = review::minutes_of_day(block.start);
-    DraftBlock { start_minutes: start, end_minutes: (start + block.minutes) % DAY_MINUTES }
-}
-
-/// A block from the pickers; an end at or before the start gives 0 minutes (reported as an error).
-fn time_block(block: DraftBlock) -> Result<TimeBlock, MobileError> {
-    let start = clock(block.start_minutes)?;
-    clock(block.end_minutes)?;
-    let end = if block.end_minutes == 0 { DAY_MINUTES } else { block.end_minutes };
-    Ok(TimeBlock { start, minutes: end.saturating_sub(block.start_minutes) })
+fn optional_day(day: &Option<DayValue>) -> Result<Option<NaiveDate>, MobileError> {
+    day.as_ref().map(|d| parse_iso_day(&d.iso)).transpose()
 }
 
 fn clock(minutes: u32) -> Result<NaiveTime, MobileError> {

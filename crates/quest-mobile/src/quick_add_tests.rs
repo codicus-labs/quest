@@ -51,7 +51,8 @@ fn a_quick_add_creates_the_task_with_quest_day_and_description() {
                 id: id(50),
                 title: "Read it".into(),
                 quest_id: Some(id(1)),
-                day: Some(day("2026-11-26")),
+                planned_on: Some(day("2026-11-26")),
+                due_on: None,
                 position: Position::Bottom,
             },
             Command::SetTaskDescription { id: id(50), description: "link".into() },
@@ -60,7 +61,7 @@ fn a_quick_add_creates_the_task_with_quest_day_and_description() {
 }
 
 #[test]
-fn a_quick_add_without_quest_and_day_goes_to_the_backlog() {
+fn a_quick_add_without_quest_and_day_stays_unplanned() {
     let commands = commands(&snapshot(), id(50), "Later", "  ", None, None).unwrap();
     assert_eq!(
         commands,
@@ -68,7 +69,8 @@ fn a_quick_add_without_quest_and_day_goes_to_the_backlog() {
             id: id(50),
             title: "Later".into(),
             quest_id: None,
-            day: None,
+            planned_on: None,
+            due_on: None,
             position: Position::Bottom
         }]
     );

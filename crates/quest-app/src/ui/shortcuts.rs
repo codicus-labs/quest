@@ -16,7 +16,6 @@ const LEFT: [Group; 3] = [
             (&["Tab"], "Cycle screens (⇧ Tab back)"),
             (&["H"], "Home"),
             (&["P"], "Plan"),
-            (&["C"], "Calendar"),
             (&["Q"], "Quests"),
             (&["R"], "Review"),
             (&["⌘", ","], "Settings"),

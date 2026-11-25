@@ -8,7 +8,8 @@ use uuid::Uuid;
 
 use crate::change::{EntityId, EntityKind, FieldWrite};
 use crate::command::{Command, CommandError, plan};
-use crate::model::{Task, TimeBlock, fields};
+use crate::dates::{TaskDates, set_planned};
+use crate::model::{Task, fields};
 use crate::snapshot::Snapshot;
 use crate::sort_key::sort_key_between;
 
@@ -167,27 +168,35 @@ impl RepeatSchedule {
 }
 
 // User edits live in the ordinary task fields and take precedence over this syncable initial value.
+// A new occurrence is planned for its date and has no deadline.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct Occurrence {
     pub series: EntityId,
-    pub day: NaiveDate,
+    pub planned_on: NaiveDate,
     pub title: String,
     pub description: String,
     pub sort_key: String,
     pub quest_id: Option<EntityId>,
-    pub block: Option<TimeBlock>,
+}
+
+/// The initial values of a checklist item copied into an occurrence, unticked. Like
+/// `Occurrence`, every device writes the same copy under the same id.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct ChecklistCopy {
+    pub task_id: EntityId,
+    pub text: String,
+    pub sort_key: String,
 }
 
 impl Occurrence {
-    fn new(task: &Task, day: NaiveDate, sort_key: String) -> Self {
+    fn new(task: &Task, planned_on: NaiveDate, sort_key: String) -> Self {
         Self {
             series: task.id,
-            day,
+            planned_on,
             title: task.title.clone(),
             description: task.description.clone(),
             sort_key,
             quest_id: task.quest_id,
-            block: task.block,
         }
     }
 
@@ -196,9 +205,9 @@ impl Occurrence {
             id,
             title: self.title.clone(),
             quest_id: self.quest_id,
-            day: Some(self.day),
+            planned_on: Some(self.planned_on),
+            due_on: None,
             sort_key: self.sort_key.clone(),
-            block: self.block,
             completed_at: None,
             description: self.description.clone(),
             repeat: None,
@@ -206,8 +215,18 @@ impl Occurrence {
         }
     }
 
-    fn write(&self, id: EntityId) -> FieldWrite {
-        task_write(id, fields::TASK_OCCURRENCE, json!(self))
+    /// The occurrence and a copy of its series' checklist.
+    fn writes(&self, snapshot: &Snapshot, id: EntityId) -> impl Iterator<Item = FieldWrite> {
+        let checklist = snapshot.checklist_of(self.series).map(move |item| {
+            let copy = ChecklistCopy { task_id: id, text: item.text.clone(), sort_key: item.sort_key.clone() };
+            FieldWrite {
+                kind: EntityKind::ChecklistItem,
+                id: EntityId(Uuid::new_v5(&id.0, item.id.0.as_bytes())),
+                field: fields::CHECKLIST_INITIAL,
+                value: json!(copy),
+            }
+        });
+        std::iter::once(task_write(id, fields::TASK_OCCURRENCE, json!(self))).chain(checklist)
     }
 }
 
@@ -254,10 +273,10 @@ pub(crate) fn edit_plan(
                 .map(|(_, initial)| initial)
                 .ok_or(CommandError::UnknownTask(id))?;
             tasks.push(initial.task(id));
-            writes.push(initial.write(id));
+            writes.extend(initial.writes(snapshot, id));
         }
     }
-    if let Command::MoveTask { day: Some(day), .. } = edit {
+    if let Command::MoveTask { planned_on: Some(day), .. } = edit {
         // A drop can use a preview as a sorting anchor without saving that preview.
         tasks.extend(
             snapshot
@@ -292,16 +311,18 @@ pub(crate) fn set_rule(
     let mut writes = Vec::new();
     let source_day = match task.repeat {
         Some(previous) => previous.source_day,
-        None if task.day.is_none() && !task.is_done() => {
+        None if task.planned_on.is_none() && !task.is_done() => {
             let first = rule.dates_from(rule.starts).next();
             if let Some(day) = first {
                 let key = DayOrder::from_tasks(snapshot, day).insert(rule.pin);
-                writes.push(task_write(id, fields::TASK_DAY, json!(day)));
+                let before = task.dates();
+                let after: TaskDates = set_planned(before, Some(day));
+                writes.extend(crate::command::date_writes(snapshot, id, before, after, now));
                 writes.push(task_write(id, fields::SORT_KEY, json!(key)));
             }
             first
         }
-        None => task.day,
+        None => task.planned_on,
     };
     let effective_from = if task.repeat.is_some() { rule.date_at(now) } else { rule.starts };
     let schedule = RepeatSchedule { rule, effective_from, source_day };
@@ -349,6 +370,7 @@ pub(crate) fn generate_due(snapshot: &Snapshot, now: DateTime<Utc>) -> Vec<Field
         .chain(snapshot.trash.iter().filter(|item| item.kind == EntityKind::Task).map(|item| item.id))
         .collect();
     let mut writes = Vec::new();
+    let mut occurrences = 0;
     let mut keys = HashMap::new();
     for task in &snapshot.tasks {
         let Some(schedule) = task.repeat else { continue };
@@ -360,8 +382,9 @@ pub(crate) fn generate_due(snapshot: &Snapshot, now: DateTime<Utc>) -> Vec<Field
             }
             let order = keys.entry(day).or_insert_with(|| DayOrder::from_tasks(snapshot, day));
             let initial = Occurrence::new(task, day, order.insert(schedule.rule.pin));
-            writes.push(initial.write(id));
-            if writes.len() == MAX_OCCURRENCES_PER_PASS {
+            writes.extend(initial.writes(snapshot, id));
+            occurrences += 1;
+            if occurrences == MAX_OCCURRENCES_PER_PASS {
                 return writes;
             }
         }

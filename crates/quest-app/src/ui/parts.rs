@@ -342,7 +342,6 @@ pub fn task_card(s: &State, task: &Task, p: &Pal, options: CardOptions) -> El {
         CardLook::Room => drag::ghost(card, p),
         CardLook::Left => card.opacity(0.35),
     };
-    let block_minutes = task.block.map(|b| b.minutes as i32);
     // The whole card drags once the pointer travels; a click opens its dialog. Its buttons take
     // their own presses.
     let card = card
@@ -350,10 +349,7 @@ pub fn task_card(s: &State, task: &Task, p: &Pal, options: CardOptions) -> El {
         .label(task.title.clone())
         .focusable(true)
         .on_key(move |s: &mut State, ev: &KeyEvent, tx: &mut Tx| card_key(s, list, id, prefix, ev, tx));
-    let card = drag::source(card.cursor(Cursor::Grab), Some(Zone::Card(list, id)), move |_, _| Payload::Task {
-        id,
-        block_minutes,
-    });
+    let card = drag::source(card.cursor(Cursor::Grab), Some(Zone::Card(list, id)), Payload { task: id });
     drag::zone(card, Zone::Card(list, id))
 }
 
@@ -366,12 +362,6 @@ fn card_title(task: &Task, p: &Pal, options: CardOptions) -> El {
     }
     title = if options.wrap_title { title.wrap() } else { title.single_line().truncate() };
     title.key(format!("{}-title-{}", options.key_prefix, task.id)).self_start()
-}
-
-/// A task picked outside a card (the calendar's list): Focus shows it while nothing runs.
-pub fn focus_on(s: &mut State, id: EntityId) {
-    s.focus_task = Some(id);
-    s.sync_focus_draft();
 }
 
 /// ↵ opens the dialog, ⌫ deletes, ⌥↑ / ⌥↓ reorder within the list, ⌥← / ⌥→ move to the day
@@ -398,12 +388,12 @@ fn card_key(s: &mut State, list: ListId, id: EntityId, prefix: &str, ev: &KeyEve
             let Some(section) = s.plan_task(id).map(|t| s.section_of(&t)) else { return true };
             let order: Vec<EntityId> = drag::list_tasks(s, list, section).iter().map(|t| t.id).collect();
             let Some(position) = dnd::nudge(&order, id, up) else { return true };
-            Command::MoveTask { id, day: list.day(today), position }
+            Command::MoveTask { id, planned_on: list.day(today), position, at: s.clock.now() }
         }
         CardKey::Day { later } => {
             let from = list.day(today).unwrap_or(today);
             let day = if later { from + Days::new(1) } else { from - Days::new(1) };
-            Command::MoveTask { id, day: Some(day), position: Position::Bottom }
+            Command::MoveTask { id, planned_on: Some(day), position: Position::Bottom, at: s.clock.now() }
         }
     };
     s.dispatch(command);

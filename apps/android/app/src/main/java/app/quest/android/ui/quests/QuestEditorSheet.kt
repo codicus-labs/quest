@@ -39,7 +39,6 @@ import app.quest.android.R
 import app.quest.android.ui.components.QuestBottomSheet
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.task.Caps
-import app.quest.android.ui.task.CommitField
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
@@ -52,8 +51,6 @@ class QuestEditorActions(
     /** The title field's Done: Create for a new quest, else save the title. */
     val titleDone: () -> Unit,
     val commitTitle: () -> Unit,
-    val editDescription: (String) -> Unit,
-    val commitDescription: () -> Unit,
     val setHue: (QuestHue) -> Unit,
     val create: () -> Unit,
     val toggleStatus: () -> Unit,
@@ -62,7 +59,7 @@ class QuestEditorActions(
 ) {
     companion object {
         /** Does nothing; for screenshots. */
-        val None = QuestEditorActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        val None = QuestEditorActions({}, {}, {}, {}, {}, {}, {}, {}, {})
     }
 }
 
@@ -90,7 +87,6 @@ fun QuestEditorFields(state: QuestEditorState, actions: QuestEditorActions, auto
         QuestEditorState.Closed -> Unit
         is QuestEditorState.New -> {
             TitleField(state.title, state.error, actions, autoFocus)
-            DescriptionField(state.description, actions)
             Colors(state.hues, actions.setHue)
             Button(
                 onClick = actions.create,
@@ -104,7 +100,6 @@ fun QuestEditorFields(state: QuestEditorState, actions: QuestEditorActions, auto
         }
         is QuestEditorState.Editing -> {
             TitleField(state.title, error = null, actions, autoFocus = false)
-            DescriptionField(state.description, actions)
             Colors(state.detail.hues, actions.setHue)
             Column(verticalArrangement = Arrangement.spacedBy(QuestSpacing.small)) {
                 WideButton(state.detail.statusAction, if (state.detail.badge == null) Icons.Filled.Check else QuestIcons.Repeat, "quest-editor-status", actions.toggleStatus)
@@ -153,18 +148,6 @@ private fun TitleField(title: String, error: String?, actions: QuestEditorAction
             .testTag("quest-editor-title"),
     )
 }
-
-/** Markdown, as in the task sheet. */
-@Composable
-private fun DescriptionField(description: String, actions: QuestEditorActions) = CommitField(
-    value = description,
-    onEdit = actions.editDescription,
-    onCommit = actions.commitDescription,
-    label = stringResource(R.string.quest_description),
-    singleLine = false,
-    placeholder = stringResource(R.string.quest_description_placeholder),
-    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp).testTag("quest-editor-description"),
-)
 
 @Composable
 private fun Colors(hues: List<HueOption>, onPick: (QuestHue) -> Unit) {

@@ -106,14 +106,14 @@ impl State {
             | Command::SetTaskDescription { id, .. }
             | Command::AssignTask { id, .. }
             | Command::MoveTask { id, .. }
-            | Command::ScheduleTask { id, .. }
             | Command::CompleteTaskFromPlan { id, .. }
             | Command::DeleteTask { id, .. }
             | Command::StartFocus { task_id: id, .. } => *id,
             _ => return command,
         };
-        let occurrence = if let Some(Cow::Owned(task)) = self.plan_task(id) { task.series.zip(task.day) } else { None };
-        if occurrence.is_some() || matches!(command, Command::MoveTask { day: Some(_), .. }) {
+        let occurrence =
+            if let Some(Cow::Owned(task)) = self.plan_task(id) { task.series.zip(task.planned_on) } else { None };
+        if occurrence.is_some() || matches!(command, Command::MoveTask { planned_on: Some(_), .. }) {
             Command::EditPlan { occurrence, now: self.now, edit: Box::new(command) }
         } else {
             command
@@ -131,7 +131,7 @@ impl State {
         let rule = series.repeat.map(|schedule| schedule.rule).unwrap_or(RepeatRule {
             every: 1,
             frequency: Frequency::Day,
-            starts: task.day.unwrap_or_else(|| self.today()).max(self.today()),
+            starts: task.planned_on.unwrap_or_else(|| self.today()).max(self.today()),
             ends: None,
             time_zone: self.repeat_zone,
             pin: RepeatPin::None,
@@ -205,7 +205,7 @@ impl State {
             && form.task == id
             && let Some(task) = self.snap.task(id)
         {
-            form.date = TextEdit::new(super::task_modal::day_label(task.day));
+            form.date = TextEdit::new(super::task_modal::day_label(task.planned_on));
         }
         self.close_repeat_editor();
         if rule.is_some() {

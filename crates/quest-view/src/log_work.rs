@@ -112,7 +112,7 @@ pub fn decide(
     }
     let task = match draft.task {
         Some(id) => WorkTask::Existing(id),
-        None => WorkTask::New { id: new_task_id, title: title.to_owned(), quest_id: draft.quest, day },
+        None => WorkTask::New { id: new_task_id, title: title.to_owned(), quest_id: draft.quest, planned_on: day },
     };
     Ok(Command::LogWork {
         entry_id,

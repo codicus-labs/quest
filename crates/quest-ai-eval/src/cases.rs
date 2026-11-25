@@ -28,8 +28,6 @@ pub struct EvalSet {
 #[serde(deny_unknown_fields)]
 pub struct FixtureQuest {
     pub title: String,
-    #[serde(default)]
-    pub description: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,7 +36,8 @@ pub struct FixtureTask {
     pub title: String,
     /// Key of a quest.
     pub quest: Option<String>,
-    pub day: Option<NaiveDate>,
+    pub planned_on: Option<NaiveDate>,
+    pub due_on: Option<NaiveDate>,
     #[serde(default)]
     pub done: bool,
 }
@@ -73,22 +72,14 @@ pub struct ExpectQuest {
 pub struct ExpectTask {
     pub title: Vec<String>,
     #[serde(default, deserialize_with = "present")]
-    pub day: Option<Option<OneOf<NaiveDate>>>,
+    pub planned_on: Option<Option<OneOf<NaiveDate>>>,
+    #[serde(default, deserialize_with = "present")]
+    pub due_on: Option<Option<OneOf<NaiveDate>>>,
     /// A quest key, `"new"` for a quest the proposal creates, or `null`.
     #[serde(default, deserialize_with = "present")]
     pub quest: Option<Option<String>>,
     #[serde(default, deserialize_with = "present")]
-    pub block: Option<Option<ExpectBlock>>,
-    #[serde(default, deserialize_with = "present")]
     pub repeat: Option<Option<ExpectRepeat>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ExpectBlock {
-    /// HH:MM
-    pub start: String,
-    pub minutes: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -162,11 +153,7 @@ impl EvalSet {
         let quests = self
             .quests
             .iter()
-            .map(|(key, quest)| ContextQuest {
-                id: Self::id(key),
-                title: quest.title.clone(),
-                description: quest.description.clone(),
-            })
+            .map(|(key, quest)| ContextQuest { id: Self::id(key), title: quest.title.clone() })
             .collect();
         let tasks = self
             .tasks
@@ -175,7 +162,8 @@ impl EvalSet {
                 id: Self::id(key),
                 title: task.title.clone(),
                 quest_id: task.quest.as_deref().map(Self::id),
-                day: task.day,
+                planned_on: task.planned_on,
+                due_on: task.due_on,
                 done: task.done,
             })
             .collect();

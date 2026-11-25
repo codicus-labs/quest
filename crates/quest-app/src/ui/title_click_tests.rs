@@ -92,7 +92,7 @@ fn a_drag_from_the_title_moves_the_card_and_opens_nothing() {
     let [x, y, w, h] = rect(&rt, &plan_key(&rt, "col", 4));
     let from = center(&rt, &format!("plan-title-{id}"));
     drag(&mut rt, from, (x + w / 2.0, y + h - 40.0));
-    assert_eq!(rt.state.snap.task(id).unwrap().day, Some(today + Days::new(2)), "the card moved");
+    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(today + Days::new(2)), "the card moved");
     assert!(rt.state.task_modal.is_none(), "no dialog opened");
     assert_eq!(rt.state.view, View::Plan);
 }

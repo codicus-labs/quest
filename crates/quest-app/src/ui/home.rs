@@ -1,12 +1,12 @@
-//! Home: today's heading and Quest Hours, the QUEST WORK and OTHER lists with their add fields,
-//! and today's time grid.
+//! Home: today's heading and Quest Hours, and the QUEST WORK and OTHER lists with their add
+//! fields.
 
 use chrono::Days;
 use quest_domain::{Command, EntityId, Position};
 use rune::{Cursor, El, ScrollSpec, TextEdit, Tx, col, el, row, spacer, text};
 
 use crate::clock;
-use crate::dnd::{GridId, ListId, Section};
+use crate::dnd::{ListId, Section};
 use crate::format;
 use crate::icons;
 use crate::palette::Mode;
@@ -14,7 +14,6 @@ use crate::state::quest_picker::PickFor;
 use crate::state::{AddAt, State};
 use crate::theme::{Pal, ty};
 use crate::ui::drag::{self, Zone};
-use crate::ui::timegrid::{self, GridSpec};
 use crate::ui::topbar::open_palette_in;
 use crate::ui::{parts, quest_picker};
 
@@ -63,13 +62,7 @@ pub fn view(s: &State, p: &Pal) -> El {
         .child(spacer())
         .child(stats);
 
-    let body = row()
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .gap(32.0)
-        .child(work_lists(s, p).grow(1.15).min_w(0.0))
-        .child(day_grid(s, p).grow(1.0).min_w(0.0));
+    let body = row().w_full().grow(1.0).min_h(0.0).child(work_lists(s, p).grow(1.0).min_w(0.0));
     col().key("home").w_full().h_full().px(30.0).pt(40.0).pb(16.0).child(header).child(body)
 }
 
@@ -191,8 +184,8 @@ pub fn add_today(s: &mut State, section: Section) {
         Section::Quest => s.home_quest(),
         Section::Other => None,
     };
-    let day = Some(s.today());
-    s.dispatch(Command::CreateTask { id: EntityId::new(), title, quest_id, day, position });
+    let planned_on = Some(s.today());
+    s.dispatch(Command::CreateTask { id: EntityId::new(), title, quest_id, planned_on, due_on: None, position });
     if s.notice.is_some() {
         return;
     }
@@ -200,15 +193,4 @@ pub fn add_today(s: &mut State, section: Section) {
         Section::Quest => s.home_add.clear(),
         Section::Other => s.home_other_add.clear(),
     }
-}
-
-fn day_grid(s: &State, p: &Pal) -> El {
-    let spec = GridSpec { key: "home-grid", grid: GridId::Home, days: vec![s.today()], scale: timegrid::HOME_SCALE };
-    let scroller = col().w_full().child(timegrid::grid(s, &spec, p)).scroll(ScrollSpec { stick_bottom: false });
-    parts::card(p)
-        .h_full()
-        .min_h(0.0)
-        .clip_rounded(12.0)
-        .fill(p.grid)
-        .child(drag::zone(scroller.grow(1.0).min_h(0.0), Zone::GridView(GridId::Home)))
 }

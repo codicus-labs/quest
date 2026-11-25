@@ -188,11 +188,11 @@ fn date_quest_and_delete_act_on_the_task() {
     rt.frame(0.0);
     let tomorrow = today + chrono::Days::new(1);
     type_text(&mut rt, &crate::log_work::date_label(tomorrow));
-    assert_eq!(rt.state.snap.task(id).unwrap().day, Some(today), "not while typing");
+    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(today), "not while typing");
     press(&mut rt, Key::Enter, Mods::default());
-    assert_eq!(rt.state.snap.task(id).unwrap().day, Some(tomorrow), "Return takes the day");
+    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(tomorrow), "Return takes the day");
     click(&mut rt, "task-modal-backlog");
-    assert_eq!(rt.state.snap.task(id).unwrap().day, None, "Backlog");
+    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, None, "Backlog");
 
     click(&mut rt, "task-modal-quest");
     click(&mut rt, "quest-picker-none");

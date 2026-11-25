@@ -1,5 +1,6 @@
-//! Migration 0004 (OIDC) on a database from the password era: data stays, passwords and app
-//! sessions go, grants of scope `quest` become `quest:write`.
+//! Migration 0004 (OIDC) on a database from the password era: accounts stay, passwords and app
+//! sessions go, grants of scope `quest` become `quest:write`. Migration 0005 (protocol 2) drops
+//! every user's synced data and keeps the accounts.
 
 mod common;
 
@@ -18,13 +19,17 @@ async fn pool_with(database_url: &str, foreign_keys: bool) -> Pool {
     SqlitePool::connect_with(options.create_if_missing(true).foreign_keys(foreign_keys)).await.unwrap()
 }
 
-/// Applies the migrations before 0004 to a new database at `database_url`.
-async fn password_era_database(database_url: &str, foreign_keys: bool) -> Pool {
+/// Applies the migrations before `version` to a new database at `database_url`.
+async fn database_before(version: i64, database_url: &str, foreign_keys: bool) -> Pool {
     let old = pool_with(database_url, foreign_keys).await;
-    let mut before_oidc = sqlx::migrate!();
-    before_oidc.migrations = Cow::Owned(before_oidc.migrations.iter().filter(|m| m.version < 4).cloned().collect());
-    before_oidc.run(&old).await.unwrap();
+    let mut migrator = sqlx::migrate!();
+    migrator.migrations = Cow::Owned(migrator.migrations.iter().filter(|m| m.version < version).cloned().collect());
+    migrator.run(&old).await.unwrap();
     old
+}
+
+async fn password_era_database(database_url: &str, foreign_keys: bool) -> Pool {
+    database_before(4, database_url, foreign_keys).await
 }
 
 #[tokio::test]
@@ -53,11 +58,7 @@ async fn password_era_databases_keep_their_data() {
     assert_eq!(user.get::<String, _>("email"), "ada@example.com");
     assert_eq!(user.get::<Option<String>, _>("issuer"), None, "not linked to an identity yet");
     assert_eq!(user.get::<Option<String>, _>("subject"), None);
-    assert_eq!((user.get::<i64, _>("ai_enabled"), user.get::<i64, _>("last_seq")), (0, 1));
-    assert_eq!(user.get::<String, _>("epoch"), "e1");
-    let fields: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM fields WHERE user_id = 'u1'").fetch_one(&migrated).await.unwrap();
-    assert_eq!(fields, 1, "data survives the rebuild of users");
+    assert_eq!(user.get::<i64, _>("ai_enabled"), 0);
     let scope: String =
         sqlx::query_scalar("SELECT scope FROM oauth_grants WHERE id = 'g1'").fetch_one(&migrated).await.unwrap();
     assert_eq!(scope, "quest:write");
@@ -72,6 +73,47 @@ async fn password_era_databases_keep_their_data() {
     // New sign-ins are new accounts; the old one stays until it is linked.
     let session = server.sign_in("ada").await;
     assert_ne!(server.account(&session.token).await.unwrap().user_id.0.to_string(), "u1");
+}
+
+#[tokio::test]
+async fn protocol_2_drops_synced_data_and_keeps_accounts() {
+    let dir = tempfile::tempdir().unwrap();
+    let database_url = common::database_url(&dir);
+    let first = TestServer::start_custom(Setup { database_url: Some(database_url.clone()), ..Setup::default() }).await;
+    let (fake, addr) = (first.fake.clone(), first.server.addr());
+    let session = first.sign_in("ada").await;
+    let user_id = first.account(&session.token).await.unwrap().user_id.0.to_string();
+    first.server.shutdown().await;
+
+    let old = pool(&database_url).await;
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 5").execute(&old).await.unwrap();
+    sqlx::query("UPDATE users SET last_seq = 1, epoch = 'e1'").execute(&old).await.unwrap();
+    sqlx::query(
+        "INSERT INTO fields (user_id, kind, entity_id, field, value_json, hlc, seq)
+         VALUES (?, 'task', 't1', 'day', '\"2026-11-23\"', 'h', 1)",
+    )
+    .bind(&user_id)
+    .execute(&old)
+    .await
+    .unwrap();
+    old.close().await;
+
+    let setup =
+        Setup { database_url: Some(database_url.clone()), bind: Some(addr), fake: Some(fake), ..Setup::default() };
+    let server = TestServer::start_custom(setup).await;
+    let migrated = pool(&database_url).await;
+    let fields: i64 = sqlx::query_scalar("SELECT count(*) FROM fields").fetch_one(&migrated).await.unwrap();
+    assert_eq!(fields, 0);
+    let (last_seq, epoch): (i64, String) = sqlx::query_as("SELECT last_seq, epoch FROM users WHERE id = ?")
+        .bind(&user_id)
+        .fetch_one(&migrated)
+        .await
+        .unwrap();
+    assert_eq!(last_seq, 0);
+    assert_ne!(epoch, "e1", "a new epoch sends every client back to a full catch-up");
+    assert!(server.account(&session.token).await.is_ok(), "the sign-in stays valid");
+    let (_, resumed) = server.connect(&session, None).await;
+    assert!(resumed.changes.is_empty());
 }
 
 #[tokio::test]

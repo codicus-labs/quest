@@ -14,7 +14,7 @@ pub use quest_view::undo::Deletable as Created;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CapturePlan {
     pub commands: Vec<Command>,
-    /// For undo: the quests, tasks and sessions the commands create (milestones go with their quest).
+    /// For undo: the quests, tasks and sessions the commands create.
     pub created: Vec<Created>,
 }
 
@@ -46,18 +46,6 @@ pub fn plan(
     for (quest, color) in proposal.quests.iter().zip(colors) {
         let id = new_id();
         plan.commands.push(Command::CreateQuest { id, title: title(&quest.title)?, color });
-        if !quest.description.trim().is_empty() {
-            plan.commands.push(Command::SetQuestDescription { id, description: quest.description.trim().to_owned() });
-        }
-        for milestone in &quest.milestones {
-            let title = title(&milestone.title)?;
-            plan.commands.push(Command::AddMilestone {
-                id: new_id(),
-                quest_id: id,
-                title,
-                achieved_on: milestone.achieved_on,
-            });
-        }
         new_quests.insert(&quest.key, id);
         plan.created.push(Created::Quest(id));
     }
@@ -77,16 +65,14 @@ pub fn plan(
             id,
             title: title(&task.title)?,
             quest_id,
-            day: task.day,
+            planned_on: task.planned_on,
+            due_on: task.due_on,
             position: Position::Bottom,
         });
         if !task.description.trim().is_empty() {
             plan.commands.push(Command::SetTaskDescription { id, description: task.description.trim().to_owned() });
         }
-        if let (Some(_), Some(block)) = (task.day, task.block) {
-            plan.commands.push(Command::SetTaskBlock { id, block: Some(block) });
-        }
-        if let (Some(day), Some(repeat)) = (task.day, &task.repeat) {
+        if let (Some(day), Some(repeat)) = (task.planned_on, &task.repeat) {
             plan.commands.push(Command::SetTaskRepeat { id, rule: Some(rule(repeat, day, time_zone)), now });
         }
         plan.created.push(Created::Task(id));
@@ -101,7 +87,7 @@ pub fn plan(
             WorkTarget::New { title: raw, quest } => {
                 let id = new_id();
                 plan.created.push(Created::Task(id));
-                WorkTask::New { id, title: title(raw)?, quest_id: quest_of(quest)?, day: work.day }
+                WorkTask::New { id, title: title(raw)?, quest_id: quest_of(quest)?, planned_on: work.day }
             }
         };
         let (started_at, ended_at) = session_times(work, time_zone)?;
@@ -125,18 +111,18 @@ pub fn new_quest_colors(snapshot: &Snapshot, count: usize) -> Vec<QuestColor> {
 }
 
 /// Commands that take back what a plan created and still exists: sessions first, then tasks, then
-/// quests (which take their milestones along).
+/// quests.
 pub fn undo(created: &[Created], snapshot: &Snapshot, at: DateTime<Utc>) -> Vec<Command> {
     let exists = |item: &Created| match item {
         Created::Entry(id) => snapshot.time_entries.iter().any(|e| e.id == *id),
         Created::Task(id) => snapshot.task(*id).is_some(),
         Created::Quest(id) => snapshot.quest(*id).is_some(),
-        Created::Milestone(id) => snapshot.milestones.iter().any(|m| m.id == *id),
+        Created::ChecklistItem(id) => snapshot.checklist_item(*id).is_some(),
     };
     let order = |item: &Created| match item {
         Created::Entry(_) => 0,
-        Created::Task(_) => 1,
-        Created::Milestone(_) => 2,
+        Created::ChecklistItem(_) => 1,
+        Created::Task(_) => 2,
         Created::Quest(_) => 3,
     };
     let mut items: Vec<Created> = created.iter().copied().filter(exists).collect();

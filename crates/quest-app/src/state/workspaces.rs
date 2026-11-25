@@ -15,7 +15,7 @@ use quest_domain::{Command, EntityId};
 use quest_view::workspaces::check_name;
 use rune::TextEdit;
 
-use super::{CaptureStep, EntryForm, LogWorkForm, Overlay, State, View};
+use super::{CaptureStep, LogWorkForm, Overlay, State, View};
 use crate::dnd::DragState;
 
 #[derive(Default)]
@@ -81,13 +81,11 @@ impl State {
         self.focus_task = None;
         self.quest_filter = None;
         self.home_quest_pick = None;
-        self.calendar_pick = None;
         self.date_picker = None;
         self.quest_picker = None;
         self.drag = DragState::Idle;
         self.landing = None;
         self.log_work = LogWorkForm::default();
-        self.entry_form = EntryForm::default();
         self.notice = None;
         self.sync_focus_draft();
         self.fill_workspace_names();

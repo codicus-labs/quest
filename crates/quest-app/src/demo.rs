@@ -2,7 +2,7 @@
 //! commands so they go through the same policy and sync as anything a user does.
 
 use chrono::{DateTime, Days, Duration, NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use quest_domain::{Command, EntityId, Position, QuestColor, TimeBlock};
+use quest_domain::{Command, EntityId, Position, QuestColor};
 
 /// One task in the seed: title, quest index (into `QUESTS`), day offset from today, done.
 type SeedTask = (&'static str, Option<usize>, Option<i64>, bool);
@@ -58,8 +58,6 @@ const PAST_ENTRIES: [(usize, i64, i64); 11] = [
 /// The last one is still running.
 const TODAY_ENTRIES: [(usize, i64, i64); 3] = [(5, 340, 90), (1, 220, 60), (4, 130, 30)];
 const RUNNING: (usize, i64) = (0, 36);
-/// Today's plan for the rest of the day: task index, local start (hour, minute), minutes.
-const PLANNED_TODAY: [(usize, (u32, u32), u32); 2] = [(2, (16, 0), 60), (3, (18, 0), 45)];
 const COMPLETED_TODAY: [usize; 2] = [4, 5];
 
 /// The commands that seed the demo. `to_utc` reads a local wall-clock time.
@@ -72,26 +70,13 @@ pub fn commands(now: DateTime<Utc>, today: NaiveDate, to_utc: impl Fn(NaiveDateT
     for ((title, color), id) in QUESTS.iter().zip(&quest_ids) {
         out.push(Command::CreateQuest { id: *id, title: (*title).to_owned(), color: *color });
     }
-    let milestones = [
-        (0, "First prototype in a friend’s hands", 9),
-        (2, "First 10 km without stopping", 20),
-        (1, "Four essays in a row", 30),
-    ];
-    for (quest, title, days_ago) in milestones {
-        let achieved_on = today.checked_sub_days(Days::new(days_ago)).unwrap_or(today);
-        out.push(Command::AddMilestone {
-            id: EntityId::new(),
-            quest_id: quest_ids[quest],
-            title: title.to_owned(),
-            achieved_on,
-        });
-    }
     for ((title, quest, offset, _), id) in TASKS.iter().zip(&task_ids) {
         out.push(Command::CreateTask {
             id: *id,
             title: (*title).to_owned(),
             quest_id: quest.map(|q| quest_ids[q]),
-            day: offset.map(day),
+            planned_on: offset.map(day),
+            due_on: None,
             position: Position::Bottom,
         });
     }
@@ -112,10 +97,6 @@ pub fn commands(now: DateTime<Utc>, today: NaiveDate, to_utc: impl Fn(NaiveDateT
         let end = start + Duration::minutes(minutes);
         out.push(Command::StartFocus { entry_id: EntityId::new(), task_id: task_ids[task], at: start });
         out.push(Command::StopFocus { at: end });
-    }
-    for (task, (hour, minute), minutes) in PLANNED_TODAY {
-        let start = NaiveTime::from_hms_opt(hour, minute, 0).unwrap_or_default();
-        out.push(Command::SetTaskBlock { id: task_ids[task], block: Some(TimeBlock { start, minutes }) });
     }
     for (task, _, offset, done) in TASKS.iter().enumerate().map(|(i, t)| (i, t.0, t.2, t.3)) {
         if done && !COMPLETED_TODAY.contains(&task) {
@@ -148,21 +129,15 @@ pub fn capture_proposal(snapshot: &quest_domain::Snapshot, today: NaiveDate) -> 
         description: String::new(),
         quest,
         quest_uncertain: uncertain,
-        day,
-        block: None,
+        planned_on: day,
+        due_on: None,
         repeat: None,
     };
-    let mut offer = task("t1", "Write the offer for Müller", launch, true, Some(today + Days::new(1)));
-    offer.block = Some(TimeBlock { start: time(9, 0), minutes: 120 });
+    let offer = task("t1", "Write the offer for Müller", launch, true, Some(today + Days::new(1)));
     let receipts =
         task("t2", "Collect receipts", Some(QuestRef::New { key: key("q1") }), false, Some(today + Days::new(3)));
     CaptureProposal {
-        quests: vec![ProposedQuest {
-            key: key("q1"),
-            title: "Tax return".to_owned(),
-            description: "File the 2026 tax return".to_owned(),
-            milestones: Vec::new(),
-        }],
+        quests: vec![ProposedQuest { key: key("q1"), title: "Tax return".to_owned() }],
         tasks: vec![offer, receipts],
         work: worked_on
             .map(|id| ProposedWork {

@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use quest_domain::EntityId;
+use quest_domain::{EntityId, EntryKind};
 
 use super::*;
 
@@ -10,6 +10,8 @@ fn at(day: u32, h: u32, m: u32, s: u32) -> DateTime<Utc> {
 fn entry() -> TimeEntry {
     TimeEntry {
         id: EntityId::new(),
+        kind: EntryKind::Task,
+        origin_task_id: None,
         task_id: None,
         quest_id: None,
         started_at: at(23, 14, 50, 20),

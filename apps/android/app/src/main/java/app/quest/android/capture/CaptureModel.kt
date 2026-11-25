@@ -20,18 +20,7 @@ sealed interface DraftQuestRef : Serializable {
 /** A day as the core labels it ("2026-11-25", "Tomorrow"). */
 data class DraftDay(val iso: String, val label: String) : Serializable
 
-data class DraftMilestone(val title: String, val day: DraftDay) : Serializable
-
-data class DraftQuest(
-    val key: String,
-    val selected: Boolean,
-    val title: String,
-    val description: String,
-    val milestones: List<DraftMilestone>,
-) : Serializable
-
-/** A planned block: minutes after midnight as picked (0..1439); the core reads an end of 0 as midnight. */
-data class DraftBlock(val startMinutes: Int, val endMinutes: Int) : Serializable
+data class DraftQuest(val key: String, val selected: Boolean, val title: String) : Serializable
 
 data class DraftTask(
     val key: String,
@@ -41,9 +30,10 @@ data class DraftTask(
     val quest: DraftQuestRef?,
     /** The model was unsure about [quest]; shown until the user picks one. */
     val questUncertain: Boolean,
-    /** null: Someday (backlog). */
-    val day: DraftDay?,
-    val block: DraftBlock?,
+    /** The plan date; null: not planned. */
+    val plannedOn: DraftDay?,
+    /** The deadline; kept as proposed (the app does not edit it yet). */
+    val dueOn: DraftDay?,
     val repeat: RepeatForm?,
 ) : Serializable
 
@@ -83,16 +73,13 @@ data class CaptureDraft(
 /** A quest as a chip: name and colour ("#rrggbb"). */
 data class CaptureChip(val name: String, val colorHex: String)
 
-data class DraftQuestView(val key: String, val colorHex: String, val detail: String, val error: String?)
+data class DraftQuestView(val key: String, val colorHex: String, val error: String?)
 
 data class DraftTaskView(
     val key: String,
     val quest: CaptureChip?,
-    /** "Tomorrow · 09:00–10:00", "Someday". */
+    /** "Tomorrow · due Fri, Nov 27", "Someday". */
     val whenLabel: String,
-    /** The block's times for the pickers ("09:00", "24:00"); null without a block. */
-    val blockStartLabel: String?,
-    val blockEndLabel: String?,
     val repeatSummary: String?,
     val error: String?,
 )

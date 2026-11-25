@@ -41,7 +41,7 @@ pub fn view(s: &State, p: &Pal) -> El {
             |s: &mut State, _: &mut Tx| s.review_week = s.review_week + Days::new(7),
         ))
         .child(
-            parts::button("review-this-week", "This week", Some(&icons::CALENDAR), p, |s: &mut State, _: &mut Tx| {
+            parts::button("review-this-week", "This week", Some(&icons::DATE), p, |s: &mut State, _: &mut Tx| {
                 s.review_week = s.this_week()
             })
             .radius(18.0)

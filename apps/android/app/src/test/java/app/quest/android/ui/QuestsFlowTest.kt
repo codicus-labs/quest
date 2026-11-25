@@ -127,7 +127,7 @@ class QuestsFlowTest {
 
     @Test
     fun newQuestCreatesTheQuestFromItsTitleOnly() {
-        core.questDetails["q-new"] = QuestSamples.detail.copy(id = "q-new", title = "Learn piano", description = "")
+        core.questDetails["q-new"] = QuestSamples.detail.copy(id = "q-new", title = "Learn piano")
         showQuests()
 
         tap("quests-new")
@@ -135,7 +135,7 @@ class QuestsFlowTest {
         compose.onNodeWithTag("quest-editor-title").performTextInput("Learn piano")
         tap("quest-editor-create")
 
-        assertEquals(listOf("create-quest Learn piano||null"), core.calls)
+        assertEquals(listOf("create-quest Learn piano|null"), core.calls)
         compose.onNode(hasText("Edit quest") and isHeading()).assertExists()
         compose.onNodeWithTag("quest-editor-status").assertExists()
     }

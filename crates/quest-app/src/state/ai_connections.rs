@@ -105,7 +105,7 @@ pub fn scope_label(scope: &str) -> &'static str {
 }
 
 /// "claude.ai · Read only · Connected Nov 3 · Last used Nov 20"; `local_day` maps instants to
-/// calendar days (`clock::local_day` in the app).
+/// local dates (`clock::local_day` in the app).
 pub fn connection_detail(
     connection: &AiConnection,
     today: NaiveDate,

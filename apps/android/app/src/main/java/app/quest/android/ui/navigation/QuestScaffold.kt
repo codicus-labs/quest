@@ -16,7 +16,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -52,14 +51,13 @@ import app.quest.android.ui.workspaces.TimerElsewhereBar
 import app.quest.android.ui.workspaces.WorkspaceSwitcher
 import uniffi.quest_mobile.WorkspacesData
 
-/** Five labels share the bar; beyond this text size they would break mid-word. */
+/** Four labels share the bar; beyond this text size they would break mid-word. */
 private const val NAV_LABEL_MAX_FONT_SCALE = 1.3f
 
-/** The five places in the bottom bar (phones) or navigation rail (tablets). */
+/** The four places in the bottom bar (phones) or navigation rail (tablets). */
 enum class TopDestination(@StringRes val label: Int, val icon: ImageVector) {
     Home(R.string.nav_home, Icons.Filled.Home),
     Plan(R.string.nav_plan, Icons.AutoMirrored.Filled.List),
-    Calendar(R.string.nav_calendar, Icons.Filled.DateRange),
     Quests(R.string.nav_quests, Icons.Filled.Star),
     Review(R.string.nav_review, Icons.Filled.CheckCircle),
 }

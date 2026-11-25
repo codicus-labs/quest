@@ -1,8 +1,14 @@
-//! The weekly review: how much tracked time went to each quest, per day and in total.
+//! The weekly review: how much tracked time went to each quest, per day and in total; what
+//! happened to the week's tasks is in `review/tasks.rs`.
+
+mod tasks;
+
+pub use tasks::{Lingering, PostponedTask, WeekTasks};
 
 use chrono::{DateTime, Datelike, Days, NaiveDate, TimeZone, Utc};
 
 use crate::change::EntityId;
+use crate::model::EntryKind;
 use crate::snapshot::{Snapshot, overlap_ms};
 
 /// The Monday of the week containing `day`.
@@ -26,7 +32,9 @@ pub struct WeeklyReview {
     /// Each day's quest work split by quest (Monday first), in `by_quest`'s order, without zeros.
     pub by_quest_per_day: [Vec<QuestHours>; 7],
     pub quest_ms: i64,
-    /// Tracked time not linked to a quest.
+    /// Organizing between tasks.
+    pub organizing_ms: i64,
+    /// Other tracked time not linked to a quest.
     pub other_ms: i64,
     pub target_ms: i64,
 }
@@ -38,32 +46,39 @@ impl WeeklyReview {
         self.quest_ms / elapsed
     }
 
+    pub fn total_ms(&self) -> i64 {
+        self.quest_ms + self.organizing_ms + self.other_ms
+    }
+
     /// Share of all tracked time that was quest work, 0..=100.
     pub fn quest_share_percent(&self) -> u8 {
-        let total = self.quest_ms + self.other_ms;
-        if total == 0 {
-            return 0;
-        }
-        u8::try_from(self.quest_ms * 100 / total).unwrap_or(100)
+        percent(self.quest_ms, self.total_ms())
+    }
+
+    /// Share of all tracked time that was organizing, 0..=100.
+    pub fn organizing_share_percent(&self) -> u8 {
+        percent(self.organizing_ms, self.total_ms())
     }
 
     pub fn build<Tz: TimeZone>(snapshot: &Snapshot, any_day: NaiveDate, tz: &Tz, now: DateTime<Utc>) -> Self {
         let start = week_start(any_day);
-        let midnight = |day: NaiveDate| -> DateTime<Utc> {
-            let naive = day.and_hms_opt(0, 0, 0).unwrap_or_default();
-            tz.from_local_datetime(&naive).earliest().map_or_else(|| naive.and_utc(), |t| t.with_timezone(&Utc))
-        };
-        let bounds: Vec<DateTime<Utc>> = (0..=7).map(|i| midnight(start + Days::new(i))).collect();
+        let bounds: Vec<DateTime<Utc>> = (0..=7).map(|i| midnight(start + Days::new(i), tz)).collect();
 
         let mut quest_ms_per_day = [0; 7];
         let mut by_quest: Vec<QuestHours> = Vec::new();
         let mut by_quest_per_day: [Vec<QuestHours>; 7] = Default::default();
         let mut other_ms = 0;
+        let mut organizing_ms = 0;
         for entry in &snapshot.time_entries {
             let quest = snapshot.entry_quest(entry);
+            let organizing = entry.kind == EntryKind::Organizing;
             for (day, window) in bounds.windows(2).enumerate() {
                 let ms = overlap_ms(entry, window[0], window[1], now);
                 if ms == 0 {
+                    continue;
+                }
+                if organizing {
+                    organizing_ms += ms;
                     continue;
                 }
                 let Some(quest_id) = quest else {
@@ -86,10 +101,24 @@ impl WeeklyReview {
             quest_ms: quest_ms_per_day.iter().sum(),
             by_quest,
             by_quest_per_day,
+            organizing_ms,
             other_ms,
             target_ms: i64::from(snapshot.settings.weekly_target_minutes) * 60_000,
         }
     }
+}
+
+/// The UTC instant a local day starts (the earlier one if the clock went back).
+fn midnight<Tz: TimeZone>(day: NaiveDate, tz: &Tz) -> DateTime<Utc> {
+    let naive = day.and_hms_opt(0, 0, 0).unwrap_or_default();
+    tz.from_local_datetime(&naive).earliest().map_or_else(|| naive.and_utc(), |t| t.with_timezone(&Utc))
+}
+
+fn percent(part: i64, total: i64) -> u8 {
+    if total == 0 {
+        return 0;
+    }
+    u8::try_from(part * 100 / total).unwrap_or(100)
 }
 
 fn add(hours: &mut Vec<QuestHours>, quest_id: EntityId, ms: i64) {

@@ -1,9 +1,7 @@
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
-use serde_json::{Value, json};
 
-use crate::change::{EntityId, EntityKind, FieldChange, FieldStore};
+use crate::change::{EntityId, FieldStore};
 use crate::command::{Command, CommandError, Position};
-use crate::hlc::{Hlc, NodeId};
 use crate::model::{QuestColor, Workspace, fields};
 use crate::recurrence::{Frequency, RepeatPin, RepeatRule, Weekdays};
 use crate::review::WeeklyReview;
@@ -20,17 +18,6 @@ fn at(d: u32, hour: u32) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 11, d, hour, 0, 0).unwrap()
 }
 
-/// A field as a client without workspaces writes it.
-fn legacy(store: &mut FieldStore, kind: EntityKind, id: EntityId, field: &str, value: Value) {
-    store.apply(&FieldChange {
-        kind,
-        id,
-        field: field.into(),
-        value,
-        hlc: Hlc { wall_ms: 1, counter: 0, node: NodeId(9) },
-    });
-}
-
 fn create_quest(r: &mut Replica, title: &str) -> EntityId {
     let id = EntityId::new();
     r.run(Command::CreateQuest { id, title: title.into(), color: QuestColor::Blue });
@@ -39,7 +26,14 @@ fn create_quest(r: &mut Replica, title: &str) -> EntityId {
 
 fn create_task(r: &mut Replica, title: &str, quest_id: Option<EntityId>) -> EntityId {
     let id = EntityId::new();
-    r.run(Command::CreateTask { id, title: title.into(), quest_id, day: Some(day(24)), position: Position::Bottom });
+    r.run(Command::CreateTask {
+        id,
+        title: title.into(),
+        quest_id,
+        planned_on: Some(day(24)),
+        due_on: None,
+        position: Position::Bottom,
+    });
     id
 }
 
@@ -66,33 +60,24 @@ fn daily(starts: NaiveDate) -> RepeatRule {
     }
 }
 
-/// What a client without workspaces wrote: the changes minus their workspace.
-fn without_workspace(changes: &[FieldChange]) -> impl Iterator<Item = &FieldChange> {
-    changes.iter().filter(|c| c.field != fields::WORKSPACE_ID)
-}
-
-/// Data from before workspaces: a quest with a milestone, a repeating task with a session, a
-/// deleted task, a weekly target. All of it, and nothing else, is the default workspace.
-fn pre_workspace_store() -> (FieldStore, [EntityId; 5]) {
-    let mut old_app = Replica::on_node(9);
-    let quest = create_quest(&mut old_app, "Launch");
-    let milestone = EntityId::new();
-    old_app.run(Command::AddMilestone { id: milestone, quest_id: quest, title: "Beta".into(), achieved_on: day(2) });
-    let task = create_task(&mut old_app, "Write", Some(quest));
-    old_app.run(Command::SetTaskRepeat { id: task, rule: Some(daily(day(24))), now: at(23, 8) });
+/// The default workspace with a quest, a repeating task with a session, a deleted task and a
+/// weekly target, written by another device.
+fn default_store() -> (FieldStore, [EntityId; 4]) {
+    let mut other = Replica::on_node(9);
+    let quest = create_quest(&mut other, "Launch");
+    let task = create_task(&mut other, "Write", Some(quest));
+    other.run(Command::SetTaskRepeat { id: task, rule: Some(daily(day(24))), now: at(23, 8) });
     let entry = EntityId::new();
-    old_app.run(Command::LogTime { entry_id: entry, task_id: Some(task), started_at: at(23, 9), ended_at: at(23, 10) });
-    let deleted = create_task(&mut old_app, "Old", None);
-    old_app.run(Command::DeleteTask { id: deleted, at: at(23, 11) });
-    old_app.run(Command::SetWeeklyTarget { minutes: 300 });
-    let mut store = FieldStore::default();
-    without_workspace(&old_app.changes).for_each(|c| _ = store.apply(c));
-    (store, [quest, task, milestone, entry, deleted])
+    other.run(Command::LogTime { entry_id: entry, task_id: Some(task), started_at: at(23, 9), ended_at: at(23, 10) });
+    let deleted = create_task(&mut other, "Old", None);
+    other.run(Command::DeleteTask { id: deleted, at: at(23, 11) });
+    other.run(Command::SetWeeklyTarget { minutes: 300 });
+    (other.store, [quest, task, entry, deleted])
 }
 
 #[test]
-fn data_from_before_workspaces_is_the_default_workspace_on_every_read() {
-    let (store, [quest, task, milestone, entry, deleted]) = pre_workspace_store();
+fn the_default_workspace_exists_without_a_record_and_holds_its_data() {
+    let (store, [quest, task, entry, deleted]) = default_store();
     let snapshot = Snapshot::from_store(&store, DEFAULT);
 
     assert_eq!(snapshot.workspaces.len(), 1);
@@ -100,21 +85,18 @@ fn data_from_before_workspaces_is_the_default_workspace_on_every_read() {
     assert_eq!(snapshot.quest(quest).unwrap().title, "Launch");
     assert_eq!(snapshot.task(task).unwrap().quest_id, Some(quest));
     assert!(snapshot.task(task).unwrap().repeat.is_some(), "series");
-    assert_eq!(snapshot.milestones[0].id, milestone);
     assert_eq!(snapshot.time_entries[0].id, entry);
     assert_eq!(snapshot.trash[0].id, deleted, "archive and trash");
     assert_eq!(snapshot.settings.weekly_target_minutes, 300);
     let content = snapshot.active_workspace().content;
     assert_eq!((content.quests, content.tasks, content.tracked_ms), (1, 1, 3_600_000));
-    // Reading it again (or on another device) gives the same: nothing is written to upgrade.
-    assert_eq!(Snapshot::from_store(&store.clone(), DEFAULT), snapshot);
     assert_eq!(Snapshot::from_store(&store, EntityId::new()), snapshot, "unknown workspace falls back");
 }
 
 #[test]
 fn a_new_workspace_starts_empty_and_keeps_its_own_data_and_weekly_target() {
     let mut r = Replica::new();
-    let (store, _) = pre_workspace_store();
+    let (store, _) = default_store();
     r.store = store;
     r.switch(DEFAULT);
     let private = new_workspace(&mut r, "Private");
@@ -151,7 +133,8 @@ fn commands_cannot_reach_into_another_workspace() {
         id: EntityId::new(),
         title: "t".into(),
         quest_id: Some(quest),
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: Position::Bottom,
     };
     assert_eq!(r.try_run(create), Err(CommandError::UnknownQuest(quest)));
@@ -160,41 +143,26 @@ fn commands_cannot_reach_into_another_workspace() {
 }
 
 #[test]
-fn records_from_older_clients_follow_their_parent_into_its_workspace() {
+fn copies_a_repeat_makes_follow_their_series_into_its_workspace() {
     let mut r = Replica::new();
     let work = new_workspace(&mut r, "Work");
     r.switch(work);
-    let quest = create_quest(&mut r, "Ship");
-    let task = create_task(&mut r, "Code", Some(quest));
+    let task = create_task(&mut r, "Code", None);
+    r.run(Command::AddChecklistItem {
+        id: EntityId::new(),
+        task_id: task,
+        text: "Test".into(),
+        position: Position::Top,
+    });
     r.run(Command::SetTaskRepeat { id: task, rule: Some(daily(day(23))), now: at(23, 8) });
+    r.run(Command::GenerateDueTasks { now: at(25, 9) });
+    assert!(r.changes.iter().any(|c| c.field == fields::TASK_OCCURRENCE), "occurrences carry no workspace");
 
-    // An older client sees every workspace mixed and writes without a workspace.
-    let (legacy_task, legacy_entry, legacy_milestone, loose) =
-        (EntityId::new(), EntityId::new(), EntityId::new(), EntityId::new());
-    legacy(&mut r.store, EntityKind::Task, legacy_task, fields::TITLE, json!("From old app"));
-    legacy(&mut r.store, EntityKind::Task, legacy_task, fields::QUEST_ID, json!(quest));
-    legacy(&mut r.store, EntityKind::TimeEntry, legacy_entry, fields::ENTRY_TASK_ID, json!(task));
-    legacy(&mut r.store, EntityKind::TimeEntry, legacy_entry, fields::ENTRY_STARTED_AT, json!(at(24, 9)));
-    legacy(&mut r.store, EntityKind::TimeEntry, legacy_entry, fields::ENTRY_ENDED_AT, json!(at(24, 10)));
-    legacy(&mut r.store, EntityKind::Milestone, legacy_milestone, fields::QUEST_ID, json!(quest));
-    legacy(&mut r.store, EntityKind::Milestone, legacy_milestone, fields::TITLE, json!("Done"));
-    legacy(&mut r.store, EntityKind::Milestone, legacy_milestone, fields::MILESTONE_ACHIEVED_ON, json!(day(24)));
-    legacy(&mut r.store, EntityKind::Task, loose, fields::TITLE, json!("Loose"));
-    // Its occurrences carry no workspace either.
-    let mut old_app = Replica::on_node(9);
-    old_app.store = r.store.clone();
-    old_app.switch(work);
-    old_app.run(Command::GenerateDueTasks { now: at(25, 9) });
-    without_workspace(&old_app.changes).for_each(|c| _ = r.store.apply(c));
-    r.switch(work);
-
-    assert!(r.snapshot.task(legacy_task).is_some());
-    assert!(r.snapshot.time_entries.iter().any(|e| e.id == legacy_entry));
-    assert!(r.snapshot.milestones.iter().any(|m| m.id == legacy_milestone));
-    assert_eq!(r.snapshot.tasks.iter().filter(|t| t.series == Some(task)).count(), 2, "occurrences");
-    assert!(r.snapshot.task(loose).is_none());
+    let occurrences: Vec<EntityId> = r.snapshot.tasks.iter().filter(|t| t.series == Some(task)).map(|t| t.id).collect();
+    assert_eq!(occurrences.len(), 2);
+    assert!(occurrences.iter().all(|id| r.snapshot.checklist_of(*id).count() == 1));
     r.switch(DEFAULT);
-    assert_eq!(titles(&r.snapshot), ["Loose"]);
+    assert!(r.snapshot.tasks.is_empty() && r.snapshot.checklist.is_empty());
 }
 
 #[test]
@@ -327,8 +295,8 @@ fn a_timer_in_a_workspace_deleted_elsewhere_hides_with_it() {
 }
 
 #[test]
-fn two_devices_upgrading_offline_share_one_default_workspace() {
-    let (store, _) = pre_workspace_store();
+fn two_devices_offline_share_one_default_workspace() {
+    let (store, _) = default_store();
     let mut laptop = Replica::on_node(1);
     let mut phone = Replica::on_node(2);
     for device in [&mut laptop, &mut phone] {

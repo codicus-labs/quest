@@ -1,6 +1,3 @@
-use quest_domain::{EntityId, EntityKind, FieldChange, Hlc, NodeId};
-use serde_json::json;
-
 use super::*;
 use crate::db::Db;
 
@@ -69,31 +66,4 @@ fn removing_an_account_deletes_its_folder() {
     layout.remove_account_dir(&key).unwrap();
     layout.remove_leftovers().unwrap();
     assert!(!dir.path().join("removed").exists());
-}
-
-#[test]
-fn the_legacy_database_becomes_the_guest_store_once() {
-    let dir = tempfile::tempdir().unwrap();
-    let layout = Layout::new(dir.path().into());
-    {
-        let mut legacy = Db::open(dir.path()).unwrap();
-        let change = FieldChange {
-            kind: EntityKind::Task,
-            id: EntityId::new(),
-            field: "title".into(),
-            value: json!("Kept"),
-            hlc: Hlc { wall_ms: 1, counter: 0, node: NodeId(1) },
-        };
-        legacy.persist_local(&[change], true).unwrap();
-    }
-
-    layout.adopt_legacy_db().unwrap();
-
-    assert!(!dir.path().join(db::FILE_NAME).exists());
-    let loaded = Db::open(&layout.guest_dir()).unwrap().load().unwrap();
-    assert_eq!(loaded.pending, 0, "the guest never syncs");
-    assert_eq!(loaded.fields.entities(EntityKind::Task).count(), 1);
-    // Nothing left to adopt: a second run changes nothing.
-    layout.adopt_legacy_db().unwrap();
-    assert_eq!(Db::open(&layout.guest_dir()).unwrap().load().unwrap().fields.entities(EntityKind::Task).count(), 1);
 }

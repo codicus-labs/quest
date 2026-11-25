@@ -38,8 +38,14 @@ impl Device {
 
     fn task(&mut self, when: DateTime<Utc>, quest: Option<EntityId>) -> EntityId {
         let id = EntityId::new();
-        let command =
-            Command::CreateTask { id, title: "Task".into(), quest_id: quest, day: None, position: Position::Bottom };
+        let command = Command::CreateTask {
+            id,
+            title: "Task".into(),
+            quest_id: quest,
+            planned_on: None,
+            due_on: None,
+            position: Position::Bottom,
+        };
         self.run(when, command);
         id
     }

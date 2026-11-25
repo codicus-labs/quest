@@ -5,9 +5,7 @@ import app.quest.android.capture.CaptureDraft
 import app.quest.android.capture.CaptureException
 import app.quest.android.capture.CaptureFailure
 import app.quest.android.capture.CaptureView
-import app.quest.android.capture.DraftBlock
 import app.quest.android.capture.DraftDay
-import app.quest.android.capture.DraftMilestone
 import app.quest.android.capture.DraftQuest
 import app.quest.android.capture.DraftQuestOption
 import app.quest.android.capture.DraftQuestRef
@@ -23,8 +21,6 @@ import uniffi.quest_mobile.MobileException
 import uniffi.quest_mobile.QuestChip
 import uniffi.quest_mobile.CaptureDraft as FfiDraft
 import uniffi.quest_mobile.CaptureView as FfiView
-import uniffi.quest_mobile.DraftBlock as FfiBlock
-import uniffi.quest_mobile.DraftMilestone as FfiMilestone
 import uniffi.quest_mobile.DraftQuest as FfiQuest
 import uniffi.quest_mobile.DraftQuestRef as FfiQuestRef
 import uniffi.quest_mobile.DraftTask as FfiTask
@@ -56,7 +52,7 @@ internal fun captureFailure(e: MobileException): CaptureFailure? = when (e) {
 }
 
 internal fun FfiDraft.toApp() = CaptureDraft(
-    quests = quests.map { q -> DraftQuest(q.key, q.selected, q.title, q.description, q.milestones.map { DraftMilestone(it.title, it.day.toApp()) }) },
+    quests = quests.map { q -> DraftQuest(q.key, q.selected, q.title) },
     tasks = tasks.map { t ->
         DraftTask(
             key = t.key,
@@ -65,8 +61,8 @@ internal fun FfiDraft.toApp() = CaptureDraft(
             description = t.description,
             quest = t.quest?.toApp(),
             questUncertain = t.questUncertain,
-            day = t.day?.toApp(),
-            block = t.block?.let { DraftBlock(it.startMinutes.toInt(), it.endMinutes.toInt()) },
+            plannedOn = t.plannedOn?.toApp(),
+            dueOn = t.dueOn?.toApp(),
             repeat = t.repeat?.let(RepeatForm::of),
         )
     },
@@ -75,7 +71,7 @@ internal fun FfiDraft.toApp() = CaptureDraft(
 )
 
 internal fun CaptureDraft.toFfi() = FfiDraft(
-    quests = quests.map { q -> FfiQuest(q.key, q.selected, q.title, q.description, q.milestones.map { FfiMilestone(it.title, it.day.toFfi()) }) },
+    quests = quests.map { q -> FfiQuest(q.key, q.selected, q.title) },
     tasks = tasks.map { t ->
         FfiTask(
             key = t.key,
@@ -84,8 +80,8 @@ internal fun CaptureDraft.toFfi() = FfiDraft(
             description = t.description,
             quest = t.quest?.toFfi(),
             questUncertain = t.questUncertain,
-            day = t.day?.toFfi(),
-            block = t.block?.let { FfiBlock(it.startMinutes.toUInt(), it.endMinutes.toUInt()) },
+            plannedOn = t.plannedOn?.toFfi(),
+            dueOn = t.dueOn?.toFfi(),
             repeat = t.repeat?.toDraft(),
         )
     },
@@ -94,8 +90,8 @@ internal fun CaptureDraft.toFfi() = FfiDraft(
 )
 
 internal fun FfiView.toApp() = CaptureView(
-    quests = quests.map { DraftQuestView(it.key, it.colorHex, it.detail, it.error) },
-    tasks = tasks.map { DraftTaskView(it.key, it.quest?.toApp(), it.`when`, it.blockStartLabel, it.blockEndLabel, it.repeatSummary, it.error) },
+    quests = quests.map { DraftQuestView(it.key, it.colorHex, it.error) },
+    tasks = tasks.map { DraftTaskView(it.key, it.quest?.toApp(), it.`when`, it.repeatSummary, it.error) },
     work = work.map { DraftWorkView(it.key, it.taskTitle, it.quest?.toApp(), it.`when`, it.duration, it.startLabel, it.endLabel, it.error) },
     questOptions = questOptions.map { DraftQuestOption(it.quest.toApp(), it.chip.toApp()) },
     selectedCount = selectedCount.toInt(),

@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use chrono::{NaiveDate, NaiveTime, Timelike};
-use quest_domain::{EntityId, QuestColor, Snapshot, TimeBlock};
+use quest_domain::{EntityId, QuestColor, Snapshot};
 use quest_protocol::{CaptureProposal, DropReason, Dropped, ProposedTask, ProposedWork, QuestRef, TempKey, WorkTarget};
 use quest_view::format::hh_mm;
 use quest_view::quests::day_label;
@@ -34,7 +34,7 @@ impl Draft {
         }
     }
 
-    /// How many items applying creates or logs (milestones count with their quest).
+    /// How many items applying creates or logs.
     pub fn selected_count(&self) -> usize {
         let p = &self.proposal;
         let keys =
@@ -86,12 +86,6 @@ impl Draft {
             && snapshot.quest(*id).is_none()
         {
             return Some("This quest no longer exists. Pick another one.");
-        }
-        if task.block.is_some_and(|block| block.minutes == 0) {
-            return Some("The end must be after the start.");
-        }
-        if task.block.is_some_and(|block| !block_fits(block)) {
-            return Some("The block must end by midnight.");
         }
         None
     }
@@ -150,20 +144,14 @@ pub fn work_task_quest(target: &WorkTarget, snapshot: &Snapshot) -> Option<Entit
     }
 }
 
-/// "Tomorrow · 09:00–10:00", "Fri, Nov 27", "Someday".
-pub fn task_when(day: Option<NaiveDate>, block: Option<TimeBlock>, today: NaiveDate) -> String {
-    let Some(day) = day else { return "Someday".to_owned() };
-    let day = day_label(day, today);
-    match block {
-        Some(block) => format!("{day} · {}", block_range(block)),
-        None => day,
+/// "Tomorrow", "Tomorrow · due Fri, Nov 27", "Due Fri, Nov 27", "Someday".
+pub fn task_when(planned_on: Option<NaiveDate>, due_on: Option<NaiveDate>, today: NaiveDate) -> String {
+    match (planned_on, due_on) {
+        (Some(plan), Some(due)) => format!("{} · due {}", day_label(plan, today), day_label(due, today)),
+        (Some(plan), None) => day_label(plan, today),
+        (None, Some(due)) => format!("Due {}", day_label(due, today)),
+        (None, None) => "Someday".to_owned(),
     }
-}
-
-/// "09:00–10:00".
-pub fn block_range(block: TimeBlock) -> String {
-    let start = minutes_of_day(block.start);
-    format!("{}–{}", hh_mm(start), hh_mm(start + block.minutes))
 }
 
 /// "Today · 09:00–11:00"; an end at midnight reads "24:00".
@@ -201,7 +189,7 @@ pub fn dropped_message(dropped: &Dropped) -> String {
     let why = match dropped.reason {
         DropReason::Incomplete => "something was missing",
         DropReason::InvalidDate => "the date or time does not exist or is too far away",
-        DropReason::InvalidTimeRange => "the end is not after the start, or it runs past midnight or into the future",
+        DropReason::InvalidTimeRange => "the end is not after the start, or it lies in the future",
         DropReason::TooLong => "it was too long, or there were too many items",
         DropReason::UnknownTask => "the task was not found",
         DropReason::UnknownQuest => "the quest was not found",
@@ -217,10 +205,6 @@ pub fn minutes_of_day(time: NaiveTime) -> u32 {
 /// Like [`minutes_of_day`], with midnight at the end of the day as 1440.
 pub fn end_minutes(end: NaiveTime) -> u32 {
     if end == NaiveTime::MIN { 24 * 60 } else { minutes_of_day(end) }
-}
-
-fn block_fits(block: TimeBlock) -> bool {
-    minutes_of_day(block.start) + block.minutes <= 24 * 60
 }
 
 #[cfg(test)]

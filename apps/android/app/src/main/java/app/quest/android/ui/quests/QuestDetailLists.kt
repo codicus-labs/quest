@@ -41,7 +41,6 @@ import app.quest.android.ui.task.Caps
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
-import uniffi.quest_mobile.MilestoneRow
 
 /** The quest's tasks: the cards act as on Home (check, timer, sheet, swipe). */
 class QuestTaskActions(
@@ -106,33 +105,6 @@ private fun TargetChip(label: String, selected: Boolean, tag: String, onClick: (
         colors = FilterChipDefaults.filterChipColors(selectedContainerColor = QuestTheme.colors.selected),
         modifier = Modifier.testTag(tag),
     )
-}
-
-/** MILESTONES, newest first, to read only (the page shows this only when there are some). */
-@Composable
-fun Milestones(milestones: List<MilestoneRow>, colorHex: String) {
-    val accent = questColor(colorHex)
-    val colors = QuestTheme.colors
-    val shape = RoundedCornerShape(QuestSpacing.cardRadius)
-    SectionHeader(stringResource(R.string.quest_milestones), Modifier.testTag("quest-milestones"))
-    milestones.forEach { milestone ->
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = QuestSpacing.touchTarget)
-                .background(colors.card, shape)
-                .border(QuestSpacing.hairline, colors.border, shape)
-                .padding(horizontal = QuestSpacing.large, vertical = QuestSpacing.small)
-                .testTag("milestone:${milestone.title}")
-                .clearAndSetSemantics { contentDescription = milestone.a11yLabel },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(QuestSpacing.medium),
-        ) {
-            Icon(QuestIcons.Milestone, contentDescription = null, tint = accent, modifier = Modifier.size(14.dp))
-            Text(milestone.title, style = QuestType.bodyMedium, color = colors.text, modifier = Modifier.weight(1f))
-            Text(milestone.dateLabel, style = QuestType.small, color = colors.textMuted)
-        }
-    }
 }
 
 /** A one-line field that adds with the keyboard's action or its + button. */

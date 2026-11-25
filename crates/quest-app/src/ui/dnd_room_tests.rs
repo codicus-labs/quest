@@ -67,7 +67,7 @@ fn siblings_spring_aside_and_the_target_holds_while_they_move() {
     let down = second_rect[1] + second_rect[3] - first_rect[1] - first_rect[3];
     move_to(&mut rt, (from.0, from.1 + down));
     let target = rt.state.drag.target();
-    assert_eq!(target, Some(Target::List { list: ListId::Home, before: order.get(2).copied() }));
+    assert_eq!(target, Some(Target { list: ListId::Home, before: order.get(2).copied() }));
     let mut ys = Vec::new();
     for _ in 0..6 {
         rt.frame(FRAME);
@@ -118,7 +118,7 @@ fn another_list_opens_a_ghost_and_leaving_every_list_closes_it() {
     assert_eq!(rect(&rt, &format!("plan-task-{polish}")), own, "its own place is back");
     rt.pointer_up(x + w / 2.0, 10.0);
     settle(&mut rt);
-    assert_eq!(task(&rt, "Polish the details that matter").day, Some(rt.state.today() + Days::new(1)));
+    assert_eq!(task(&rt, "Polish the details that matter").planned_on, Some(rt.state.today() + Days::new(1)));
 }
 
 #[test]

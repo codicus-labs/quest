@@ -24,7 +24,7 @@ fn now() -> Moment {
 fn a_quick_add_shows_on_home_with_its_quest_and_description() {
     let dir = tempfile::tempdir().unwrap();
     let core = open(&dir);
-    let quest = core.create_quest("Reading".into(), String::new(), None).unwrap();
+    let quest = core.create_quest("Reading".into(), None).unwrap();
     let form = core.quick_add_form(Some("A good read\nhttps://example.com".into()), now()).unwrap();
     assert_eq!(form.quest.as_ref().map(|q| q.id.as_str()), Some(quest.as_str()));
 

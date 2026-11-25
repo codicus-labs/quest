@@ -179,7 +179,7 @@ class TaskSheetViewModel(
     fun setQuest(questId: String?) = act { taskId -> core.perform { c, _ -> c.setTaskQuest(taskId, questId) } }
 
     /** [day] is ISO; null moves the task to the backlog. */
-    fun setDay(day: String?) = act { taskId -> core.perform { c, now -> c.setTaskDay(taskId, day, now) } }
+    fun setDay(day: String?) = act { taskId -> core.perform { c, now -> c.setTaskPlanned(taskId, day, now) } }
 
     /** Deletes the task and closes the sheet; Home shows the undo snackbar. */
     fun delete() {

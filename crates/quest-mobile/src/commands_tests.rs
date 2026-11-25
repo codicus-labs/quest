@@ -19,9 +19,9 @@ fn snapshot_with(done: bool) -> Snapshot {
         id: id(1),
         title: "Draft".into(),
         quest_id: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         sort_key: "a".into(),
-        block: None,
         completed_at: done.then(|| frozen().at),
         description: String::new(),
         repeat: None,
@@ -41,7 +41,6 @@ fn with_quest(snapshot: Snapshot) -> Snapshot {
         color: QuestColor::Blue,
         status: QuestStatus::Active,
         sort_key: "a".into(),
-        description: String::new(),
     };
     Snapshot { quests: vec![quest], ..snapshot }
 }
@@ -57,7 +56,8 @@ fn quest_work_lands_today_with_the_desktop_quest_at_the_chosen_end() {
             id: id(1),
             title: "Draft".into(),
             quest_id: Some(id(7)),
-            day: Some(NaiveDate::from_ymd_opt(2026, 11, 25).unwrap()),
+            planned_on: Some(NaiveDate::from_ymd_opt(2026, 11, 25).unwrap()),
+            due_on: None,
             position: Position::Top,
         }
     );
@@ -111,8 +111,10 @@ fn a_done_task_cannot_start_its_timer() {
 fn starting_the_timer_that_already_runs_does_nothing() {
     let running = quest_domain::TimeEntry {
         id: id(8),
+        kind: quest_domain::EntryKind::Task,
         task_id: Some(id(1)),
         quest_id: None,
+        origin_task_id: None,
         started_at: frozen().at,
         ended_at: None,
     };
@@ -127,7 +129,8 @@ fn unchanged_values_save_nothing() {
     assert_eq!(rename_task(&t, ""), None);
     assert_eq!(set_description(&t, ""), None);
     assert_eq!(set_quest(&t, None), Ok(None));
-    assert_eq!(set_day(&t, None), None);
+    assert_eq!(set_planned(&t, None, frozen()), None);
+    assert_eq!(set_due(&t, None, frozen()), None);
     assert_eq!(
         set_description(&t, "a\nb"),
         Some(Command::SetTaskDescription { id: id(1), description: "a\nb".into() })
@@ -135,11 +138,16 @@ fn unchanged_values_save_nothing() {
 }
 
 #[test]
-fn a_new_day_moves_to_the_bottom_and_a_bad_quest_id_is_refused() {
+fn new_dates_plan_at_the_bottom_or_set_the_deadline_and_a_bad_quest_id_is_refused() {
     let day = NaiveDate::from_ymd_opt(2026, 11, 26).unwrap();
+    let at = frozen().at;
     assert_eq!(
-        set_day(&task(false), Some(day)),
-        Some(Command::MoveTask { id: id(1), day: Some(day), position: Position::Bottom })
+        set_planned(&task(false), Some(day), frozen()),
+        Some(Command::MoveTask { id: id(1), planned_on: Some(day), position: Position::Bottom, at })
+    );
+    assert_eq!(
+        set_due(&task(false), Some(day), frozen()),
+        Some(Command::SetTaskDue { id: id(1), due_on: Some(day), at })
     );
     assert_eq!(set_quest(&task(false), Some("nope")), Err(MobileError::InvalidId { value: "nope".into() }));
     assert_eq!(

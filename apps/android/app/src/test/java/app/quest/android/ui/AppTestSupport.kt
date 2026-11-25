@@ -13,9 +13,9 @@ import app.quest.android.settings.Appearance
 import app.quest.android.settings.AppearanceRepository
 import app.quest.android.ui.account.AccountViewModel
 import app.quest.android.ui.archive.ArchiveViewModel
-import app.quest.android.ui.calendar.CalendarViewModel
 import app.quest.android.ui.focus.FocusViewModel
 import app.quest.android.ui.home.HomeViewModel
+import app.quest.android.ui.logwork.LogWorkViewModel
 import app.quest.android.ui.plan.PlanViewModel
 import app.quest.android.ui.quests.QuestDetailViewModel
 import app.quest.android.ui.quests.QuestEditorViewModel
@@ -45,7 +45,7 @@ fun testAppViewModels(holder: CoreHolder, appearance: AppearanceRepository = Fix
     settings = SettingsViewModel(holder, appearance, FakeFocusPreferences(), FakeCapturePreferences()),
     focus = FocusViewModel(holder, SavedStateHandle()),
     plan = PlanViewModel(holder, SavedStateHandle(), FakeHomePreferences(), FakePlanRules(), FakeClock()),
-    calendar = CalendarViewModel(holder, SavedStateHandle()),
+    logWork = LogWorkViewModel(holder, SavedStateHandle()),
     quests = QuestsViewModel(holder, SavedStateHandle()),
     questEditor = QuestEditorViewModel(holder, SavedStateHandle()),
     questDetail = QuestDetailViewModel(holder, SavedStateHandle(), FakeHomePreferences()),

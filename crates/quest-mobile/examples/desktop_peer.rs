@@ -10,22 +10,20 @@
 //!   delete <title>                      soft-delete the task
 //!   restore                             bring back the task deleted last
 //!   start <title> | stop                the timer
-//!   move <title> => <YYYY-MM-DD|backlog>
+//!   move <title> => <YYYY-MM-DD|none>     plan the task for a day, or unplan it
+//!   due <title> => <YYYY-MM-DD|none>      set or clear the task's deadline
 //!   repeat <title> => <day|week|month|year> [every]
 //!   norepeat <title>
 //!   assign <title> => <quest title|none>
 //!   log <title> => HH:MM-HH:MM          log a session today on the task
 //!   retime <title> => HH:MM-HH:MM       set the times of the task's latest session
 //!   unlog <title>                       delete the task's latest session
-//!   block <title> => HH:MM+<minutes>    plan the task's block today
 //!   newquest <title>                    create an empty quest
 //!   qcomplete <quest> | qreopen <quest> complete or reopen a quest
 //!   qarchive <quest>                    archive it the way older versions did (to try Unarchive)
 //!   qrename <old> => <new>
-//!   qdescribe <quest> => <text>         set the quest's description (\n for a line break)
 //!   qcolor <quest> => <red|orange|…>
-//!   qdelete <quest>                     soft-delete the quest (and its milestones)
-//!   milestone <quest> => <title>        add a milestone achieved today
+//!   qdelete <quest>                     soft-delete the quest
 //!   wsnew <name>                        create a workspace (and show it)
 //!   wsswitch <name>                     show another live workspace
 //!   wsrename <old> => <new> | wsdelete <name> | wsrestore <name>
@@ -47,8 +45,8 @@ use std::time::Instant;
 
 use chrono::{DateTime, Local, NaiveDate, NaiveTime, TimeZone, Utc};
 use quest_domain::{
-    Command, EntityId, EntityKind, Frequency, Position, Quest, QuestColor, QuestStatus, RepeatPin, RepeatRule,
-    Snapshot, Task, TimeBlock, TimeEntry, Weekdays, WorkTask,
+    Command, EntityId, EntityKind, EntryKind, Frequency, Position, Quest, QuestColor, QuestStatus, RepeatPin,
+    RepeatRule, Snapshot, Task, TimeEntry, Weekdays, WorkTask,
 };
 use quest_oidc_fake::Browser;
 use quest_store::{
@@ -174,10 +172,10 @@ fn sign_in(profiles: &Profiles, guest: Store, server: &Url, user: &str) -> Store
 }
 
 const USAGE: &str = "commands: add | toggle | quest | rename <old> => <new> | describe <t> => <text> | delete | restore \
-                     | start | stop | move <t> => <YYYY-MM-DD|backlog> | repeat <t> => <day|week|month|year> [every] \
+                     | start | stop | move/due <t> => <YYYY-MM-DD|none> | repeat <t> => <day|week|month|year> [every] \
                      | norepeat | assign <t> => <quest|none> | log/retime <t> => HH:MM-HH:MM | unlog <t> \
-                     | block <t> => HH:MM+<minutes> | newquest | qcomplete | qreopen | qarchive | qrename <old> => <new> \
-                     | qdescribe <q> => <text> | qcolor <q> => <color> | qdelete | milestone <q> => <title> \
+                     | newquest | qcomplete | qreopen | qarchive | qrename <old> => <new> \
+                     | qcolor <q> => <color> | qdelete \
                      | wsnew | wsswitch | wsrename <old> => <new> | wsdelete | wsrestore | show | quit";
 
 /// The commands one input line asks for, or what is wrong with it.
@@ -205,13 +203,8 @@ fn commands_for(snapshot: &Snapshot, verb: &str, rest: &str) -> Result<Vec<Comma
         "delete" => Command::DeleteTask { id: task()?.id, at: now },
         "start" => Command::StartFocus { entry_id: EntityId::new(), task_id: task()?.id, at: now },
         "stop" => Command::StopFocus { at: now },
-        "move" => {
-            let day = match arg {
-                "backlog" => None,
-                day => Some(day.parse::<NaiveDate>().map_err(|_| format!("not a date: {day:?}"))?),
-            };
-            Command::MoveTask { id: task()?.id, day, position: Position::Bottom }
-        }
+        "move" => Command::MoveTask { id: task()?.id, planned_on: day(arg)?, position: Position::Bottom, at: now },
+        "due" => Command::SetTaskDue { id: task()?.id, due_on: day(arg)?, at: now },
         "repeat" => Command::SetTaskRepeat { id: task()?.id, rule: Some(rule(arg)?), now },
         "norepeat" => Command::SetTaskRepeat { id: task()?.id, rule: None, now },
         "log" => {
@@ -223,17 +216,6 @@ fn commands_for(snapshot: &Snapshot, verb: &str, rest: &str) -> Result<Vec<Comma
             Command::SetEntryTimes { id: latest_session(snapshot, task()?.id)?, started_at, ended_at: Some(ended_at) }
         }
         "unlog" => Command::DeleteEntry { id: latest_session(snapshot, task()?.id)?, at: now },
-        "block" => {
-            let (start, minutes) = arg.split_once('+').ok_or_else(|| format!("expected HH:MM+<minutes>: {arg:?}"))?;
-            let start =
-                NaiveTime::parse_from_str(start.trim(), "%H:%M").map_err(|_| format!("not a time: {start:?}"))?;
-            let minutes = minutes.trim().parse().map_err(|_| format!("not minutes: {minutes:?}"))?;
-            Command::ScheduleTask {
-                id: task()?.id,
-                day: Local::now().date_naive(),
-                block: TimeBlock { start, minutes },
-            }
-        }
         "assign" => {
             let quest_id = match arg {
                 "none" => None,
@@ -246,7 +228,6 @@ fn commands_for(snapshot: &Snapshot, verb: &str, rest: &str) -> Result<Vec<Comma
         "qreopen" => Command::SetQuestStatus { id: quest()?, status: QuestStatus::Active },
         "qarchive" => Command::SetQuestStatus { id: quest()?, status: QuestStatus::Archived },
         "qrename" => Command::RenameQuest { id: quest()?, title: arg.to_owned() },
-        "qdescribe" => Command::SetQuestDescription { id: quest()?, description: arg.replace("\\n", "\n") },
         "qcolor" => {
             let named = QuestColor::ALL.into_iter().find(|c| format!("{c:?}").eq_ignore_ascii_case(arg));
             let color = named.ok_or_else(|| format!("no colour {arg:?}"))?;
@@ -256,15 +237,17 @@ fn commands_for(snapshot: &Snapshot, verb: &str, rest: &str) -> Result<Vec<Comma
         "wsrename" => Command::RenameWorkspace { id: workspace_named(snapshot, title, false)?, name: arg.to_owned() },
         "wsdelete" => Command::DeleteWorkspace { id: workspace_named(snapshot, title, false)?, at: now },
         "wsrestore" => Command::RestoreWorkspace { id: workspace_named(snapshot, title, true)? },
-        "milestone" => Command::AddMilestone {
-            id: EntityId::new(),
-            quest_id: quest()?,
-            title: arg.to_owned(),
-            achieved_on: Local::now().date_naive(),
-        },
         _ => return Err(USAGE.to_owned()),
     };
     Ok(vec![command])
+}
+
+/// "2026-11-24", or "none".
+fn day(arg: &str) -> Result<Option<NaiveDate>, String> {
+    match arg {
+        "none" => Ok(None),
+        day => day.parse().map(Some).map_err(|_| format!("not a date: {day:?}")),
+    }
 }
 
 /// The live (or, for `deleted`, the deleted) workspace with that name.
@@ -334,7 +317,8 @@ fn new_task(id: EntityId, title: &str, quest_id: Option<EntityId>) -> Command {
         id,
         title: title.to_owned(),
         quest_id,
-        day: Some(Local::now().date_naive()),
+        planned_on: Some(Local::now().date_naive()),
+        due_on: None,
         position: Position::Bottom,
     }
 }
@@ -368,7 +352,7 @@ fn describe(status: &SyncStatus, snapshot: &Snapshot) -> String {
         snapshot.time_entries.iter().filter(|e| e.started_at.with_timezone(&Local).date_naive() == today).collect();
     sessions.sort_by_key(|e| e.started_at);
     let sessions: Vec<String> = sessions.into_iter().map(|e| session_line(snapshot, e)).collect();
-    let quests: Vec<String> = snapshot.quests.iter().map(|q| quest_line(snapshot, q)).collect();
+    let quests: Vec<String> = snapshot.quests.iter().map(quest_line).collect();
     let list = |items: Vec<String>| if items.is_empty() { "-".to_owned() } else { items.join(", ") };
     let shown = snapshot.workspace(snapshot.workspace).map_or("?", |w| w.name.as_str());
     let others: Vec<String> = snapshot
@@ -386,32 +370,25 @@ fn describe(status: &SyncStatus, snapshot: &Snapshot) -> String {
     )
 }
 
-/// "Garden (done, green, “notes”, ◆2)" with the parts that apply.
-fn quest_line(snapshot: &Snapshot, quest: &Quest) -> String {
+/// "Garden (done, green)" with the parts that apply.
+fn quest_line(quest: &Quest) -> String {
     let mut parts = vec![format!("{:?}", quest.color).to_lowercase()];
     match quest.status {
         QuestStatus::Completed => parts.insert(0, "done".to_owned()),
         QuestStatus::Archived => parts.insert(0, "archived".to_owned()),
         QuestStatus::Active => {}
     }
-    if !quest.description.is_empty() {
-        parts.push(format!("“{}”", quest.description.replace('\n', "⏎")));
-    }
-    let milestones = snapshot.milestones_of(quest.id).count();
-    if milestones > 0 {
-        parts.push(format!("◆{milestones}"));
-    }
     format!("{} ({})", quest.title, parts.join(", "))
 }
 
-/// "[x] Title (Quest) ▶ “notes” ↻week" with the parts that apply.
+/// "[x] Title (Quest) !2026-11-27 ▶ “notes” ↻week" with the parts that apply.
 fn task_line(snapshot: &Snapshot, task: &Task) -> String {
     let mut line = format!("[{}] {}", if task.is_done() { "x" } else { " " }, task.title);
     if let Some(quest) = task.quest_id.and_then(|id| snapshot.quest(id)) {
         line.push_str(&format!(" ({})", quest.title));
     }
-    if let Some(block) = task.block {
-        line.push_str(&format!(" @{}+{}", block.start.format("%H:%M"), block.minutes));
+    if let Some(due) = task.due_on {
+        line.push_str(&format!(" !{due}"));
     }
     if snapshot.running_entry().is_some_and(|e| e.task_id == Some(task.id)) {
         line.push_str(" ▶");
@@ -430,7 +407,8 @@ fn task_line(snapshot: &Snapshot, task: &Task) -> String {
 fn session_line(snapshot: &Snapshot, entry: &TimeEntry) -> String {
     let clock = |at: DateTime<Utc>| at.with_timezone(&Local).format("%H:%M").to_string();
     let end = entry.ended_at.map_or_else(|| "…".to_owned(), clock);
-    let title = entry.task_id.and_then(|id| snapshot.task(id)).map_or("Other work", |t| t.title.as_str());
+    let untitled = if entry.kind == EntryKind::Organizing { "Organizing" } else { "Other work" };
+    let title = entry.task_id.and_then(|id| snapshot.task(id)).map_or(untitled, |t| t.title.as_str());
     let quest = entry.quest_id.and_then(|id| snapshot.quest(id)).map(|q| format!(" ({})", q.title)).unwrap_or_default();
     format!("{}–{end} {title}{quest}", clock(entry.started_at))
 }

@@ -96,8 +96,9 @@ pub(crate) fn plan(
 }
 
 fn plan_day(snapshot: &Snapshot, day: NaiveDate, today: NaiveDate, at: DateTime<Utc>, choice: Choice) -> PlanDay {
-    let cards =
-        |section| day_tasks(snapshot, day, at, choice, section).iter().map(|t| home_task(snapshot, t, at)).collect();
+    let cards = |section| {
+        day_tasks(snapshot, day, at, choice, section).iter().map(|t| home_task(snapshot, t, at, today)).collect()
+    };
     PlanDay {
         day_iso: iso_day(day),
         weekday: day.format("%a").to_string(),
@@ -143,8 +144,8 @@ pub(crate) fn preview(snapshot: &Snapshot, memory: PlanMemory, id: EntityId) -> 
 /// saves the repeat first, and a move to a day may sort among that day's previews.
 pub(crate) fn plan_edit(snapshot: &Snapshot, memory: PlanMemory, command: Command) -> Command {
     let Some(id) = edited_task(&command) else { return command };
-    let occurrence = preview(snapshot, memory, id).and_then(|task| task.series.zip(task.day));
-    if occurrence.is_some() || matches!(command, Command::MoveTask { day: Some(_), .. }) {
+    let occurrence = preview(snapshot, memory, id).and_then(|task| task.series.zip(task.planned_on));
+    if occurrence.is_some() || matches!(command, Command::MoveTask { planned_on: Some(_), .. }) {
         return Command::EditPlan { occurrence, now: memory.at, edit: Box::new(command) };
     }
     command
@@ -157,7 +158,8 @@ fn edited_task(command: &Command) -> Option<EntityId> {
         | Command::SetTaskDescription { id, .. }
         | Command::AssignTask { id, .. }
         | Command::MoveTask { id, .. }
-        | Command::ScheduleTask { id, .. }
+        | Command::SetTaskDue { id, .. }
+        | Command::AddChecklistItem { task_id: id, .. }
         | Command::CompleteTaskFromPlan { id, .. }
         | Command::DeleteTask { id, .. }
         | Command::StartFocus { task_id: id, .. } => Some(*id),
@@ -165,42 +167,49 @@ fn edited_task(command: &Command) -> Option<EntityId> {
     }
 }
 
-/// A drop: `task` to `day` (None: the backlog), right before the card `before` or at the end.
+/// A drop: `task` to `day` (None: unplanned), right before the card `before` or at the end.
 /// Nothing when dropped before itself (back where it was). Lists show open cards before done
 /// ones whatever their order, so an open card dropped before a done one goes to the end, which
 /// is right after the last open card, where it showed.
-pub(crate) fn drop_move(task: &Task, day: Option<NaiveDate>, before: Option<&Task>) -> Option<Command> {
+pub(crate) fn drop_move(
+    task: &Task,
+    day: Option<NaiveDate>,
+    before: Option<&Task>,
+    at: DateTime<Utc>,
+) -> Option<Command> {
     if before.is_some_and(|b| b.id == task.id) {
         return None;
     }
     let anchor = before.filter(|b| task.is_done() || !b.is_done());
-    Some(Command::MoveTask { id: task.id, day, position: anchor.map_or(Position::Bottom, |b| Position::Before(b.id)) })
+    let position = anchor.map_or(Position::Bottom, |b| Position::Before(b.id));
+    Some(Command::MoveTask { id: task.id, planned_on: day, position, at })
 }
 
 /// "Move up" / "Move down": one place within the task's day and section, as the plan lists it
 /// at `at` with `choice`'s filter.
-/// None at either end, or for a task without a day.
+/// None at either end, or for an unplanned task.
 pub(crate) fn nudge_move(
     snapshot: &Snapshot,
     at: DateTime<Utc>,
     choice: Choice,
     task: &Task,
     up: bool,
+    now: DateTime<Utc>,
 ) -> Option<Command> {
-    let day = task.day?;
+    let day = task.planned_on?;
     let section = section_of(snapshot, task);
     let order: Vec<EntityId> =
         day_tasks(snapshot, day, at, choice.known_in(snapshot), section).iter().map(|t| t.id).collect();
     let position = nudge(&order, task.id, up)?;
-    Some(Command::MoveTask { id: task.id, day: Some(day), position })
+    Some(Command::MoveTask { id: task.id, planned_on: Some(day), position, at: now })
 }
 
 /// "Move to previous / next day": the bottom of the day before or after the task's day
-/// (today's for a task in the backlog).
-pub(crate) fn shift_move(task: &Task, later: bool, today: NaiveDate) -> Command {
-    let from = task.day.unwrap_or(today);
+/// (today's for an unplanned task).
+pub(crate) fn shift_move(task: &Task, later: bool, now: Now) -> Command {
+    let from = task.planned_on.unwrap_or(now.today());
     let day = if later { from + Days::new(1) } else { from - Days::new(1) };
-    Command::MoveTask { id: task.id, day: Some(day), position: Position::Bottom }
+    Command::MoveTask { id: task.id, planned_on: Some(day), position: Position::Bottom, at: now.at }
 }
 
 pub(crate) fn move_targets(today: NaiveDate) -> Vec<MoveTarget> {

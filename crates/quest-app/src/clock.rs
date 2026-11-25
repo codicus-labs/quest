@@ -1,4 +1,4 @@
-//! The app's clock and calendar: the only place that reads the system time or time zone.
+//! The app's clock and local dates: the only place that reads the system time or time zone.
 //! The domain takes time as arguments.
 
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};

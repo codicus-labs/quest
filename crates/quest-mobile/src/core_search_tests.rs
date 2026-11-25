@@ -60,17 +60,13 @@ fn focus_starts_the_timer_and_choose_switches_the_mode() {
 }
 
 #[test]
-fn moving_scheduling_and_deleting_from_the_search() {
+fn moving_and_deleting_from_the_search() {
     let (_dir, core) = open();
     let task = add(&core, "Draft");
     let results = core.search(SearchMode::MoveTo { task_id: task.clone() }, "tomorrow".into(), now()).unwrap();
     assert_eq!(core.run_search(results[0].token.clone(), now()).unwrap(), SearchOutcome::Done);
-    assert_eq!(core.task_detail(task.clone(), now()).unwrap().date.map(|d| d.iso), Some("2026-11-26".into()));
-
-    let at = SearchToken::Schedule { task_id: task.clone(), day: "2026-11-25".into(), start_minute: 570 };
-    assert_eq!(core.run_search(at, now()).unwrap(), SearchOutcome::Done);
-    let grid = core.day_grid("2026-11-25".into(), now()).unwrap();
-    assert_eq!(grid.blocks.len(), 1);
+    let planned = core.task_detail(task.clone(), now()).unwrap().planned_on;
+    assert_eq!(planned.map(|d| d.iso), Some("2026-11-26".into()));
 
     core.run_search(SearchToken::DeleteTask { task_id: task }, now()).unwrap();
     let home = core.home(now(), query()).unwrap();

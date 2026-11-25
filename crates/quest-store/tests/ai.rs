@@ -25,8 +25,8 @@ impl LlmProvider for FakeProvider {
         let value = json!({
             "new_quests": [],
             "tasks": [{ "title": "Angebot schreiben", "description": "", "quest_id": null, "new_quest_key": null,
-                        "quest_confidence": "high", "day": "2026-11-25", "start_time": "09:00",
-                        "duration_minutes": 120, "repeat": null }],
+                        "quest_confidence": "high", "planned_on": "2026-11-25", "due_on": "2026-11-27",
+                        "repeat": null }],
             "work_logs": [],
         });
         Box::pin(async move { Ok(Completion { value, usage: None }) })
@@ -68,7 +68,7 @@ async fn capture_needs_an_account_and_the_ai_opt_in() {
         tokio::task::spawn_blocking(move || ai.capture(&request(text))).await.unwrap().expect("the server proposes");
     assert_eq!(proposal.tasks.len(), 1);
     assert_eq!(proposal.tasks[0].title, "Angebot schreiben");
-    assert_eq!(proposal.tasks[0].block.map(|b| b.minutes), Some(120));
+    assert_eq!(proposal.tasks[0].due_on, chrono::NaiveDate::from_ymd_opt(2026, 11, 27));
     server.stop().await;
 }
 

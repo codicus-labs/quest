@@ -141,7 +141,8 @@ fn a_workspace_deleted_on_another_device_falls_back_and_closes_its_dialogs() {
         id: EntityId::new(),
         title: "Side task".into(),
         quest_id: None,
-        day: None,
+        planned_on: None,
+        due_on: None,
         position: quest_domain::Position::Top,
     });
     rt.state.open_task_modal(task_titled(&rt, "Side task"));
@@ -159,7 +160,7 @@ fn the_focus_timer_runs_on_across_a_switch_and_starting_elsewhere_stops_it() {
     let running = rt.state.snap.running_entry().map(|e| e.id).expect("the demo runs a session");
     let side = create(&mut rt, "Side");
     assert!(shown(&rt, "timer-elsewhere"), "the timer stays visible");
-    command(&mut rt, '4');
+    command(&mut rt, '3');
     assert!(shown(&rt, "timer-elsewhere"), "also on Focus");
 
     click(&mut rt, "timer-elsewhere");
@@ -171,7 +172,8 @@ fn the_focus_timer_runs_on_across_a_switch_and_starting_elsewhere_stops_it() {
         id: EntityId::new(),
         title: "Side task".into(),
         quest_id: None,
-        day: Some(rt.state.today()),
+        planned_on: Some(rt.state.today()),
+        due_on: None,
         position: quest_domain::Position::Top,
     });
     rt.state.start_focus(task_titled(&rt, "Side task"));

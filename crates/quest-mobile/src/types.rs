@@ -1,6 +1,9 @@
 //! What the native UIs see: plain records shaped for one screen each. Domain and store types
 //! never cross the FFI boundary; ids travel as strings.
 
+use crate::task_types::{DayValue, PostponedCount};
+use crate::work_types::SessionKind;
+
 /// The caller's notion of "now": the instant and the IANA time zone (e.g. "Europe/Berlin").
 /// Mobile platforms own the clock and the zone, so they pass both in.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -32,6 +35,14 @@ pub struct HomeTask {
     pub timer_running: bool,
     /// Whether the card offers Play/Pause (not on done tasks).
     pub can_start_timer: bool,
+    /// The day it is planned for; None: not planned.
+    pub planned_on: Option<DayValue>,
+    /// The deadline; None: none.
+    pub due_on: Option<DayValue>,
+    /// Open and the deadline has passed.
+    pub overdue: bool,
+    /// How often its dates were moved later.
+    pub postponed: PostponedCount,
 }
 
 /// UI state of the Home screen the core needs to pick sections and quests. Kotlin keeps it.
@@ -75,7 +86,7 @@ pub struct UndoToast {
 pub struct HomeData {
     /// "Monday, November 23".
     pub day_label: String,
-    /// The same local day, "2026-11-23" (e.g. for `day_grid`).
+    /// The same local day, "2026-11-23".
     pub day_iso: String,
     /// Quest Hours today, e.g. "3.6h".
     pub today_hours: String,
@@ -221,15 +232,22 @@ pub struct FocusPickTask {
 /// The running timer, for the ongoing notification.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct RunningSession {
-    pub task_id: String,
+    pub kind: SessionKind,
+    /// The task's id; None while organizing.
+    pub task_id: Option<String>,
+    /// The task's title, or "Organizing".
     pub title: String,
     /// The quest's name; None without a quest.
     pub quest_name: Option<String>,
     /// "#rrggbb"; None without a quest.
     pub quest_color_hex: Option<String>,
     /// Chronometer base, epoch ms: now minus the task's tracked time, so a chronometer counting
-    /// from here shows the Focus timer's value.
+    /// from here shows the Focus timer's value; organizing: the session's start.
     pub chronometer_base_ms: i64,
+    /// Organizing only: the open task it interrupted, for "Back to …" (`start_timer` on it).
+    pub origin_task_id: Option<String>,
+    /// "Back to" this title.
+    pub origin_title: Option<String>,
     /// The timer's workspace when it is not the shown one ("in Default"); None when it is.
     pub workspace_name: Option<String>,
 }

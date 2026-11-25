@@ -67,7 +67,14 @@ impl World {
 
     pub fn task(&mut self, title: &str, quest_id: Option<EntityId>, on: Option<NaiveDate>) -> EntityId {
         let id = self.id();
-        let create = Command::CreateTask { id, title: title.into(), quest_id, day: on, position: Position::Bottom };
+        let create = Command::CreateTask {
+            id,
+            title: title.into(),
+            quest_id,
+            planned_on: on,
+            due_on: None,
+            position: Position::Bottom,
+        };
         self.run(&[create]).unwrap();
         id
     }

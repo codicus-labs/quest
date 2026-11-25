@@ -1,5 +1,5 @@
-//! `QuestCore`'s task actions: the card (rename, timer, delete, undo), the task sheet and the
-//! day grid. Memory-only like the rest of the core; decisions live in the pure modules.
+//! `QuestCore`'s task actions: the card (rename, timer, delete, undo) and the task sheet.
+//! Memory-only like the rest of the core; decisions live in the pure modules.
 
 use quest_domain::{Command, EntityId, Position};
 use quest_store::SyncStatus;
@@ -9,11 +9,11 @@ use crate::core::QuestCore;
 use crate::error::MobileError;
 use crate::guard::guard;
 use crate::ids::{parse_id, parse_iso_day};
-use crate::task_types::{DayGrid, RepeatCheck, RepeatDraft, RepeatWeekday, TaskDetail};
+use crate::task_types::{RepeatCheck, RepeatDraft, RepeatWeekday, TaskDetail};
 use crate::time::Now;
 use crate::types::Moment;
-use crate::undo::{PutBack, UndoAction};
-use crate::{commands, day_grid, repeat, task_detail};
+use crate::undo::UndoAction;
+use crate::{commands, repeat, task_detail};
 
 #[uniffi::export]
 impl QuestCore {
@@ -67,18 +67,11 @@ impl QuestCore {
                 UndoAction::Reopen { task, back_to } => {
                     self.dispatch(Command::ReopenTask { id: task })?;
                     let Some(day) = back_to else { return Ok(()) };
-                    self.dispatch(Command::MoveTask { id: task, day: Some(day), position: Position::Bottom })
+                    let back =
+                        Command::MoveTask { id: task, planned_on: Some(day), position: Position::Bottom, at: now.at };
+                    self.dispatch(back)
                 }
                 UndoAction::Complete(id) => self.dispatch(Command::CompleteTask { id, at: now.at }),
-                UndoAction::PutBack(PutBack::Entry { id, started_at, ended_at }) => {
-                    // It was running: keep the end a stop has given it since (it can't run again).
-                    let stopped = || self.store().snapshot().time_entries.iter().find(|e| e.id == id)?.ended_at;
-                    let ended_at = ended_at.or_else(stopped);
-                    self.dispatch(Command::SetEntryTimes { id, started_at, ended_at })
-                }
-                UndoAction::PutBack(PutBack::Block { id, day, block }) => {
-                    self.dispatch(Command::ScheduleTask { id, day, block })
-                }
                 UndoAction::SetQuestStatus { quest, status } => {
                     self.dispatch(Command::SetQuestStatus { id: quest, status })
                 }
@@ -113,13 +106,29 @@ impl QuestCore {
         guard(|| self.dispatch_some(commands::set_quest(&self.task(&task_id)?, quest_id.as_deref())?))
     }
 
-    /// Moves the task to `day` ("2026-11-24"), or to the backlog with `None`, at the bottom of
-    /// that list.
-    pub fn set_task_day(&self, task_id: String, day: Option<String>, now: Moment) -> Result<(), MobileError> {
+    /// Plans the task for `planned_on` ("2026-11-24"), or unplans it with `None`, at the bottom
+    /// of that day's list. A plan date after the deadline takes the deadline along; moving a date
+    /// later counts as a postponement.
+    pub fn set_task_planned(
+        &self,
+        task_id: String,
+        planned_on: Option<String>,
+        now: Moment,
+    ) -> Result<(), MobileError> {
         guard(|| {
-            Now::parse(&now)?;
-            let day = day.as_deref().map(parse_iso_day).transpose()?;
-            self.dispatch_some(commands::set_day(&self.task(&task_id)?, day))
+            let now = Now::parse(&now)?;
+            let planned_on = planned_on.as_deref().map(parse_iso_day).transpose()?;
+            self.dispatch_some(commands::set_planned(&self.task(&task_id)?, planned_on, now))
+        })
+    }
+
+    /// Sets the deadline `due_on` ("2026-11-24"), or clears it with `None`. A deadline before the
+    /// plan date takes the plan date along; moving a date later counts as a postponement.
+    pub fn set_task_due(&self, task_id: String, due_on: Option<String>, now: Moment) -> Result<(), MobileError> {
+        guard(|| {
+            let now = Now::parse(&now)?;
+            let due_on = due_on.as_deref().map(parse_iso_day).transpose()?;
+            self.dispatch_some(commands::set_due(&self.task(&task_id)?, due_on, now))
         })
     }
 
@@ -145,15 +154,6 @@ impl QuestCore {
     /// "Stop repeating".
     pub fn clear_task_repeat(&self, task_id: String, now: Moment) -> Result<(), MobileError> {
         guard(|| self.change_repeat(&task_id, None, Now::parse(&now)?))
-    }
-
-    /// The time grid of `day` ("2026-11-24"): sessions, planned blocks and, on today, the
-    /// now-line.
-    pub fn day_grid(&self, day: String, now: Moment) -> Result<DayGrid, MobileError> {
-        guard(|| {
-            let (day, now) = (parse_iso_day(&day)?, Now::parse(&now)?);
-            Ok(day_grid::day_grid(&self.store().snapshot(), day, now))
-        })
     }
 }
 

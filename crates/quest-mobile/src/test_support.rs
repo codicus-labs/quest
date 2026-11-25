@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
-use quest_domain::{EntityId, Quest, QuestColor, QuestStatus, Task, TimeBlock, TimeEntry};
+use chrono::{DateTime, NaiveDate, Utc};
+use quest_domain::{EntityId, EntryKind, Quest, QuestColor, QuestStatus, Task, TimeEntry};
 
 use crate::time::Now;
 use crate::types::Moment;
@@ -62,7 +62,6 @@ pub(crate) fn quest(n: u128, title: &str) -> Quest {
         color: QuestColor::Blue,
         status: QuestStatus::Active,
         sort_key: format!("{n}"),
-        description: String::new(),
     }
 }
 
@@ -71,9 +70,9 @@ pub(crate) fn task(n: u128, title: &str, quest: Option<u128>, on: Option<&str>) 
         id: id(n),
         title: title.into(),
         quest_id: quest.map(id),
-        day: on.map(day),
+        planned_on: on.map(day),
+        due_on: None,
         sort_key: format!("{n:04}"),
-        block: None,
         completed_at: None,
         description: String::new(),
         repeat: None,
@@ -81,13 +80,16 @@ pub(crate) fn task(n: u128, title: &str, quest: Option<u128>, on: Option<&str>) 
     }
 }
 
-/// A block at `start` ("09:30") for `minutes`.
-pub(crate) fn block(start: &str, minutes: u32) -> Option<TimeBlock> {
-    Some(TimeBlock { start: NaiveTime::parse_from_str(start, "%H:%M").unwrap(), minutes })
-}
-
 pub(crate) fn entry(n: u128, task: Option<u128>, quest: Option<u128>, from: &str, to: Option<&str>) -> TimeEntry {
-    TimeEntry { id: id(n), task_id: task.map(id), quest_id: quest.map(id), started_at: at(from), ended_at: to.map(at) }
+    TimeEntry {
+        id: id(n),
+        kind: EntryKind::Task,
+        task_id: task.map(id),
+        quest_id: quest.map(id),
+        origin_task_id: None,
+        started_at: at(from),
+        ended_at: to.map(at),
+    }
 }
 
 /// Lists `snapshot`'s running entries as its running focus sessions, as `Snapshot::from_store`

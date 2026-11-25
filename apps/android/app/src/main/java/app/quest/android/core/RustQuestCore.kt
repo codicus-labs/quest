@@ -21,15 +21,8 @@ import uniffi.quest_mobile.SearchResult
 import uniffi.quest_mobile.SearchToken
 import uniffi.quest_mobile.TrashKind
 import uniffi.quest_mobile.AddPosition
-import uniffi.quest_mobile.CalendarData
-import uniffi.quest_mobile.CalendarQuery
 import uniffi.quest_mobile.ChangeListener
-import uniffi.quest_mobile.DayGrid
-import uniffi.quest_mobile.EntryCheck
-import uniffi.quest_mobile.EntryDraft
 import uniffi.quest_mobile.FocusView
-import uniffi.quest_mobile.GridDrag
-import uniffi.quest_mobile.GridPlacement
 import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.LogWorkCheck
@@ -87,15 +80,13 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
 
     override fun setTaskQuest(taskId: String, questId: String?) = core.setTaskQuest(taskId, questId)
 
-    override fun setTaskDay(taskId: String, day: String?, now: Moment) = core.setTaskDay(taskId, day, now)
+    override fun setTaskPlanned(taskId: String, plannedOn: String?, now: Moment) = core.setTaskPlanned(taskId, plannedOn, now)
 
     override fun repeatDraft(taskId: String, now: Moment): RepeatDraft = core.repeatDraft(taskId, now)
 
     override fun setTaskRepeat(taskId: String, draft: RepeatDraft, now: Moment) = core.setTaskRepeat(taskId, draft, now)
 
     override fun clearTaskRepeat(taskId: String, now: Moment) = core.clearTaskRepeat(taskId, now)
-
-    override fun dayGrid(day: String, now: Moment): DayGrid = core.dayGrid(day, now)
 
     override fun focus(now: Moment, focusTask: String?): FocusView = core.focus(now, focusTask)
 
@@ -133,13 +124,6 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
 
     override fun moveTargets(now: Moment): List<MoveTarget> = core.moveTargets(now)
 
-    override fun calendar(query: CalendarQuery, now: Moment): CalendarData = core.calendar(query, now)
-
-    override fun gridDragPreview(drag: GridDrag, day: String, minute: Float, now: Moment): GridPlacement? =
-        core.gridDragPreview(drag, day, minute, now)
-
-    override fun gridDrop(drag: GridDrag, day: String, minute: Float, now: Moment): LogWorkDraft? = core.gridDrop(drag, day, minute, now)
-
     override fun taskChoices(query: String): TaskChoices = core.taskChoices(query)
 
     override fun logWorkNow(now: Moment): LogWorkDraft = core.logWorkNow(now)
@@ -148,23 +132,13 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
 
     override fun logWork(draft: LogWorkDraft, now: Moment): String = core.logWork(draft, now)
 
-    override fun entryDraft(entryId: String, now: Moment): EntryDraft = core.entryDraft(entryId, now)
-
-    override fun checkEntry(draft: EntryDraft, now: Moment): EntryCheck = core.checkEntry(draft, now)
-
-    override fun saveEntry(draft: EntryDraft, now: Moment) = core.saveEntry(draft, now)
-
-    override fun deleteEntry(entryId: String, now: Moment) = core.deleteEntry(entryId, now)
-
     override fun quests(now: Moment): QuestsData = core.quests(now)
 
-    override fun createQuest(title: String, description: String, hue: QuestHue?): String = core.createQuest(title, description, hue)
+    override fun createQuest(title: String, hue: QuestHue?): String = core.createQuest(title, hue)
 
     override fun questDetail(questId: String, now: Moment): QuestDetail = core.questDetail(questId, now)
 
     override fun renameQuest(questId: String, title: String) = core.renameQuest(questId, title)
-
-    override fun setQuestDescription(questId: String, description: String) = core.setQuestDescription(questId, description)
 
     override fun setQuestHue(questId: String, hue: QuestHue) = core.setQuestHue(questId, hue)
 

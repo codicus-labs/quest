@@ -1,6 +1,6 @@
 //! The ⌘K command palette: a field and the entries `palette::entries` finds for it.
 
-use quest_domain::{Command, EntityId, Position, TimeBlock};
+use quest_domain::{Command, EntityId, Position};
 use rune::{Color, Cursor, El, Key, KeyEvent, Tx, col, el, row, text, text_input};
 
 use crate::clock;
@@ -106,12 +106,13 @@ pub fn run(s: &mut State, action: Action, tx: &mut Tx) {
     match action {
         Action::Go(view) => s.go_with(view, tx),
         Action::CreateTask(title) => {
-            let day = Some(s.today());
+            let planned_on = Some(s.today());
             s.dispatch(Command::CreateTask {
                 id: EntityId::new(),
                 title,
                 quest_id: None,
-                day,
+                planned_on,
+                due_on: None,
                 position: Position::Top,
             });
             s.go_with(View::Home, tx);
@@ -129,17 +130,9 @@ pub fn run(s: &mut State, action: Action, tx: &mut Tx) {
         Action::ToggleTheme => s.dark = !s.dark,
         Action::Account => s.overlay = Overlay::Account,
         Action::Choose(mode) => open_palette_in(s, mode, tx),
-        Action::MoveTask { task, day } => {
-            s.dispatch(Command::MoveTask { id: task, day, position: Position::Bottom });
-        }
-        Action::Schedule { task, day, start } => {
-            let minutes = s
-                .snap
-                .task(task)
-                .and_then(|t| t.block)
-                .map_or(crate::timescale::DEFAULT_BLOCK_MINUTES as u32, |b| b.minutes);
-            let start = crate::dnd::drop::local(day, start).time();
-            s.dispatch(Command::ScheduleTask { id: task, day, block: TimeBlock { start, minutes } });
+        Action::MoveTask { task, planned_on } => {
+            let at = s.clock.now();
+            s.dispatch(Command::MoveTask { id: task, planned_on, position: Position::Bottom, at });
         }
         Action::AssignQuest { task, quest } => s.dispatch(Command::AssignTask { id: task, quest_id: quest }),
         Action::Delete(item) => s.delete(item),

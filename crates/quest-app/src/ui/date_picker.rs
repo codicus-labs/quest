@@ -30,7 +30,7 @@ pub(crate) fn field(
     let trigger = parts::icon_button(
         format!("{key}-button"),
         label,
-        &icons::CALENDAR,
+        &icons::DATE,
         p.muted,
         p,
         move |s: &mut State, tx: &mut Tx| {

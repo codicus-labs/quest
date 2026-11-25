@@ -7,7 +7,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -89,17 +88,13 @@ class QuestDetailActions(
     }
 }
 
-/** From this width tasks and milestones sit side by side. */
-private val TwoColumnWidth = 840.dp
-
 /** Widest the page's content gets (Material's readable width on large screens); centred beyond. */
 private val ContentMaxWidth = 840.dp
 
 /**
  * A quest's page over the tabs (back, also predictive, closes it), the working view of its tasks as
  * on the desktop: name (tap to rename) with its status badge, colour, figures, Complete/Reopen quest
- * (Delete in the top bar), then its tasks and, if it has any, its milestones to read (side by side
- * when wide). Description and the rest are in the quest editor on the Quests tab.
+ * (Delete in the top bar), then its tasks.
  */
 @Composable
 fun QuestDetailScreen(state: QuestDetailUiState, actions: QuestDetailActions) {
@@ -146,8 +141,7 @@ fun QuestDetailScreen(state: QuestDetailUiState, actions: QuestDetailActions) {
 @Composable
 private fun DetailContent(state: QuestDetailUiState.Ready, actions: QuestDetailActions) {
     val detail = state.detail
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val wide = maxWidth >= TwoColumnWidth
+    Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             TopBar(actions.close, onDelete = actions.delete)
             Column(
@@ -167,16 +161,7 @@ private fun DetailContent(state: QuestDetailUiState.Ready, actions: QuestDetailA
                 HuePicker(detail.hues, actions.setHue)
                 Figures(detail)
                 StatusRow(detail, actions)
-                val milestones = detail.milestones
-                if (wide && milestones.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(QuestSpacing.section)) {
-                        Column(Modifier.weight(1.3f), verticalArrangement = Arrangement.spacedBy(QuestSpacing.medium)) { QuestTasks(state, actions.tasks) }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(QuestSpacing.medium)) { Milestones(milestones, detail.colorHex) }
-                    }
-                } else {
-                    QuestTasks(state, actions.tasks)
-                    if (milestones.isNotEmpty()) Milestones(milestones, detail.colorHex)
-                }
+                QuestTasks(state, actions.tasks)
             }
         }
         detail.toast?.let { toast ->

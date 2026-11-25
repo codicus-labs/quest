@@ -3,9 +3,7 @@ package app.quest.android
 import app.quest.android.capture.CaptureChip
 import app.quest.android.capture.CaptureDraft
 import app.quest.android.capture.CaptureView
-import app.quest.android.capture.DraftBlock
 import app.quest.android.capture.DraftDay
-import app.quest.android.capture.DraftMilestone
 import app.quest.android.capture.DraftQuest
 import app.quest.android.capture.DraftQuestOption
 import app.quest.android.capture.DraftQuestRef
@@ -31,16 +29,16 @@ object CaptureSamples {
 
     val draft = CaptureDraft(
         quests = listOf(
-            DraftQuest("q1", true, "Tax return", "Everything for the 2025 return", listOf(DraftMilestone("Receipts collected", DraftDay("2026-11-27", "Fri, Nov 27")))),
+            DraftQuest("q1", true, "Tax return"),
         ),
         tasks = listOf(
             DraftTask(
                 "t1", true, "Write offer for Miller", "", DraftQuestRef.Existing("q-relaunch"), questUncertain = false,
-                day = DraftDay("2026-11-25", "Tomorrow"), block = DraftBlock(9 * 60, 11 * 60), repeat = null,
+                plannedOn = DraftDay("2026-11-25", "Tomorrow"), dueOn = DraftDay("2026-11-27", "Fri, Nov 27"), repeat = null,
             ),
             DraftTask(
                 "t2", true, "Collect receipts", "", DraftQuestRef.New("q1"), questUncertain = true,
-                day = DraftDay("2026-11-27", "Fri, Nov 27"), block = null, repeat = weekly,
+                plannedOn = DraftDay("2026-11-27", "Fri, Nov 27"), dueOn = null, repeat = weekly,
             ),
         ),
         work = listOf(
@@ -60,12 +58,11 @@ object CaptureSamples {
         val count = draft.quests.count { it.selected } + draft.tasks.count { it.selected } + draft.work.count { it.selected }
         val badTitle = draft.tasks.any { it.selected && it.title.isBlank() }
         return CaptureView(
-            quests = draft.quests.map { DraftQuestView(it.key, "#62b87a", if (it.milestones.isEmpty()) "" else "${it.milestones.size} milestone", null) },
+            quests = draft.quests.map { DraftQuestView(it.key, "#62b87a", null) },
             tasks = draft.tasks.map { t ->
                 DraftTaskView(
                     t.key, chip(t.quest),
-                    whenLabel = listOfNotNull(t.day?.label ?: "Someday", t.block?.let { "09:00–11:00" }).joinToString(" · "),
-                    blockStartLabel = t.block?.let { "09:00" }, blockEndLabel = t.block?.let { "11:00" },
+                    whenLabel = listOfNotNull(t.plannedOn?.label ?: "Someday", t.dueOn?.let { "due ${it.label}" }).joinToString(" · "),
                     repeatSummary = t.repeat?.let { "Every week on Fri" },
                     error = if (t.selected && t.title.isBlank()) "Enter a title." else null,
                 )

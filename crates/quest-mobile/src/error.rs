@@ -40,8 +40,10 @@ pub enum MobileError {
     InvalidRepeat { reason: String },
     #[error("the quest {id:?} no longer exists. It may be in the archive; go back to the quests.")]
     UnknownQuest { id: String },
-    #[error("the time entry {id:?} no longer exists. Close the editor; the calendar shows the current entries.")]
+    #[error("the time entry {id:?} no longer exists. Close the editor and open a current session.")]
     UnknownEntry { id: String },
+    #[error("the checklist item {id:?} no longer exists. Close it and use the task's current checklist.")]
+    UnknownChecklistItem { id: String },
     /// A form field to correct; `reason` is the desktop's message, e.g. "The end must be after the start.".
     #[error("{reason}")]
     InvalidForm { reason: String },

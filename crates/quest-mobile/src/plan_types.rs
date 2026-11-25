@@ -42,7 +42,7 @@ pub struct PlanData {
 }
 
 /// One entry of "Move to…": "Today", "Tomorrow", the next five days ("Thursday, Nov 26"), and
-/// "Backlog · someday" (no day).
+/// "Not planned" (no day).
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct MoveTarget {
     pub label: String,

@@ -11,7 +11,7 @@ import uniffi.quest_mobile.PlanWindow
 /** A plan around Monday 2026-11-23 (today): Saturday 21 to Friday 27. */
 object PlanSamples {
     private fun task(id: String, title: String, quest: uniffi.quest_mobile.QuestChip?, done: Boolean = false, tracked: String? = null) =
-        HomeTask(id = id, title = title, done = done, quest = quest, tracked = tracked, timerRunning = false, canStartTimer = !done)
+        HomeTask(id = id, title = title, done = done, quest = quest, tracked = tracked, timerRunning = false, canStartTimer = !done, plannedOn = null, dueOn = null, overdue = false, postponed = Samples.notPostponed)
 
     private val names = listOf("Saturday" to "Sat", "Sunday" to "Sun", "Monday" to "Mon", "Tuesday" to "Tue", "Wednesday" to "Wed", "Thursday" to "Thu", "Friday" to "Fri")
 

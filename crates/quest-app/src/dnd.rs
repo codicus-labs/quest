@@ -1,17 +1,13 @@
 //! Drag and drop, pure: what is being dragged (`Payload`), where it would land (`Target`, found
 //! by `hit` from the pointer and the element rects the views reported), and the gesture as a
-//! state machine (`step`). `drop` turns a finished drop into domain commands. The views only
-//! feed events in and draw the state; nothing here touches Rune or the store.
-
-pub mod drop;
+//! state machine (`step`). `drop_command` turns a finished drop into a domain command. The
+//! views only feed events in and draw the state; nothing here touches Rune or the store.
 
 #[cfg(test)]
 mod tests;
 
-use chrono::NaiveDate;
-use quest_domain::EntityId;
-
-use crate::timescale::{Span, TimeScale};
+use chrono::{DateTime, NaiveDate, Utc};
+use quest_domain::{Command, EntityId, Position};
 
 /// How far (in points) a press travels before it becomes a drag rather than a click.
 pub const DRAG_THRESHOLD: f32 = 4.0;
@@ -92,67 +88,17 @@ impl ListId {
     }
 }
 
-/// A time grid that takes drops.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum GridId {
-    Home,
-    Calendar,
-}
-
-/// Which edge of a tracked session is being dragged.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Edge {
-    Start,
-    End,
-}
-
-/// What a drag carries. Grid payloads remember their span and where in it the pointer grabbed
-/// (`grab`, minutes from the start), so the item moves with the pointer rather than jumping.
+/// What a drag carries: a task card (≡ handle).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Payload {
-    /// A task card (≡ handle) or a calendar picker row. `block_minutes` is its planned length.
-    Task { id: EntityId, block_minutes: Option<i32> },
-    /// A planned block, moved.
-    Block { id: EntityId, day: NaiveDate, span: Span, grab: i32 },
-    /// A planned block's bottom edge.
-    BlockEnd { id: EntityId, day: NaiveDate, span: Span },
-    /// A finished tracked session, moved.
-    Session { id: EntityId, day: NaiveDate, span: Span, grab: i32 },
-    /// A tracked session's edge; a running session only offers its start.
-    SessionEdge { id: EntityId, day: NaiveDate, span: Span, edge: Edge, running: bool },
-    /// A drag over empty grid space, from `anchor` (a snapped minute): a new manual session.
-    NewSession { day: NaiveDate, anchor: i32 },
+pub struct Payload {
+    pub task: EntityId,
 }
 
-impl Payload {
-    /// The task a list drag carries; lists only take tasks.
-    pub fn task(&self) -> Option<EntityId> {
-        match self {
-            Payload::Task { id, .. } => Some(*id),
-            _ => None,
-        }
-    }
-
-    /// The planned block or session the payload came from, so the grid can fade it.
-    pub fn source(&self) -> Option<EntityId> {
-        match self {
-            Payload::Task { id, .. }
-            | Payload::Block { id, .. }
-            | Payload::BlockEnd { id, .. }
-            | Payload::Session { id, .. }
-            | Payload::SessionEdge { id, .. } => Some(*id),
-            Payload::NewSession { .. } => None,
-        }
-    }
-}
-
-/// Where a drop would land.
+/// Where a drop would land: in a list, before `before` (or at the end).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Target {
-    /// In a list, before `before` (or at the end).
-    List { list: ListId, before: Option<EntityId> },
-    /// On a grid's day column at `minute` (unsnapped, inside the grid's hours).
-    Grid { grid: GridId, day: NaiveDate, minute: f32 },
+pub struct Target {
+    pub list: ListId,
+    pub before: Option<EntityId>,
 }
 
 /// A list's drop area and its cards, top to bottom, as laid out, `spacing` apart.
@@ -162,15 +108,6 @@ pub struct ListGeom {
     pub rect: Rect,
     pub cards: Vec<(EntityId, Rect)>,
     pub spacing: f32,
-}
-
-/// A grid's visible viewport and its day columns (whose rects move as the grid scrolls).
-#[derive(Clone, Debug, PartialEq)]
-pub struct GridGeom {
-    pub grid: GridId,
-    pub viewport: Rect,
-    pub scale: TimeScale,
-    pub days: Vec<(NaiveDate, Rect)>,
 }
 
 /// Where a list has opened room for the dragged card (`Slot::Room`): before `before`, or at
@@ -185,26 +122,17 @@ pub struct Room {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Geometry {
     pub lists: Vec<ListGeom>,
-    pub grids: Vec<GridGeom>,
     pub room: Option<Room>,
 }
 
-/// The drop target under `at` for `payload`: tasks go into lists or onto grids; grid items
-/// only onto grids. `lifted` is the dragged card where it follows the pointer, if it shows.
-/// All rects and `at` are window points, as laid out after scrolling.
+/// The list under `at` for `payload`, and where in it the card would drop. `lifted` is the
+/// dragged card where it follows the pointer, if it shows. All rects and `at` are window
+/// points, as laid out after scrolling.
 pub fn hit(geometry: &Geometry, payload: &Payload, at: Point, lifted: Option<Rect>) -> Option<Target> {
-    if let Some(dragged) = payload.task()
-        && let Some(list) = geometry.lists.iter().find(|l| l.rect.contains(at))
-    {
-        let room = geometry.room.filter(|r| r.list == list.list);
-        let probe = lifted.unwrap_or(Rect { x: at.x, y: at.y, w: 0.0, h: 0.0 });
-        return Some(Target::List { list: list.list, before: slot_at(list, dragged, room, probe) });
-    }
-    let grid = geometry.grids.iter().find(|g| g.viewport.contains(at))?;
-    let (day, column) = grid.days.iter().find(|(_, r)| at.x >= r.x && at.x < r.x + r.w)?;
-    let minute = grid.scale.minute_at(at.y - column.y);
-    let minute = minute.clamp(grid.scale.first_minute() as f32, grid.scale.last_minute() as f32);
-    Some(Target::Grid { grid: grid.grid, day: *day, minute })
+    let list = geometry.lists.iter().find(|l| l.rect.contains(at))?;
+    let room = geometry.room.filter(|r| r.list == list.list);
+    let probe = lifted.unwrap_or(Rect { x: at.x, y: at.y, w: 0.0, h: 0.0 });
+    Some(Target { list: list.list, before: slot_at(list, payload.task, room, probe) })
 }
 
 /// The place in `list` whose middle is nearest the middle of `card` (the lifted card): before
@@ -351,6 +279,17 @@ pub fn step(state: DragState, event: DragEvent) -> (DragState, Effect) {
         },
         (DragState::Dragging { payload, .. }, DragEvent::Cancel) => (DragState::Idle, Effect::SnapBack(payload)),
         (_, DragEvent::Cancel) | (DragState::Idle, _) => (DragState::Idle, Effect::None),
+    }
+}
+
+/// The command a drop of `task` on `target` runs: plan it for the list's day, before `before`
+/// or at the end.
+pub fn drop_command(task: EntityId, target: Target, today: NaiveDate, at: DateTime<Utc>) -> Command {
+    Command::MoveTask {
+        id: task,
+        planned_on: target.list.day(today),
+        position: target.before.map_or(Position::Bottom, Position::Before),
+        at,
     }
 }
 

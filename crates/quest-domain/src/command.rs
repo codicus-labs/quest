@@ -1,18 +1,23 @@
 //! User intents and the pure policy that turns them into field writes. The store stamps the
 //! writes with its clock, persists them and syncs them; nothing here performs side effects.
 
+mod checklist;
 mod edit_entry;
+mod task_dates;
+mod timer;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::{Value, json};
 
 use crate::change::{EntityId, EntityKind, FieldWrite};
-use crate::model::{QuestColor, QuestStatus, TimeBlock, fields};
+use crate::model::{EntryKind, QuestColor, QuestStatus, fields};
 use crate::recurrence::{self, RepeatRule};
 use crate::snapshot::{RunningFocus, Snapshot};
 use crate::sort_key::sort_key_between;
 
-/// Where a new or moved task lands within its day.
+pub(crate) use task_dates::date_writes;
+
+/// Where a new or moved task lands within its day, or an item within its checklist.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Position {
     Top,
@@ -21,14 +26,16 @@ pub enum Position {
 }
 
 /// The task a `LogWork` session is for: one that exists (open or done), or a new one that is
-/// created already done.
+/// created already done, planned on the day of the work.
 #[derive(Clone, Debug, PartialEq)]
 pub enum WorkTask {
     Existing(EntityId),
-    New { id: EntityId, title: String, quest_id: Option<EntityId>, day: NaiveDate },
+    New { id: EntityId, title: String, quest_id: Option<EntityId>, planned_on: NaiveDate },
 }
 
 /// Ids of created entities are chosen by the caller, so the UI can refer to them right away.
+/// Commands that change a task's dates take the time `at`: moving a date later records a
+/// `Postponement` then.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
     CreateQuest {
@@ -48,30 +55,27 @@ pub enum Command {
         id: EntityId,
         status: QuestStatus,
     },
-    /// Plain text notes; empty clears them.
-    SetQuestDescription {
-        id: EntityId,
-        description: String,
-    },
-    /// Soft-deletes a quest and its milestones. Its tasks and sessions stay and count as other
-    /// work until the quest is restored.
+    /// Soft-deletes a quest. Its tasks and sessions stay and count as other work until the
+    /// quest is restored.
     DeleteQuest {
         id: EntityId,
         at: DateTime<Utc>,
     },
 
+    /// A new task. A deadline before the plan date takes the plan date along (see `set_due`).
     CreateTask {
         id: EntityId,
         title: String,
         quest_id: Option<EntityId>,
-        day: Option<NaiveDate>,
+        planned_on: Option<NaiveDate>,
+        due_on: Option<NaiveDate>,
         position: Position,
     },
     RenameTask {
         id: EntityId,
         title: String,
     },
-    /// Plain text notes; empty clears them.
+    /// Markdown notes; empty clears them.
     SetTaskDescription {
         id: EntityId,
         description: String,
@@ -84,6 +88,7 @@ pub enum Command {
     GenerateDueTasks {
         now: DateTime<Utc>,
     },
+    /// Runs `edit` on a repeat's projected occurrence, creating the occurrence first.
     EditPlan {
         occurrence: Option<(EntityId, NaiveDate)>,
         now: DateTime<Utc>,
@@ -93,27 +98,26 @@ pub enum Command {
         id: EntityId,
         quest_id: Option<EntityId>,
     },
-    /// Moves a task to a day (or the backlog with `None`) at a position in that day's list.
+    /// Plans a task for a day (or unplans it with `None`) at a position in that day's list;
+    /// see `set_planned`. Also reorders within a day.
     MoveTask {
         id: EntityId,
-        day: Option<NaiveDate>,
+        planned_on: Option<NaiveDate>,
         position: Position,
+        at: DateTime<Utc>,
     },
-    SetTaskBlock {
+    /// Sets or clears the deadline; see `set_due`.
+    SetTaskDue {
         id: EntityId,
-        block: Option<TimeBlock>,
-    },
-    /// Plans a task into a day's calendar (e.g. dropped onto a time grid). If the day changes,
-    /// the task goes to the bottom of that day's list.
-    ScheduleTask {
-        id: EntityId,
-        day: NaiveDate,
-        block: TimeBlock,
+        due_on: Option<NaiveDate>,
+        at: DateTime<Utc>,
     },
     CompleteTask {
         id: EntityId,
         at: DateTime<Utc>,
     },
+    /// Completes a task from the plan: a repeat's occurrence planned for a later day moves to
+    /// `today`, so the next one is not skipped.
     CompleteTaskFromPlan {
         id: EntityId,
         at: DateTime<Utc>,
@@ -127,21 +131,32 @@ pub enum Command {
         at: DateTime<Utc>,
     },
 
-    AddMilestone {
+    AddChecklistItem {
         id: EntityId,
-        quest_id: EntityId,
-        title: String,
-        achieved_on: NaiveDate,
+        task_id: EntityId,
+        text: String,
+        position: Position,
     },
-    RenameMilestone {
+    RenameChecklistItem {
         id: EntityId,
-        title: String,
+        text: String,
     },
-    SetMilestoneDate {
+    /// Ticks an item off or opens it again.
+    SetChecklistItemDone {
         id: EntityId,
-        achieved_on: NaiveDate,
+        done: bool,
     },
-    DeleteMilestone {
+    MoveChecklistItem {
+        id: EntityId,
+        position: Position,
+    },
+    DeleteChecklistItem {
+        id: EntityId,
+        at: DateTime<Utc>,
+    },
+
+    /// Takes a postponement back (undoing the move that recorded it).
+    DeletePostponement {
         id: EntityId,
         at: DateTime<Utc>,
     },
@@ -152,10 +167,24 @@ pub enum Command {
         task_id: EntityId,
         at: DateTime<Utc>,
     },
+    /// Starts tracking organizing; stops whatever else is running. `origin_task_id` is the task
+    /// to go back to.
+    StartOrganizing {
+        entry_id: EntityId,
+        origin_task_id: Option<EntityId>,
+        at: DateTime<Utc>,
+    },
+    /// Books the running task session as organizing from `since` on: the task session ends at
+    /// `since` and an organizing session (back to that task) runs from there.
+    RebookAsOrganizing {
+        entry_id: EntityId,
+        since: DateTime<Utc>,
+        now: DateTime<Utc>,
+    },
     StopFocus {
         at: DateTime<Utc>,
     },
-    /// Records a finished session after the fact (e.g. dragged out on the calendar).
+    /// Records a finished session after the fact; without a task it is other work.
     LogTime {
         entry_id: EntityId,
         task_id: Option<EntityId>,
@@ -163,14 +192,15 @@ pub enum Command {
         ended_at: DateTime<Utc>,
     },
     /// Logs finished work after the fact (the Log work dialog), all or nothing: the session,
-    /// and for a new task that task, created done (at the session's end) on `day`. The session
-    /// counts towards the task's quest.
+    /// and for a new task that task, created done (at the session's end). The session counts
+    /// towards the task's quest.
     LogWork {
         entry_id: EntityId,
         task: WorkTask,
         started_at: DateTime<Utc>,
         ended_at: DateTime<Utc>,
     },
+    /// Edits a session. Giving an organizing session a task or quest makes it task work.
     EditEntry {
         id: EntityId,
         task: Option<WorkTask>,
@@ -184,11 +214,6 @@ pub enum Command {
         id: EntityId,
         started_at: DateTime<Utc>,
         ended_at: Option<DateTime<Utc>>,
-    },
-    /// Links a session to a task (and its quest), or to nothing (other work).
-    AssignEntry {
-        id: EntityId,
-        task_id: Option<EntityId>,
     },
     DeleteEntry {
         id: EntityId,
@@ -218,7 +243,7 @@ pub enum Command {
         id: EntityId,
     },
 
-    /// Undoes a soft delete. Restoring a quest also restores the milestones deleted with it.
+    /// Undoes a soft delete of a quest, task, checklist item or session.
     Restore {
         kind: EntityKind,
         id: EntityId,
@@ -231,14 +256,20 @@ pub enum CommandError {
     UnknownQuest(EntityId),
     #[error("task {0} does not exist")]
     UnknownTask(EntityId),
-    #[error("milestone {0} does not exist")]
-    UnknownMilestone(EntityId),
+    #[error("checklist item {0} does not exist")]
+    UnknownChecklistItem(EntityId),
+    #[error("postponement {0} does not exist")]
+    UnknownPostponement(EntityId),
     #[error("session {0} does not exist")]
     UnknownEntry(EntityId),
     #[error("a session must end after it starts")]
     InvalidTimeRange,
     #[error("a finished session cannot be resumed by editing its times; start a new session instead")]
     CannotResumeEntry,
+    #[error("no task session is running; start one before booking time as organizing")]
+    NothingToRebook,
+    #[error("organizing can only start within the running session, after its start and not in the future")]
+    RebookOutsideEntry,
     #[error("{kind:?} {id} is not in the trash")]
     NotInTrash { kind: EntityKind, id: EntityId },
     #[error("a title cannot be empty")]
@@ -274,7 +305,7 @@ fn title(raw: &str) -> Result<String, CommandError> {
 
 /// Decides the field writes a command needs, validated against the current state.
 pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, CommandError> {
-    use EntityKind::{Milestone, Quest, Settings, Task, TimeEntry, Workspace};
+    use EntityKind::{Quest, Settings, Task, TimeEntry, Workspace};
     let quest_exists = |id: EntityId| snapshot.quest(id).map(|_| ()).ok_or(CommandError::UnknownQuest(id));
     let task_exists = |id: EntityId| snapshot.task(id).map(|_| ()).ok_or(CommandError::UnknownTask(id));
 
@@ -301,27 +332,13 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
             quest_exists(*id)?;
             vec![write(Quest, *id, fields::QUEST_STATUS, json!(status))]
         }
-        Command::SetQuestDescription { id, description } => {
-            quest_exists(*id)?;
-            vec![write(Quest, *id, fields::QUEST_DESCRIPTION, json!(description))]
-        }
         Command::DeleteQuest { id, at } => {
             quest_exists(*id)?;
-            let milestones = snapshot.milestones_of(*id).map(|m| write(Milestone, m.id, fields::DELETED_AT, json!(at)));
-            std::iter::once(write(Quest, *id, fields::DELETED_AT, json!(at))).chain(milestones).collect()
+            vec![write(Quest, *id, fields::DELETED_AT, json!(at))]
         }
 
-        Command::CreateTask { id, title: raw, quest_id, day, position } => {
-            if let Some(quest) = quest_id {
-                quest_exists(*quest)?;
-            }
-            vec![
-                write(Task, *id, fields::TITLE, json!(title(raw)?)),
-                write(Task, *id, fields::QUEST_ID, json!(quest_id)),
-                write(Task, *id, fields::TASK_DAY, json!(day)),
-                write(Task, *id, fields::SORT_KEY, json!(task_sort_key(snapshot, *id, *day, *position))),
-                in_workspace(Task, *id, snapshot),
-            ]
+        Command::CreateTask { id, title: raw, quest_id, planned_on, due_on, position } => {
+            task_dates::create(snapshot, *id, raw, *quest_id, *planned_on, *due_on, *position)?
         }
         Command::RenameTask { id, title: raw } => {
             task_exists(*id)?;
@@ -341,39 +358,20 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
             }
             vec![write(Task, *id, fields::QUEST_ID, json!(quest_id))]
         }
-        Command::MoveTask { id, day, position } => {
-            task_exists(*id)?;
-            vec![
-                write(Task, *id, fields::TASK_DAY, json!(day)),
-                write(Task, *id, fields::SORT_KEY, json!(task_sort_key(snapshot, *id, *day, *position))),
-            ]
+        Command::MoveTask { id, planned_on, position, at } => {
+            task_dates::move_task(snapshot, *id, *planned_on, *position, *at)?
         }
-        Command::SetTaskBlock { id, block } => {
-            task_exists(*id)?;
-            vec![write(Task, *id, fields::TASK_BLOCK, json!(block))]
-        }
-        Command::ScheduleTask { id, day, block } => {
-            let task = snapshot.task(*id).ok_or(CommandError::UnknownTask(*id))?;
-            let mut writes = vec![write(Task, *id, fields::TASK_BLOCK, json!(block))];
-            if task.day != Some(*day) {
-                writes.push(write(Task, *id, fields::TASK_DAY, json!(day)));
-                let key = task_sort_key(snapshot, *id, Some(*day), Position::Bottom);
-                writes.push(write(Task, *id, fields::SORT_KEY, json!(key)));
-            }
-            writes
-        }
+        Command::SetTaskDue { id, due_on, at } => task_dates::set_task_due(snapshot, *id, *due_on, *at)?,
         Command::CompleteTask { id, at } | Command::CompleteTaskFromPlan { id, at, .. } => {
             let task = snapshot.task(*id).ok_or(CommandError::UnknownTask(*id))?;
             let mut writes = stop_running(snapshot, *at, |running| running.entry.task_id == Some(*id));
             writes.push(write(Task, *id, fields::TASK_COMPLETED_AT, json!(at)));
             if let Command::CompleteTaskFromPlan { today, .. } = command
-                && task.day.is_some_and(|day| day > *today)
+                && task.planned_on.is_some_and(|day| day > *today)
                 && (task.repeat.is_some()
                     || task.series.and_then(|id| snapshot.task(id)).is_some_and(|source| source.repeat.is_some()))
             {
-                writes.push(write(Task, *id, fields::TASK_DAY, json!(today)));
-                let key = task_sort_key(snapshot, *id, Some(*today), Position::Bottom);
-                writes.push(write(Task, *id, fields::SORT_KEY, json!(key)));
+                writes.extend(task_dates::move_task(snapshot, *id, Some(*today), Position::Bottom, *at)?);
             }
             writes
         }
@@ -388,53 +386,39 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
             writes
         }
 
-        Command::AddMilestone { id, quest_id, title: raw, achieved_on } => {
-            quest_exists(*quest_id)?;
-            vec![
-                write(Milestone, *id, fields::QUEST_ID, json!(quest_id)),
-                write(Milestone, *id, fields::TITLE, json!(title(raw)?)),
-                write(Milestone, *id, fields::MILESTONE_ACHIEVED_ON, json!(achieved_on)),
-                in_workspace(Milestone, *id, snapshot),
-            ]
+        Command::AddChecklistItem { id, task_id, text, position } => {
+            checklist::add(snapshot, *id, *task_id, text, *position)?
         }
-        Command::RenameMilestone { id, title: raw } => {
-            milestone_exists(snapshot, *id)?;
-            vec![write(Milestone, *id, fields::TITLE, json!(title(raw)?))]
-        }
-        Command::SetMilestoneDate { id, achieved_on } => {
-            milestone_exists(snapshot, *id)?;
-            vec![write(Milestone, *id, fields::MILESTONE_ACHIEVED_ON, json!(achieved_on))]
-        }
-        Command::DeleteMilestone { id, at } => {
-            milestone_exists(snapshot, *id)?;
-            vec![write(Milestone, *id, fields::DELETED_AT, json!(at))]
+        Command::RenameChecklistItem { id, text } => checklist::rename(snapshot, *id, text)?,
+        Command::SetChecklistItemDone { id, done } => checklist::set_done(snapshot, *id, *done)?,
+        Command::MoveChecklistItem { id, position } => checklist::move_item(snapshot, *id, *position)?,
+        Command::DeleteChecklistItem { id, at } => checklist::delete(snapshot, *id, *at)?,
+
+        Command::DeletePostponement { id, at } => {
+            snapshot.postponements.iter().find(|p| p.id == *id).ok_or(CommandError::UnknownPostponement(*id))?;
+            vec![write(EntityKind::Postponement, *id, fields::DELETED_AT, json!(at))]
         }
 
         Command::StartFocus { entry_id, task_id, at } => {
             let task = snapshot.task(*task_id).ok_or(CommandError::UnknownTask(*task_id))?;
             let mut writes = stop_running(snapshot, *at, |_| true);
-            writes.extend([
-                write(TimeEntry, *entry_id, fields::ENTRY_TASK_ID, json!(task_id)),
-                write(TimeEntry, *entry_id, fields::QUEST_ID, json!(task.quest_id)),
-                write(TimeEntry, *entry_id, fields::ENTRY_STARTED_AT, json!(at)),
-                write(TimeEntry, *entry_id, fields::ENTRY_ENDED_AT, Value::Null),
-                in_workspace(TimeEntry, *entry_id, snapshot),
-            ]);
+            writes.extend(entry_writes(*entry_id, Some(*task_id), task.quest_id, *at, None));
+            writes.push(in_workspace(TimeEntry, *entry_id, snapshot));
             writes
         }
+        Command::StartOrganizing { entry_id, origin_task_id, at } => {
+            timer::start_organizing(snapshot, *entry_id, *origin_task_id, *at)?
+        }
+        Command::RebookAsOrganizing { entry_id, since, now } => timer::rebook(snapshot, *entry_id, *since, *now)?,
         Command::StopFocus { at } => stop_running(snapshot, *at, |_| true),
         Command::LogTime { entry_id, task_id, started_at, ended_at } => {
             if ended_at <= started_at {
                 return Err(CommandError::InvalidTimeRange);
             }
             let quest_id = task_quest(snapshot, *task_id)?;
-            vec![
-                write(TimeEntry, *entry_id, fields::ENTRY_TASK_ID, json!(task_id)),
-                write(TimeEntry, *entry_id, fields::QUEST_ID, json!(quest_id)),
-                write(TimeEntry, *entry_id, fields::ENTRY_STARTED_AT, json!(started_at)),
-                write(TimeEntry, *entry_id, fields::ENTRY_ENDED_AT, json!(ended_at)),
-                in_workspace(TimeEntry, *entry_id, snapshot),
-            ]
+            let mut writes = entry_writes(*entry_id, *task_id, quest_id, *started_at, Some(*ended_at)).to_vec();
+            writes.push(in_workspace(TimeEntry, *entry_id, snapshot));
+            writes
         }
         Command::LogWork { entry_id, task, started_at, ended_at } => {
             log_work(snapshot, *entry_id, task, *started_at, *ended_at)?
@@ -455,14 +439,6 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
                 writes.push(write(TimeEntry, *id, fields::ENTRY_ENDED_AT, json!(end)));
             }
             writes
-        }
-        Command::AssignEntry { id, task_id } => {
-            entry(snapshot, *id)?;
-            let quest_id = task_quest(snapshot, *task_id)?;
-            vec![
-                write(TimeEntry, *id, fields::ENTRY_TASK_ID, json!(task_id)),
-                write(TimeEntry, *id, fields::QUEST_ID, json!(quest_id)),
-            ]
         }
         Command::DeleteEntry { id, at } => {
             entry(snapshot, *id)?;
@@ -500,9 +476,34 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
             writes.push(write(Workspace, *id, fields::DELETED_AT, Value::Null));
             writes
         }
-        Command::Restore { kind, id } => restore(snapshot, *kind, *id)?,
+        Command::Restore { kind, id } => {
+            snapshot
+                .trash
+                .iter()
+                .find(|t| t.kind == *kind && t.id == *id)
+                .ok_or(CommandError::NotInTrash { kind: *kind, id: *id })?;
+            vec![write(*kind, *id, fields::DELETED_AT, Value::Null)]
+        }
     };
     Ok(writes)
+}
+
+/// The fields of a task session (without its workspace).
+fn entry_writes(
+    id: EntityId,
+    task_id: Option<EntityId>,
+    quest_id: Option<EntityId>,
+    started_at: DateTime<Utc>,
+    ended_at: Option<DateTime<Utc>>,
+) -> [FieldWrite; 5] {
+    use EntityKind::TimeEntry;
+    [
+        write(TimeEntry, id, fields::ENTRY_KIND, json!(EntryKind::Task)),
+        write(TimeEntry, id, fields::TASK_ID, json!(task_id)),
+        write(TimeEntry, id, fields::QUEST_ID, json!(quest_id)),
+        write(TimeEntry, id, fields::ENTRY_STARTED_AT, json!(started_at)),
+        write(TimeEntry, id, fields::ENTRY_ENDED_AT, json!(ended_at)),
+    ]
 }
 
 fn log_work(
@@ -517,37 +518,13 @@ fn log_work(
     }
     let (task_id, quest_id, mut writes) = match task {
         WorkTask::Existing(id) => (*id, task_quest(snapshot, Some(*id))?, Vec::new()),
-        WorkTask::New { id, title, quest_id, day } => {
-            let writes = edit_entry::completed_task(snapshot, *id, title, *quest_id, *day, ended_at)?;
+        WorkTask::New { id, title, quest_id, planned_on } => {
+            let writes = edit_entry::completed_task(snapshot, *id, title, *quest_id, *planned_on, ended_at)?;
             (*id, *quest_id, writes)
         }
     };
-    writes.extend([
-        write(EntityKind::TimeEntry, entry_id, fields::ENTRY_TASK_ID, json!(task_id)),
-        write(EntityKind::TimeEntry, entry_id, fields::QUEST_ID, json!(quest_id)),
-        write(EntityKind::TimeEntry, entry_id, fields::ENTRY_STARTED_AT, json!(started_at)),
-        write(EntityKind::TimeEntry, entry_id, fields::ENTRY_ENDED_AT, json!(ended_at)),
-        in_workspace(EntityKind::TimeEntry, entry_id, snapshot),
-    ]);
-    Ok(writes)
-}
-
-fn milestone_exists(snapshot: &Snapshot, id: EntityId) -> Result<(), CommandError> {
-    snapshot.milestones.iter().any(|m| m.id == id).then_some(()).ok_or(CommandError::UnknownMilestone(id))
-}
-
-fn restore(snapshot: &Snapshot, kind: EntityKind, id: EntityId) -> Result<Vec<FieldWrite>, CommandError> {
-    let trashed =
-        snapshot.trash.iter().find(|t| t.kind == kind && t.id == id).ok_or(CommandError::NotInTrash { kind, id })?;
-    let mut writes = vec![write(kind, id, fields::DELETED_AT, Value::Null)];
-    if kind == EntityKind::Quest {
-        // Milestones are not materialised while deleted, so find them through the trash: the
-        // ones deleted together with the quest share its timestamp.
-        let deleted_with_quest = snapshot.trash.iter().filter(|t| {
-            t.kind == EntityKind::Milestone && t.quest_id == Some(id) && t.deleted_at == trashed.deleted_at
-        });
-        writes.extend(deleted_with_quest.map(|m| write(EntityKind::Milestone, m.id, fields::DELETED_AT, Value::Null)));
-    }
+    writes.extend(entry_writes(entry_id, Some(task_id), quest_id, started_at, Some(ended_at)));
+    writes.push(in_workspace(EntityKind::TimeEntry, entry_id, snapshot));
     Ok(writes)
 }
 
@@ -583,15 +560,14 @@ fn stop_running(snapshot: &Snapshot, at: DateTime<Utc>, which: impl Fn(&RunningF
         .collect()
 }
 
-fn task_sort_key(snapshot: &Snapshot, moving: EntityId, day: Option<NaiveDate>, position: Position) -> String {
-    let siblings: Vec<&str> =
-        snapshot.tasks.iter().filter(|t| t.day == day && t.id != moving).map(|t| t.sort_key.as_str()).collect();
+/// A key at `position` among `siblings` (sorted keys, the moving record excluded); `anchor` is
+/// the key of `Position::Before`'s record if it is among them.
+fn key_at(siblings: &[&str], position: Position, anchor: Option<&str>) -> String {
     match position {
         Position::Top => sort_key_between(None, siblings.first().copied()),
         Position::Bottom => sort_key_between(siblings.last().copied(), None),
-        Position::Before(anchor) => {
-            let anchor_key = snapshot.task(anchor).filter(|t| t.day == day).map(|t| t.sort_key.as_str());
-            let Some(anchor_key) = anchor_key else {
+        Position::Before(_) => {
+            let Some(anchor_key) = anchor else {
                 return sort_key_between(siblings.last().copied(), None);
             };
             let previous = siblings.iter().copied().rfind(|key| *key < anchor_key);
@@ -600,7 +576,25 @@ fn task_sort_key(snapshot: &Snapshot, moving: EntityId, day: Option<NaiveDate>, 
     }
 }
 
+fn task_sort_key(snapshot: &Snapshot, moving: EntityId, day: Option<NaiveDate>, position: Position) -> String {
+    let siblings: Vec<&str> =
+        snapshot.tasks.iter().filter(|t| t.planned_on == day && t.id != moving).map(|t| t.sort_key.as_str()).collect();
+    let anchor = match position {
+        Position::Before(anchor) => {
+            snapshot.task(anchor).filter(|t| t.planned_on == day && t.id != moving).map(|t| t.sort_key.as_str())
+        }
+        Position::Top | Position::Bottom => None,
+    };
+    key_at(&siblings, position, anchor)
+}
+
+#[cfg(test)]
+mod checklist_tests;
+#[cfg(test)]
+mod dates_tests;
 #[cfg(test)]
 mod log_work_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod timer_tests;

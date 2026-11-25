@@ -6,7 +6,6 @@
 pub enum AppView {
     Home,
     Plan,
-    Calendar,
     Focus,
     Quests,
     Review,
@@ -17,12 +16,8 @@ pub enum AppView {
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum SearchMode {
     Commands,
-    /// A day (or the backlog) for a task.
+    /// A plan date (or none) for a task.
     MoveTo {
-        task_id: String,
-    },
-    /// A time today for a task's block.
-    ScheduleAt {
         task_id: String,
     },
     /// The other workspaces, then "Manage workspaces…".
@@ -52,7 +47,6 @@ pub enum SearchToken {
     Account,
     Choose { mode: SearchMode },
     MoveTask { task_id: String, day: Option<String> },
-    Schedule { task_id: String, day: String, start_minute: u32 },
     DeleteTask { task_id: String },
     LogWork,
     SwitchWorkspace { workspace_id: String },
@@ -92,10 +86,10 @@ pub enum SearchOutcome {
     /// Switch between light and dark.
     ToggleTheme,
     Account,
-    /// Open the calendar's Log work (with `log_work_now`).
+    /// Open Log work (with `log_work_now`).
     LogWork,
     /// Open "Manage workspaces".
     ManageWorkspaces,
-    /// Close the search: a move, schedule, delete or workspace switch is done (a delete shows its undo toast).
+    /// Close the search: a move, delete or workspace switch is done (a delete shows its undo toast).
     Done,
 }

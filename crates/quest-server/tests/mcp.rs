@@ -32,8 +32,8 @@ impl LlmProvider for FakeProvider {
         let value = json!({
             "new_quests": [],
             "tasks": [{ "title": "Buy milk", "description": "", "quest_id": null, "new_quest_key": null,
-                "quest_confidence": "high", "day": tomorrow.to_string(), "start_time": null,
-                "duration_minutes": null, "repeat": null }],
+                "quest_confidence": "high", "planned_on": tomorrow.to_string(), "due_on": null,
+                "repeat": null }],
             "work_logs": [],
         });
         Box::pin(async move { Ok(Completion { value, usage: None }) })
@@ -134,6 +134,7 @@ async fn tools_are_listed_with_schemas_and_honest_annotations() {
     for name in [
         "list_tasks",
         "get_task",
+        "get_checklist",
         "list_quests",
         "get_quest",
         "search",
@@ -179,6 +180,7 @@ async fn read_only_access_lists_and_calls_only_reading_tools() {
     let mut names: Vec<&str> = tools.iter().map(|tool| tool.name.as_ref()).collect();
     names.sort_unstable();
     let mut expected = vec![
+        "get_checklist",
         "get_quest",
         "get_running_timer",
         "get_task",
@@ -191,7 +193,7 @@ async fn read_only_access_lists_and_calls_only_reading_tools() {
     ];
     expected.sort_unstable();
     assert_eq!(names, expected);
-    assert!(s.ok("list_tasks", json!({ "someday": true })).await["tasks"].as_array().unwrap().is_empty());
+    assert!(s.ok("list_tasks", json!({ "unplanned": true })).await["tasks"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -203,15 +205,21 @@ async fn task_tools() {
     let created = s
         .ok(
             "create_task",
-            json!({ "title": "Write offer", "quest_id": quest_id, "block": { "start": "09:00", "minutes": 90 } }),
+            json!({ "title": "Write offer", "quest_id": quest_id, "planned_on": today(), "due_on": "2099-01-31" }),
         )
         .await;
     let task = &created["task"];
     let id = task["id"].as_str().unwrap().to_owned();
-    assert_eq!((task["day"].as_str(), task["block"]["end"].as_str()), (Some(today().as_str()), Some("10:30")));
+    assert_eq!((task["planned_on"].as_str(), task["due_on"].as_str()), (Some(today().as_str()), Some("2099-01-31")));
     assert_eq!(task["quest"]["title"], "Website relaunch");
     assert_eq!(created["time_zone"], ZONE);
     s.refuses("create_task", json!({ "title": " " }), "empty_title").await;
+    s.refuses(
+        "create_task",
+        json!({ "title": "x", "planned_on": "2099-02-02", "due_on": "2099-02-01" }),
+        "invalid_input",
+    )
+    .await;
 
     let listed = s.ok("list_tasks", json!({})).await;
     assert_eq!(listed["tasks"][0]["id"], id.as_str());
@@ -227,9 +235,13 @@ async fn task_tools() {
     assert_eq!(updated["task"]["repeat"], "Every week");
     s.refuses("update_task", json!({ "task_id": id }), "invalid_input").await;
 
-    let moved = s.ok("move_task", json!({ "task_id": id, "day": "someday" })).await;
-    assert!(moved["task"]["day"].is_null());
-    s.refuses("move_task", json!({ "task_id": id, "day": "24.12." }), "invalid_input").await;
+    let moved = s.ok("move_task", json!({ "task_id": id, "planned_on": "2099-02-15" })).await;
+    assert_eq!(moved["task"]["due_on"], "2099-02-15", "the deadline moves along");
+    let unplanned = s.ok("move_task", json!({ "task_id": id, "planned_on": "none" })).await;
+    assert!(unplanned["task"]["planned_on"].is_null());
+    s.refuses("move_task", json!({ "task_id": id, "planned_on": "24.12." }), "invalid_input").await;
+    let due = s.ok("update_task", json!({ "task_id": id, "due_on": "none" })).await;
+    assert!(due["task"]["due_on"].is_null());
 
     let done = s.ok("complete_task", json!({ "task_id": id })).await;
     assert_eq!(done["task"]["done"], true);
@@ -253,39 +265,21 @@ async fn task_tools() {
 }
 
 #[tokio::test]
-async fn quest_and_milestone_tools() {
+async fn quest_tools() {
     let s = Setup::new(false).await;
     let quest = s.ok("create_quest", json!({ "title": "Marathon", "color": "teal" })).await;
     let quest_id = quest["quest"]["id"].as_str().unwrap().to_owned();
     assert_eq!(quest["quest"]["color"], "teal");
     s.refuses("create_quest", json!({ "title": "x", "color": "beige" }), "invalid_input").await;
 
-    let updated = s.ok("update_quest", json!({ "quest_id": quest_id, "description": "Sub 4h" })).await;
-    assert_eq!(updated["quest"]["description"], "Sub 4h");
+    let updated = s.ok("update_quest", json!({ "quest_id": quest_id, "title": "Marathon 2027" })).await;
+    assert_eq!(updated["quest"]["title"], "Marathon 2027");
     s.refuses("update_quest", json!({ "quest_id": quest_id, "title": "" }), "empty_title").await;
 
-    let milestone = s.ok("add_milestone", json!({ "quest_id": quest_id, "title": "First 10 km" })).await;
-    let milestone_id = milestone["milestone"]["id"].as_str().unwrap().to_owned();
-    assert_eq!(milestone["milestone"]["achieved_on"], today());
-    s.refuses(
-        "add_milestone",
-        json!({ "quest_id": uuid::Uuid::now_v7().to_string(), "title": "x" }),
-        "quest_not_found",
-    )
-    .await;
-
-    let renamed = s.ok("update_milestone", json!({ "milestone_id": milestone_id, "achieved_on": "2026-01-02" })).await;
-    assert_eq!(renamed["milestone"]["achieved_on"], "2026-01-02");
-    s.refuses("update_milestone", json!({ "milestone_id": milestone_id, "achieved_on": "2.1.2026" }), "invalid_input")
-        .await;
-
+    s.ok("create_task", json!({ "title": "Long run", "quest_id": quest_id })).await;
     let detail = s.ok("get_quest", json!({ "quest_id": quest_id })).await;
-    assert_eq!(detail["milestones"][0]["title"], "First 10 km");
+    assert_eq!(detail["tasks"][0]["title"], "Long run");
     s.refuses("get_quest", json!({ "quest_id": uuid::Uuid::now_v7().to_string() }), "quest_not_found").await;
-
-    let archived = s.ok("archive_milestone", json!({ "milestone_id": milestone_id })).await;
-    assert_eq!(archived["archived"]["kind"], "milestone");
-    s.refuses("archive_milestone", json!({ "milestone_id": milestone_id }), "milestone_not_found").await;
 
     let completed = s.ok("complete_quest", json!({ "quest_id": quest_id })).await;
     assert_eq!(completed["quest"]["status"], "completed");
@@ -294,6 +288,39 @@ async fn quest_and_milestone_tools() {
     assert!(s.ok("list_quests", json!({})).await["quests"].as_array().unwrap().is_empty());
     assert_eq!(s.ok("list_quests", json!({ "status": "completed" })).await["quests"][0]["id"], quest_id.as_str());
     s.refuses("list_quests", json!({ "status": "paused" }), "invalid_input").await;
+}
+
+#[tokio::test]
+async fn checklist_tools() {
+    let s = Setup::new(false).await;
+    let task = s.ok("create_task", json!({ "title": "Pack" })).await;
+    let task_id = task["task"]["id"].as_str().unwrap().to_owned();
+
+    assert!(s.ok("get_checklist", json!({ "task_id": task_id })).await["items"].as_array().unwrap().is_empty());
+    s.refuses("get_checklist", json!({ "task_id": uuid::Uuid::now_v7().to_string() }), "task_not_found").await;
+
+    s.ok("add_checklist_item", json!({ "task_id": task_id, "text": "Passport" })).await;
+    let added = s.ok("add_checklist_item", json!({ "task_id": task_id, "text": "Charger" })).await;
+    assert_eq!(added["task"]["title"], "Pack");
+    let item = added["items"][0]["id"].as_str().unwrap().to_owned();
+    s.refuses("add_checklist_item", json!({ "task_id": task_id, "text": " " }), "empty_title").await;
+
+    let checked = s.ok("check_checklist_item", json!({ "item_id": item })).await;
+    assert_eq!(checked["items"][0]["done"], true);
+    let opened = s.ok("check_checklist_item", json!({ "item_id": item, "done": false })).await;
+    assert_eq!(opened["items"][0]["done"], false);
+    let unknown = uuid::Uuid::now_v7().to_string();
+    s.refuses("check_checklist_item", json!({ "item_id": unknown }), "checklist_item_not_found").await;
+
+    let renamed = s.ok("rename_checklist_item", json!({ "item_id": item, "text": "ID card" })).await;
+    assert_eq!(renamed["items"][0]["text"], "ID card");
+    s.refuses("rename_checklist_item", json!({ "item_id": "x", "text": "y" }), "invalid_input").await;
+
+    let deleted = s.ok("delete_checklist_item", json!({ "item_id": item })).await;
+    assert_eq!(deleted["items"][0]["text"], "Charger");
+    s.refuses("delete_checklist_item", json!({ "item_id": item }), "checklist_item_not_found").await;
+    assert_eq!(s.ok("restore", json!({ "kind": "checklist_item", "id": item })).await["restored"], "checklist_item");
+    assert_eq!(s.ok("get_checklist", json!({ "task_id": task_id })).await["items"].as_array().unwrap().len(), 2);
 }
 
 #[tokio::test]
@@ -306,12 +333,19 @@ async fn time_tools() {
     s.refuses("get_running_timer", json!({ "time_zone": "Moon/Base" }), "invalid_input").await;
 
     let started = s.ok("start_timer", json!({ "task_id": task_id })).await;
-    assert_eq!(started["entry"]["running"], true);
+    assert_eq!((&started["entry"]["running"], &started["entry"]["kind"]), (&json!(true), &json!("task")));
     s.refuses("start_timer", json!({ "task_id": uuid::Uuid::now_v7().to_string() }), "task_not_found").await;
     assert_eq!(s.ok("get_running_timer", json!({})).await["running"]["task"]["id"], task_id.as_str());
 
+    let organizing = s.ok("start_timer", json!({ "organizing": true, "task_id": task_id })).await;
+    assert_eq!(organizing["entry"]["kind"], "organizing");
+    assert_eq!(organizing["entry"]["origin_task"]["id"], task_id.as_str());
+    s.refuses("start_timer", json!({}), "invalid_input").await;
+    let running = s.ok("get_running_timer", json!({})).await;
+    assert_eq!((&running["running"]["kind"], &running["running"]["task"]), (&json!("organizing"), &Value::Null));
+
     let stopped = s.ok("stop_timer", json!({})).await;
-    assert_eq!(stopped["stopped"]["running"], false);
+    assert_eq!((&stopped["stopped"]["running"], &stopped["stopped"]["kind"]), (&json!(false), &json!("organizing")));
     assert!(s.ok("stop_timer", json!({})).await["stopped"].is_null());
     s.refuses("stop_timer", json!({ "time_zone": "Nowhere" }), "invalid_input").await;
 
@@ -329,11 +363,12 @@ async fn time_tools() {
     .await;
 
     let entries = s.ok("list_time_entries", json!({ "from": yesterday, "to": today() })).await;
-    assert_eq!(entries["entries"].as_array().unwrap().len(), 2);
+    assert_eq!(entries["entries"].as_array().unwrap().len(), 3);
     s.refuses("list_time_entries", json!({ "from": today(), "to": yesterday }), "invalid_input").await;
 
     let review = s.ok("get_week_review", json!({ "week_of": yesterday })).await;
     assert!(review["other_minutes"].as_i64().unwrap() >= 120, "{review}");
+    assert!(review["organizing_minutes"].is_i64(), "{review}");
     s.refuses("get_week_review", json!({ "week_of": "last week" }), "invalid_input").await;
 }
 
@@ -343,7 +378,7 @@ async fn capture_text_proposes_and_applies_all_or_nothing() {
     let proposal = s.ok("capture_text", json!({ "text": "Tomorrow buy milk", "language": "en-US" })).await;
     assert_eq!(proposal["applied"], false);
     assert_eq!(proposal["proposal"]["tasks"][0]["title"], "Buy milk");
-    assert!(s.ok("list_tasks", json!({ "someday": false })).await["tasks"].as_array().unwrap().is_empty());
+    assert!(s.ok("list_tasks", json!({ "unplanned": false })).await["tasks"].as_array().unwrap().is_empty());
 
     let applied = s.ok("capture_text", json!({ "text": "Tomorrow buy milk", "apply": true })).await;
     assert_eq!(applied["applied"], true);
@@ -384,8 +419,9 @@ async fn tools_work_in_the_default_workspace_unless_given_another() {
     let titles = |listed: Value| -> Vec<String> {
         listed["tasks"].as_array().unwrap().iter().map(|task| task["title"].as_str().unwrap().to_owned()).collect()
     };
-    assert_eq!(titles(s.ok("list_tasks", json!({})).await), ["Water plants"]);
-    assert_eq!(titles(s.ok("list_tasks", json!({ "workspace": work })).await), ["Ship release"]);
+    let unplanned = |workspace: Option<&str>| json!({ "unplanned": true, "workspace": workspace });
+    assert_eq!(titles(s.ok("list_tasks", unplanned(None)).await), ["Water plants"]);
+    assert_eq!(titles(s.ok("list_tasks", unplanned(Some(&work))).await), ["Ship release"]);
     s.refuses("get_task", json!({ "task_id": release }), "task_not_found").await;
     s.refuses("complete_task", json!({ "task_id": private, "workspace": "Work" }), "task_not_found").await;
     assert!(s.ok("search", json!({ "query": "release" })).await["tasks"].as_array().unwrap().is_empty());
@@ -466,9 +502,9 @@ async fn changes_reach_other_devices_live() {
         .push(vec![
             pushed,
             common::change(pushed_id, fields::SORT_KEY, json!("zz"), 1),
-            common::change(pushed_id, fields::TASK_DAY, json!(null), 1),
+            common::change(pushed_id, fields::TASK_PLANNED_ON, json!(null), 1),
         ])
         .await;
-    let backlog = s.ok("list_tasks", json!({ "someday": true })).await;
-    assert_eq!(backlog["tasks"][0]["title"], "Pushed");
+    let unplanned = s.ok("list_tasks", json!({ "unplanned": true })).await;
+    assert!(unplanned["tasks"].as_array().unwrap().iter().any(|task| task["title"] == "Pushed"), "{unplanned}");
 }

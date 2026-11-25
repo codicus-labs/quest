@@ -4,20 +4,22 @@
 //! rule: the entry editor has no quest field, the session counts towards its task's quest.
 
 use chrono::{Duration, NaiveDate, Timelike};
-use quest_domain::{Command, EntityId, Snapshot, Task, TimeEntry, WorkTask};
+use quest_domain::{Command, EntityId, EntryKind, Snapshot, Task, TimeEntry, WorkTask};
 use quest_view::entry_editor::{self, EndFields};
 use quest_view::log_work::{self, FieldError};
 use quest_view::{format, undo::Deletable};
 
-use crate::calendar_types::{
-    EntryCheck, EntryDraft, FormError, FormField, LogWorkCheck, LogWorkDraft, TaskChoices, TaskOption,
-};
-use crate::day_grid::DAY_MINUTES;
 use crate::error::MobileError;
 use crate::home::{chip, quest_options};
 use crate::ids::{iso_day, parse_id, parse_iso_day};
 use crate::task_types::DayValue;
 use crate::time::Now;
+use crate::work_types::{
+    EntryCheck, EntryDraft, FormError, FormField, LogWorkCheck, LogWorkDraft, SessionKind, TaskChoices, TaskOption,
+};
+
+/// Minutes in a day: the form's times are clock times below it.
+const DAY_MINUTES: u32 = 24 * 60;
 
 /// Shown for a duration while a field is wrong.
 const NO_DURATION: &str = "–";
@@ -63,20 +65,6 @@ pub(crate) fn log_work_now(now: Now) -> LogWorkDraft {
         day: iso_day(local.date()),
         start_minute: end.saturating_sub(15),
         end_minute: end,
-    }
-}
-
-/// A drop of time to log: the span's day and times. The form's times are clock times, so a span
-/// to midnight ends at 23:59.
-pub(crate) fn log_work_for(day: NaiveDate, start_minute: u32, end_minute: u32) -> LogWorkDraft {
-    let end_minute = end_minute.min(DAY_MINUTES as u32 - 1);
-    LogWorkDraft {
-        task_id: None,
-        new_title: String::new(),
-        quest_id: None,
-        day: iso_day(day),
-        start_minute,
-        end_minute,
     }
 }
 
@@ -156,6 +144,7 @@ pub(crate) fn check_entry(snapshot: &Snapshot, draft: &EntryDraft, now: Now) -> 
     let times = entry_times(entry, draft, now);
     let quest = task.and_then(|t| t.quest_id).and_then(|q| snapshot.quest(q));
     Ok(EntryCheck {
+        kind: session_kind(entry.kind),
         running: entry.is_running(),
         task_title: task.map(|t| t.title.clone()),
         quest: quest.map(chip),
@@ -173,7 +162,7 @@ pub(crate) fn check_entry(snapshot: &Snapshot, draft: &EntryDraft, now: Now) -> 
 }
 
 /// The `EditEntry` the draft saves: its times, its task and that task's quest (none without a
-/// task); or the field to correct.
+/// task; an organizing session given a task becomes task work); or the field to correct.
 pub(crate) fn decide_entry(snapshot: &Snapshot, draft: &EntryDraft, now: Now) -> Result<Command, MobileError> {
     let entry = entry(snapshot, &draft.entry_id)?;
     let task = picked_task(snapshot, draft.task_id.as_deref())?.map(|t| t.id);
@@ -191,10 +180,11 @@ pub(crate) fn decide_entry(snapshot: &Snapshot, draft: &EntryDraft, now: Now) ->
     })
 }
 
-/// "Deleted “…”" names the session's task, else "Session" (desktop `title_of`).
+/// "Deleted “…”" names the session's task, else "Organizing" or "Session" (desktop `title_of`).
 pub(crate) fn delete_entry(snapshot: &Snapshot, entry_id: &str) -> Result<(Deletable, String), MobileError> {
     let entry = entry(snapshot, entry_id)?;
-    let title = entry.task_id.and_then(|t| snapshot.task(t)).map_or_else(|| "Session".to_owned(), |t| t.title.clone());
+    let untitled = if entry.kind == EntryKind::Organizing { "Organizing" } else { "Session" };
+    let title = entry.task_id.and_then(|t| snapshot.task(t)).map_or_else(|| untitled.to_owned(), |t| t.title.clone());
     Ok((Deletable::Entry(entry.id), title))
 }
 
@@ -239,11 +229,18 @@ fn chosen_quest(snapshot: &Snapshot, quest_id: Option<&str>) -> Result<Option<En
 
 /// "14:50"; empty (so it fails as the desktop's field would) past the day's last minute.
 fn clock_text(minute: u32) -> String {
-    if minute < DAY_MINUTES as u32 { format::hh_mm(minute) } else { String::new() }
+    if minute < DAY_MINUTES { format::hh_mm(minute) } else { String::new() }
 }
 
 fn clock_label(minute: u32) -> String {
-    format::hh_mm(minute.min(DAY_MINUTES as u32 - 1))
+    format::hh_mm(minute.min(DAY_MINUTES - 1))
+}
+
+pub(crate) fn session_kind(kind: EntryKind) -> SessionKind {
+    match kind {
+        EntryKind::Task => SessionKind::Task,
+        EntryKind::Organizing => SessionKind::Organizing,
+    }
 }
 
 fn span_duration(start: u32, end: u32) -> String {

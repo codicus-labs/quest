@@ -15,7 +15,6 @@ pub enum PickFor {
     TaskModal,
     /// Log work's new task.
     LogWork,
-    Entry,
     /// A task in the AI capture's proposal.
     CaptureTask(TempKey),
     /// Home's new quest work.
@@ -30,7 +29,6 @@ impl PickFor {
         match self {
             PickFor::TaskModal => "task-modal-quest".into(),
             PickFor::LogWork => "log-work-quest".into(),
-            PickFor::Entry => "entry-editor-quest".into(),
             PickFor::CaptureTask(key) => format!("capture-item-{}-quest", key.0),
             PickFor::HomeAdd => "home-add-quest".into(),
             PickFor::Focus(_) => "focus-quest".into(),
@@ -152,7 +150,6 @@ impl State {
         match picker.target {
             PickFor::TaskModal => self.assign_task_quest(quest),
             PickFor::LogWork => self.log_work.quest = quest,
-            PickFor::Entry => self.entry_form.quest = quest,
             PickFor::CaptureTask(key) => {
                 let quest = match pick {
                     Pick::NoQuest => None,
@@ -185,7 +182,6 @@ impl State {
                 quest(task.quest_id)
             }
             PickFor::LogWork => quest(self.log_work.quest),
-            PickFor::Entry => quest(self.entry_form.quest),
             PickFor::CaptureTask(key) => {
                 let CaptureStep::Review(review) = &self.capture.step else { return None };
                 let task = review.draft.proposal.tasks.iter().find(|t| &t.key == key)?;
@@ -211,13 +207,6 @@ impl State {
         };
         let mut rows: Vec<PickRow> =
             quest_picker::recent_quests(&self.snap, self.now).into_iter().map(quest_row).collect();
-        // A session may keep a quest that is no longer active.
-        if let PickFor::Entry = target
-            && let Some(quest) = self.entry_form.quest.and_then(|id| self.snap.quest(id))
-            && !rows.iter().any(|row| row.pick == Pick::Quest(quest.id))
-        {
-            rows.insert(0, quest_row(quest));
-        }
         if let (PickFor::CaptureTask(_), CaptureStep::Review(review)) = (target, &self.capture.step) {
             let colors = review.draft.new_quest_colors(&self.snap);
             for quest in review.draft.proposal.quests.iter().filter(|q| review.draft.is_selected(&q.key)) {

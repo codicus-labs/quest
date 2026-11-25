@@ -26,16 +26,6 @@ pub struct HueOption {
     pub selected: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct MilestoneRow {
-    pub id: String,
-    pub title: String,
-    /// "Nov 24, 2026".
-    pub date_label: String,
-    /// "Show, Nov 24, 2026", for TalkBack.
-    pub a11y_label: String,
-}
-
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct QuestCard {
     pub id: String,
@@ -74,7 +64,7 @@ pub struct QuestsData {
 
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct QuestTaskGroup {
-    /// "Today", "Tomorrow", "Yesterday", "Mon, Nov 30", "Backlog" or "Done".
+    /// "Today", "Tomorrow", "Yesterday", "Mon, Nov 30", "Not planned" or "Done".
     pub label: String,
     pub tasks: Vec<HomeTask>,
 }
@@ -83,8 +73,6 @@ pub struct QuestTaskGroup {
 pub struct QuestDetail {
     pub id: String,
     pub title: String,
-    /// Plain text, possibly several lines; empty when there is none.
-    pub description: String,
     pub color_hex: String,
     /// All nine colours, the quest's selected.
     pub hues: Vec<HueOption>,
@@ -101,10 +89,8 @@ pub struct QuestDetail {
     pub total_hours: String,
     pub open_count: u32,
     pub done_count: u32,
-    /// Open tasks by day, then the backlog, then what's done.
+    /// Open tasks by plan date, then the unplanned ones, then what's done.
     pub task_groups: Vec<QuestTaskGroup>,
-    /// Newest first, to read only; empty: the page has no milestones section.
-    pub milestones: Vec<MilestoneRow>,
     pub toast: Option<UndoToast>,
 }
 
@@ -113,7 +99,7 @@ pub struct QuestDetail {
 pub enum TrashKind {
     Quest,
     Task,
-    Milestone,
+    ChecklistItem,
     Session,
 }
 
@@ -130,7 +116,7 @@ pub struct ArchiveItem {
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct ArchiveGroup {
-    /// "Deleted quests", "Deleted tasks", "Deleted milestones", "Deleted sessions".
+    /// "Deleted quests", "Deleted tasks", "Deleted checklist items", "Deleted sessions".
     pub title: String,
     /// Newest first.
     pub items: Vec<ArchiveItem>,

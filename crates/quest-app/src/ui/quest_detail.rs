@@ -1,8 +1,8 @@
 //! A quest's page: rename it inline, change its colour, complete, reopen or delete it; its hours this
-//! week and in total; its tasks (open ones by day, then the backlog, then what's done) with a
-//! field to add one; and its milestones, if it has any, to read only.
+//! week and in total; and its tasks (open ones by plan date, then the unplanned ones, then
+//! what's done) with a field to add one.
 
-use quest_domain::{Command, EntityId, Milestone, Position, Quest, QuestColor, QuestStatus};
+use quest_domain::{Command, EntityId, Position, Quest, QuestColor, QuestStatus};
 use rune::{
     ClipboardContent, Color, Cursor, El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, el, row, spacer, text,
     text_input,
@@ -51,10 +51,7 @@ pub fn view(s: &State, id: EntityId, p: &Pal) -> El {
             })
             .h(32.0),
         );
-    let mut body = row().w_full().grow(1.0).min_h(0.0).gap(28.0).child(tasks(s, quest, p).grow(1.3).min_w(0.0));
-    if let Some(milestones) = milestones(s, quest, p) {
-        body = body.child(milestones.grow(1.0).min_w(0.0));
-    }
+    let body = row().w_full().grow(1.0).min_h(0.0).gap(28.0).child(tasks(s, quest, p).grow(1.3).min_w(0.0));
     page.child(top).child(heading(s, quest, p)).child(body)
 }
 
@@ -248,55 +245,14 @@ fn add_task(s: &mut State, quest: EntityId) {
         AddAt::Top => Position::Top,
         AddAt::Bottom => Position::Bottom,
     };
-    let day = (!s.quest_add_backlog).then(|| s.today());
-    s.dispatch(Command::CreateTask { id: EntityId::new(), title, quest_id: Some(quest), day, position });
+    let planned_on = (!s.quest_add_backlog).then(|| s.today());
+    s.dispatch(Command::CreateTask {
+        id: EntityId::new(),
+        title,
+        quest_id: Some(quest),
+        planned_on,
+        due_on: None,
+        position,
+    });
     s.quest_add.clear();
-}
-
-/// The quest's milestones, newest first, to read only; none when it has none.
-fn milestones(s: &State, quest: &Quest, p: &Pal) -> Option<El> {
-    let all: Vec<&Milestone> = s.snap.milestones_of(quest.id).collect();
-    if all.is_empty() {
-        return None;
-    }
-    let mut list = col().key("quest-milestones").w_full().gap(8.0).pb(24.0);
-    for milestone in all.into_iter().rev() {
-        list = list.child(milestone_row(milestone, p));
-    }
-    Some(
-        col()
-            .h_full()
-            .min_h(0.0)
-            .gap(14.0)
-            .child(parts::caps("Milestones", p))
-            .child(list.scroll(ScrollSpec { stick_bottom: false }).grow(1.0).min_h(0.0)),
-    )
-}
-
-fn milestone_row(milestone: &Milestone, p: &Pal) -> El {
-    let mid = milestone.id;
-    let date = milestone.achieved_on.format("%b %-d, %Y").to_string();
-    row()
-        .key(format!("milestone-{mid}"))
-        .label(format!("{}, {date}", milestone.title))
-        .w_full()
-        .min_h(48.0)
-        .px(14.0)
-        .py(8.0)
-        .gap(12.0)
-        .center_y()
-        .radius(10.0)
-        .fill(p.card)
-        .border(1.0, p.border)
-        .child(text("◆").font(ty::SMALL).color(p.accent))
-        .child(
-            text(milestone.title.clone())
-                .key(format!("milestone-title-{mid}"))
-                .font(ty::BODY_MEDIUM)
-                .color(p.text)
-                .wrap()
-                .grow(1.0)
-                .min_w(0.0),
-        )
-        .child(text(date).key(format!("milestone-date-{mid}")).font(ty::SMALL).color(p.muted))
 }

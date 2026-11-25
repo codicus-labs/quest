@@ -1,10 +1,10 @@
 //! Scores a validated proposal against a case's expectation: one point per check (item found, each
 //! expected field right, no extra items, clean titles). Pure.
 
-use chrono::{NaiveTime, Weekday};
+use chrono::{NaiveDate, NaiveTime, Weekday};
 use quest_protocol::{CaptureProposal, ProposedRepeat, ProposedTask, ProposedWork, QuestRef, WorkTarget};
 
-use crate::cases::{EvalSet, Expect, ExpectRepeat, ExpectTask, ExpectWork, ExpectWorkTask};
+use crate::cases::{EvalSet, Expect, ExpectRepeat, ExpectTask, ExpectWork, ExpectWorkTask, OneOf};
 
 /// Dictation artefacts that must not end up in a title.
 const FILLER_WORDS: [&str; 6] = ["ähm", "äh", "halt", "irgendwie", "also", "ne"];
@@ -82,7 +82,7 @@ fn fail_all(score: &mut Score, checks: u32, failure: String) {
 }
 
 fn task_checks(expected: &ExpectTask) -> u32 {
-    [expected.day.is_some(), expected.quest.is_some(), expected.block.is_some(), expected.repeat.is_some()]
+    [expected.planned_on.is_some(), expected.due_on.is_some(), expected.quest.is_some(), expected.repeat.is_some()]
         .into_iter()
         .map(u32::from)
         .sum()
@@ -90,13 +90,13 @@ fn task_checks(expected: &ExpectTask) -> u32 {
 
 fn check_task(score: &mut Score, expected: &ExpectTask, task: &ProposedTask, proposal: &CaptureProposal) {
     let title = &task.title;
-    if let Some(day) = &expected.day {
-        let ok = match (day, task.day) {
-            (None, None) => true,
-            (Some(day), Some(actual)) => day.accepts(&actual),
-            _ => false,
-        };
-        score.check(ok, || format!("{title:?}: day {:?}, expected {day:?}", task.day));
+    if let Some(planned_on) = &expected.planned_on {
+        let ok = date_matches(planned_on, task.planned_on);
+        score.check(ok, || format!("{title:?}: planned_on {:?}, expected {planned_on:?}", task.planned_on));
+    }
+    if let Some(due_on) = &expected.due_on {
+        let ok = date_matches(due_on, task.due_on);
+        score.check(ok, || format!("{title:?}: due_on {:?}, expected {due_on:?}", task.due_on));
     }
     if let Some(quest) = &expected.quest {
         let ok = match (quest.as_deref(), &task.quest) {
@@ -107,14 +107,6 @@ fn check_task(score: &mut Score, expected: &ExpectTask, task: &ProposedTask, pro
         };
         score.check(ok, || format!("{title:?}: quest {:?}, expected {quest:?}", task.quest));
     }
-    if let Some(block) = &expected.block {
-        let ok = match (block, task.block) {
-            (None, None) => true,
-            (Some(block), Some(actual)) => time(&block.start) == Some(actual.start) && block.minutes == actual.minutes,
-            _ => false,
-        };
-        score.check(ok, || format!("{title:?}: block {:?}, expected {block:?}", task.block));
-    }
     if let Some(repeat) = &expected.repeat {
         let ok = match (repeat, &task.repeat) {
             (None, None) => true,
@@ -122,6 +114,14 @@ fn check_task(score: &mut Score, expected: &ExpectTask, task: &ProposedTask, pro
             _ => false,
         };
         score.check(ok, || format!("{title:?}: repeat {:?}, expected {repeat:?}", task.repeat));
+    }
+}
+
+fn date_matches(expected: &Option<OneOf<NaiveDate>>, actual: Option<NaiveDate>) -> bool {
+    match (expected, actual) {
+        (None, None) => true,
+        (Some(expected), Some(actual)) => expected.accepts(&actual),
+        _ => false,
     }
 }
 

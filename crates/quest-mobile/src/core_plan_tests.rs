@@ -93,7 +93,7 @@ fn a_drop_moves_a_card_to_another_day_before_a_card_or_to_the_end() {
     core.plan_move_task(a.clone(), Some("2026-11-26".into()), None, now()).unwrap();
     assert_eq!(titles(&day(&plan_days(&core), "2026-11-26").other), ["B", "C", "A"]);
     core.plan_move_task(a.clone(), None, None, now()).unwrap();
-    assert!(!titles(&day(&plan_days(&core), "2026-11-26").other).contains(&"A"), "to the backlog");
+    assert!(!titles(&day(&plan_days(&core), "2026-11-26").other).contains(&"A"), "unplanned");
     assert!(core.task_detail(a, now()).is_ok());
 }
 

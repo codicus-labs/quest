@@ -59,8 +59,7 @@ pub struct Profiles {
 }
 
 impl Profiles {
-    /// Opens the active profile (the guest if none is signed in). Adopts the database of earlier
-    /// versions as the guest store on first use. `on_change` is passed to every store opened.
+    /// Opens the active profile (the guest if none is signed in). `on_change` is passed to every store opened.
     pub fn open(
         config: ProfilesConfig,
         on_change: impl Fn() + Send + Sync + 'static,
@@ -74,7 +73,6 @@ impl Profiles {
         on_change: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<(Profiles, Store), StoreError> {
         let profiles = Profiles { layout: Layout::new(config.data_dir), vault: config.vault, on_change, timing };
-        profiles.layout.adopt_legacy_db()?;
         if let Err(error) = profiles.layout.remove_leftovers() {
             tracing::warn!(%error, "could not delete the data of a signed-out account; retrying on the next start");
         }

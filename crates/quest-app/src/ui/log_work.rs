@@ -16,7 +16,7 @@ pub fn layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
     let form = &s.log_work;
     let mut body = col().w_full().gap(8.0).px(20.0).pb(20.0);
     let mut popups = Vec::new();
-    let task = task_picker::combo(task_picker::Form::LogWork, s, p, &mut popups);
+    let task = task_picker::combo(s, p, &mut popups);
     body = body.child(parts::caps("Task", p)).child(task);
     if let Some(error) = form.error.filter(|e| *e == FieldError::Task) {
         body = body.child(text(error.message()).key("log-work-error").font(ty::SMALL).color(p.accent).wrap());

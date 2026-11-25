@@ -7,7 +7,7 @@ use quest_protocol::{DropReason, Dropped};
 use super::*;
 use crate::core::{ChangeListener, QuestCore};
 use crate::quest_types::TrashKind;
-use crate::test_support::{berlin, block, day, id, moment, quest, task};
+use crate::test_support::{berlin, day, id, moment, quest, task};
 
 struct Quiet;
 
@@ -39,12 +39,7 @@ fn snapshot() -> Snapshot {
 fn proposal() -> CaptureProposal {
     let tax = QuestRef::New { key: key("q1") };
     CaptureProposal {
-        quests: vec![ProposedQuest {
-            key: key("q1"),
-            title: "Steuer".into(),
-            description: String::new(),
-            milestones: vec![],
-        }],
+        quests: vec![ProposedQuest { key: key("q1"), title: "Steuer".into() }],
         tasks: vec![
             ProposedTask {
                 key: key("t1"),
@@ -52,8 +47,8 @@ fn proposal() -> CaptureProposal {
                 description: String::new(),
                 quest: Some(QuestRef::Existing { id: id(1) }),
                 quest_uncertain: true,
-                day: Some(day("2026-11-25")),
-                block: block("09:00", 120),
+                planned_on: Some(day("2026-11-25")),
+                due_on: Some(day("2026-11-27")),
                 repeat: None,
             },
             ProposedTask {
@@ -62,8 +57,8 @@ fn proposal() -> CaptureProposal {
                 description: String::new(),
                 quest: Some(tax),
                 quest_uncertain: false,
-                day: Some(day("2026-11-27")),
-                block: None,
+                planned_on: Some(day("2026-11-27")),
+                due_on: None,
                 repeat: Some(ProposedRepeat {
                     every: 1,
                     frequency: Frequency::Week,
@@ -89,8 +84,8 @@ fn proposal() -> CaptureProposal {
 fn a_proposal_opens_as_a_draft_with_everything_selected() {
     let draft = draft(&proposal(), &snapshot(), now());
     assert!(draft.quests[0].selected && draft.tasks.iter().all(|t| t.selected) && draft.work[0].selected);
-    assert_eq!(draft.tasks[0].block, Some(DraftBlock { start_minutes: 540, end_minutes: 660 }));
-    assert_eq!(draft.tasks[0].day.as_ref().unwrap().iso, "2026-11-25");
+    assert_eq!(draft.tasks[0].planned_on.as_ref().unwrap().iso, "2026-11-25");
+    assert_eq!(draft.tasks[0].due_on.as_ref().unwrap().label, "Nov 27, 2026");
     let repeat = draft.tasks[1].repeat.as_ref().unwrap();
     assert_eq!(
         (repeat.frequency, repeat.weekdays.as_slice()),
@@ -109,8 +104,7 @@ fn the_view_labels_every_item() {
     assert_eq!(view.apply_label, "Create (4)");
     assert!(view.can_apply);
     let offer = &view.tasks[0];
-    assert_eq!(offer.when, "Tomorrow · 09:00–11:00");
-    assert_eq!((offer.block_start_label.as_deref(), offer.block_end_label.as_deref()), (Some("09:00"), Some("11:00")));
+    assert_eq!(offer.when, "Tomorrow · due Fri, Nov 27");
     assert_eq!(offer.quest.as_ref().unwrap().name, "Website-Relaunch");
     let receipts = &view.tasks[1];
     assert_eq!(receipts.quest.as_ref().unwrap().name, "Steuer");
@@ -128,10 +122,10 @@ fn edits_from_the_pickers_show_their_problems() {
     let snapshot = snapshot();
     let mut draft = draft(&proposal(), &snapshot, now());
     draft.quests[0].selected = false;
-    draft.tasks[0].block = Some(DraftBlock { start_minutes: 23 * 60, end_minutes: 0 });
+    draft.tasks[0].planned_on = None;
     draft.work[0].start_minutes = 12 * 60;
     let view = super::view(&draft, &snapshot, now()).unwrap();
-    assert_eq!(view.tasks[0].when, "Tomorrow · 23:00–24:00", "an end of 00:00 is midnight");
+    assert_eq!(view.tasks[0].when, "Due Fri, Nov 27");
     assert_eq!(view.tasks[1].quest, None, "its new quest is deselected");
     assert_eq!(view.quest_options.len(), 1);
     assert_eq!(view.work[0].error.as_deref(), Some("The end must be after the start."));
@@ -139,11 +133,11 @@ fn edits_from_the_pickers_show_their_problems() {
     assert_eq!(view.apply_label, "Create (3)");
 
     draft.work[0].selected = false;
-    draft.tasks[0].block = Some(DraftBlock { start_minutes: 600, end_minutes: 540 });
+    draft.tasks[0].title = " ".into();
     let view = super::view(&draft, &snapshot, now()).unwrap();
-    assert_eq!(view.tasks[0].error.as_deref(), Some("The end must be after the start."));
+    assert_eq!(view.tasks[0].error.as_deref(), Some("Type a title."));
     draft.tasks[1].repeat.as_mut().unwrap().every = "0".into();
-    draft.tasks[0].block = None;
+    draft.tasks[0].title = "Angebot schreiben".into();
     let view = super::view(&draft, &snapshot, now()).unwrap();
     assert!(view.tasks[1].error.is_some(), "a broken repeat is reported");
     assert!(!view.can_apply);

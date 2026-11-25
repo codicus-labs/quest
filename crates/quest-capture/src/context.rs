@@ -5,8 +5,8 @@ use chrono::{DateTime, Days, NaiveDate, Utc};
 use chrono_tz::Tz;
 use quest_domain::{Snapshot, Task};
 use quest_protocol::{
-    CAPTURE_VERSION, CaptureContext, CaptureRequest, ContextQuest, ContextTask, MAX_CONTEXT_DESCRIPTION_CHARS,
-    MAX_CONTEXT_QUESTS, MAX_CONTEXT_TASKS, MAX_CONTEXT_TITLE_CHARS,
+    CAPTURE_VERSION, CaptureContext, CaptureRequest, ContextQuest, ContextTask, MAX_CONTEXT_QUESTS, MAX_CONTEXT_TASKS,
+    MAX_CONTEXT_TITLE_CHARS,
 };
 
 use crate::text::{shorten, single_line};
@@ -29,33 +29,30 @@ pub fn request(text: &str, now: DateTime<Utc>, time_zone: Tz, language: &str, sn
     }
 }
 
-/// Active quests (titles, shortened descriptions) and the tasks around `today`: planned ones from a
-/// week before to two weeks after, nearest first, then open backlog tasks, within the protocol's limits.
+/// Active quests (titles) and the tasks around `today`: planned ones from a week before to two weeks
+/// after, nearest first, then open unplanned tasks, within the protocol's limits.
 pub fn context(snapshot: &Snapshot, today: NaiveDate) -> CaptureContext {
     let quests: Vec<ContextQuest> = snapshot
         .active_quests()
         .take(MAX_CONTEXT_QUESTS)
-        .map(|quest| ContextQuest {
-            id: quest.id,
-            title: shorten(&single_line(&quest.title), MAX_CONTEXT_TITLE_CHARS),
-            description: shorten(&single_line(&quest.description), MAX_CONTEXT_DESCRIPTION_CHARS),
-        })
+        .map(|quest| ContextQuest { id: quest.id, title: shorten(&single_line(&quest.title), MAX_CONTEXT_TITLE_CHARS) })
         .collect();
     let from = today.checked_sub_days(Days::new(DAYS_BEFORE)).unwrap_or(today);
     let to = today.checked_add_days(Days::new(DAYS_AFTER)).unwrap_or(today);
     let mut planned: Vec<&Task> =
-        snapshot.tasks.iter().filter(|t| t.day.is_some_and(|day| (from..=to).contains(&day))).collect();
-    planned.sort_by_key(|t| t.day.map(|day| (day - today).num_days().abs()));
-    let backlog = snapshot.backlog().filter(|t| !t.is_done());
+        snapshot.tasks.iter().filter(|t| t.planned_on.is_some_and(|day| (from..=to).contains(&day))).collect();
+    planned.sort_by_key(|t| t.planned_on.map(|day| (day - today).num_days().abs()));
+    let unplanned = snapshot.tasks.iter().filter(|t| t.planned_on.is_none() && !t.is_done());
     let tasks = planned
         .into_iter()
-        .chain(backlog)
+        .chain(unplanned)
         .take(MAX_CONTEXT_TASKS)
         .map(|task| ContextTask {
             id: task.id,
             title: shorten(&single_line(&task.title), MAX_CONTEXT_TITLE_CHARS),
             quest_id: task.quest_id.filter(|id| quests.iter().any(|q| q.id == *id)),
-            day: task.day,
+            planned_on: task.planned_on,
+            due_on: task.due_on,
             done: task.is_done(),
         })
         .collect();

@@ -1,17 +1,14 @@
-use chrono::{NaiveDate, NaiveTime};
-use quest_domain::{Command, EntityId, Position, TimeBlock};
+use chrono::NaiveDate;
+use quest_domain::{Command, EntityId, Position};
 
-use super::drop::{Placement, commands, place};
 use super::*;
-
-const SCALE: TimeScale = TimeScale { first_hour: 7, last_hour: 23, hour_height: 48.0 };
 
 fn day(d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, 10, d).unwrap()
 }
 
 fn task_payload(id: EntityId) -> Payload {
-    Payload::Task { id, block_minutes: None }
+    Payload { task: id }
 }
 
 // --- the state machine -------------------------------------------------------------------
@@ -31,7 +28,7 @@ fn a_press_without_travel_is_a_click() {
 #[test]
 fn travel_past_the_threshold_drags_and_a_release_over_a_target_drops() {
     let payload = task_payload(EntityId::new());
-    let target = Target::List { list: ListId::Home, before: None };
+    let target = Target { list: ListId::Home, before: None };
     let (state, _) = step(DragState::Idle, DragEvent::Down { payload, at: Point::new(10.0, 10.0), lift: None });
     let (state, _) = step(state, DragEvent::Move { at: Point::new(10.0, 30.0), target: Some(target) });
     assert_eq!(state.dragging(), Some(&payload));
@@ -48,7 +45,7 @@ fn a_release_over_nothing_or_a_cancel_snaps_back() {
         let (s, _) = step(DragState::Idle, DragEvent::Down { payload, at: Point::default(), lift: None });
         step(s, DragEvent::Move { at: Point::new(50.0, 0.0), target }).0
     };
-    let target = Some(Target::List { list: ListId::Home, before: None });
+    let target = Some(Target { list: ListId::Home, before: None });
     assert_eq!(
         step(dragging(None), DragEvent::Up { at: Point::new(50.0, 0.0), target: None }).1,
         Effect::SnapBack(payload)
@@ -76,13 +73,6 @@ fn geometry(a: EntityId, b: EntityId) -> Geometry {
             cards: vec![(a, Rect::new(0.0, 100.0, 400.0, 80.0)), (b, Rect::new(0.0, 190.0, 400.0, 80.0))],
             spacing: 10.0,
         }],
-        grids: vec![GridGeom {
-            grid: GridId::Calendar,
-            viewport: Rect::new(500.0, 100.0, 700.0, 400.0),
-            scale: SCALE,
-            // Scrolled by 96 pt: the column's top is above the viewport.
-            days: vec![(day(15), Rect::new(500.0, 4.0, 100.0, 768.0)), (day(16), Rect::new(600.0, 4.0, 100.0, 768.0))],
-        }],
         room: None,
     }
 }
@@ -92,15 +82,9 @@ fn over_a_list_the_drop_goes_before_the_first_card_below_the_pointer() {
     let (a, b, dragged) = (EntityId::new(), EntityId::new(), EntityId::new());
     let geo = geometry(a, b);
     let p = task_payload(dragged);
-    assert_eq!(
-        hit(&geo, &p, Point::new(10.0, 120.0), None),
-        Some(Target::List { list: ListId::Home, before: Some(a) })
-    );
-    assert_eq!(
-        hit(&geo, &p, Point::new(10.0, 150.0), None),
-        Some(Target::List { list: ListId::Home, before: Some(b) })
-    );
-    assert_eq!(hit(&geo, &p, Point::new(10.0, 400.0), None), Some(Target::List { list: ListId::Home, before: None }));
+    assert_eq!(hit(&geo, &p, Point::new(10.0, 120.0), None), Some(Target { list: ListId::Home, before: Some(a) }));
+    assert_eq!(hit(&geo, &p, Point::new(10.0, 150.0), None), Some(Target { list: ListId::Home, before: Some(b) }));
+    assert_eq!(hit(&geo, &p, Point::new(10.0, 400.0), None), Some(Target { list: ListId::Home, before: None }));
 }
 
 #[test]
@@ -109,27 +93,7 @@ fn a_card_is_never_dropped_before_itself() {
     let geo = geometry(a, b);
     assert_eq!(
         hit(&geo, &task_payload(a), Point::new(10.0, 120.0), None),
-        Some(Target::List { list: ListId::Home, before: Some(b) })
-    );
-}
-
-#[test]
-fn over_a_grid_the_minute_follows_the_scrolled_column() {
-    let geo = geometry(EntityId::new(), EntityId::new());
-    // y 148 is 144 pt below the column top: three hours after 07:00.
-    let target = hit(&geo, &task_payload(EntityId::new()), Point::new(650.0, 148.0), None);
-    assert_eq!(target, Some(Target::Grid { grid: GridId::Calendar, day: day(16), minute: 600.0 }));
-}
-
-#[test]
-fn grid_items_ignore_lists_and_nothing_outside_the_viewport_hits() {
-    let geo = geometry(EntityId::new(), EntityId::new());
-    let block = Payload::Block { id: EntityId::new(), day: day(15), span: Span::new(600, 660), grab: 0 };
-    assert_eq!(hit(&geo, &block, Point::new(10.0, 120.0), None), None);
-    assert_eq!(
-        hit(&geo, &block, Point::new(650.0, 60.0), None),
-        None,
-        "above the viewport, though the column is there"
+        Some(Target { list: ListId::Home, before: Some(b) })
     );
 }
 
@@ -151,10 +115,7 @@ fn a_scrolled_list_measures_cards_where_they_show() {
         ..Geometry::default()
     };
     let p = task_payload(EntityId::new());
-    assert_eq!(
-        hit(&geo, &p, Point::new(10.0, 110.0), None),
-        Some(Target::List { list: ListId::Home, before: Some(c) })
-    );
+    assert_eq!(hit(&geo, &p, Point::new(10.0, 110.0), None), Some(Target { list: ListId::Home, before: Some(c) }));
     assert_eq!(hit(&geo, &p, Point::new(10.0, 90.0), None), None, "above the list's viewport");
 }
 
@@ -174,7 +135,6 @@ fn list_with_room(order: &[EntityId], dragged: EntityId, room_before: Option<Opt
     Geometry {
         lists: vec![ListGeom { list: ListId::Home, rect: Rect::new(0.0, 100.0, 400.0, 600.0), cards, spacing: 10.0 }],
         room: room_before.map(|before| Room { list: ListId::Home, before }),
-        ..Geometry::default()
     }
 }
 
@@ -184,10 +144,7 @@ fn lifted(y: f32) -> Option<Rect> {
 }
 
 fn before_at(geo: &Geometry, dragged: EntityId, y: f32) -> Option<Option<EntityId>> {
-    match hit(geo, &task_payload(dragged), Point::new(10.0, y + 20.0), lifted(y))? {
-        Target::List { before, .. } => Some(before),
-        Target::Grid { .. } => None,
-    }
+    hit(geo, &task_payload(dragged), Point::new(10.0, y + 20.0), lifted(y)).map(|t| t.before)
 }
 
 #[test]
@@ -224,7 +181,6 @@ fn foreign_list(cards: &[EntityId], ghost: Option<usize>) -> Geometry {
     Geometry {
         lists: vec![ListGeom { list: ListId::Home, rect: Rect::new(0.0, 100.0, 400.0, 600.0), cards, spacing: 10.0 }],
         room: ghost.map(|_| Room { list: ListId::Home, before: None }),
-        ..Geometry::default()
     }
 }
 
@@ -270,118 +226,21 @@ fn a_drop_back_into_its_own_place_changes_nothing() {
     assert!(changes_order(&order, EntityId::new(), None), "from another list");
 }
 
-// --- placement and commands --------------------------------------------------------------
-
-fn grid_at(day: NaiveDate, minute: f32) -> Target {
-    Target::Grid { grid: GridId::Calendar, day, minute }
-}
+// --- the drop's command -----------------------------------------------------------------
 
 #[test]
-fn a_task_on_the_grid_gets_a_snapped_half_hour_or_its_own_length() {
-    let id = EntityId::new();
-    let placed = place(&task_payload(id), &grid_at(day(15), 9.0 * 60.0 + 37.0), &SCALE);
-    assert_eq!(placed, Some(Placement::Schedule { id, day: day(15), span: Span::new(570, 600) }));
-    let long = Payload::Task { id, block_minutes: Some(90) };
-    let placed = place(&long, &grid_at(day(15), 22.0 * 60.0 + 50.0), &SCALE);
-    assert_eq!(
-        placed,
-        Some(Placement::Schedule { id, day: day(15), span: Span::new(21 * 60 + 30, 23 * 60) }),
-        "kept inside the grid"
-    );
-}
-
-#[test]
-fn a_moved_block_keeps_its_grab_offset_and_length_across_days() {
-    let id = EntityId::new();
-    let block = Payload::Block { id, day: day(15), span: Span::new(600, 660), grab: 20 };
-    let placed = place(&block, &grid_at(day(16), 700.0), &SCALE);
-    assert_eq!(placed, Some(Placement::Schedule { id, day: day(16), span: Span::new(675, 735) }));
-}
-
-#[test]
-fn a_resized_block_ends_at_least_a_quarter_hour_after_it_starts() {
-    let id = EntityId::new();
-    let end = Payload::BlockEnd { id, day: day(15), span: Span::new(600, 660) };
-    assert_eq!(
-        place(&end, &grid_at(day(15), 728.0), &SCALE),
-        Some(Placement::Resize { id, day: day(15), span: Span::new(600, 735) })
-    );
-    assert_eq!(
-        place(&end, &grid_at(day(15), 500.0), &SCALE),
-        Some(Placement::Resize { id, day: day(15), span: Span::new(600, 615) })
-    );
-}
-
-#[test]
-fn session_edges_move_one_side_and_a_running_session_only_its_start() {
-    let id = EntityId::new();
-    let edge = |edge, running| Payload::SessionEdge { id, day: day(15), span: Span::new(600, 660), edge, running };
-    assert_eq!(
-        place(&edge(Edge::Start, false), &grid_at(day(15), 571.0), &SCALE),
-        Some(Placement::EntryTimes { id, day: day(15), span: Span::new(570, 660), running: false })
-    );
-    assert_eq!(
-        place(&edge(Edge::Start, true), &grid_at(day(15), 700.0), &SCALE),
-        Some(Placement::EntryTimes { id, day: day(15), span: Span::new(645, 660), running: true }),
-        "the start stays a quarter hour before the end"
-    );
-    assert_eq!(place(&edge(Edge::End, true), &grid_at(day(15), 700.0), &SCALE), None);
-    assert_eq!(
-        place(&edge(Edge::End, false), &grid_at(day(15), 690.0), &SCALE),
-        Some(Placement::EntryTimes { id, day: day(15), span: Span::new(600, 690), running: false })
-    );
-}
-
-#[test]
-fn a_new_session_spans_from_the_press_either_way_and_needs_a_quarter_hour() {
-    let new = Payload::NewSession { day: day(15), anchor: 600 };
-    assert_eq!(
-        place(&new, &grid_at(day(15), 541.0), &SCALE),
-        Some(Placement::NewEntry { day: day(15), span: Span::new(540, 600) })
-    );
-    assert_eq!(place(&new, &grid_at(day(15), 604.0), &SCALE), None);
-}
-
-#[test]
-fn grid_items_do_not_land_in_lists() {
-    let new = Payload::NewSession { day: day(15), anchor: 600 };
-    assert_eq!(place(&new, &Target::List { list: ListId::Home, before: None }, &SCALE), None);
-}
-
-#[test]
-fn placements_become_domain_commands() {
+fn a_drop_plans_the_task_for_the_lists_day() {
     let (id, other) = (EntityId::new(), EntityId::new());
-    let utc = |t: chrono::NaiveDateTime| t.and_utc();
     let today = day(15);
-    let run = |p: Placement| commands(&p, today, utc);
-
+    let at = "2026-10-15T10:00:00Z".parse().unwrap();
     assert_eq!(
-        run(Placement::Reorder { id, list: ListId::Home, before: Some(other) }),
-        vec![Command::MoveTask { id, day: Some(today), position: Position::Before(other) }]
+        drop_command(id, Target { list: ListId::Home, before: Some(other) }, today, at),
+        Command::MoveTask { id, planned_on: Some(today), position: Position::Before(other), at }
     );
     assert_eq!(
-        run(Placement::Reorder { id, list: ListId::Backlog, before: None }),
-        vec![Command::MoveTask { id, day: None, position: Position::Bottom }]
+        drop_command(id, Target { list: ListId::Backlog, before: None }, today, at),
+        Command::MoveTask { id, planned_on: None, position: Position::Bottom, at }
     );
-    let nine_thirty = NaiveTime::from_hms_opt(9, 30, 0).unwrap();
-    assert_eq!(
-        run(Placement::Schedule { id, day: day(16), span: Span::new(570, 600) }),
-        vec![Command::ScheduleTask { id, day: day(16), block: TimeBlock { start: nine_thirty, minutes: 30 } }]
-    );
-    assert_eq!(
-        run(Placement::Resize { id, day: today, span: Span::new(570, 660) }),
-        vec![Command::SetTaskBlock { id, block: Some(TimeBlock { start: nine_thirty, minutes: 90 }) }]
-    );
-    let at = |m: i32| drop::local(today, m).and_utc();
-    assert_eq!(
-        run(Placement::EntryTimes { id, day: today, span: Span::new(570, 600), running: true }),
-        vec![Command::SetEntryTimes { id, started_at: at(570), ended_at: None }]
-    );
-    assert_eq!(
-        run(Placement::EntryTimes { id, day: today, span: Span::new(570, 600), running: false }),
-        vec![Command::SetEntryTimes { id, started_at: at(570), ended_at: Some(at(600)) }]
-    );
-    assert_eq!(run(Placement::NewEntry { day: today, span: Span::new(570, 600) }), Vec::new(), "the dialog logs it");
 }
 
 #[test]

@@ -117,7 +117,8 @@ fn tick_creates_due_recurring_tasks_and_asks_for_the_next_minute() {
         id,
         title: "Stretch".into(),
         quest_id: None,
-        day: Some(today),
+        planned_on: Some(today),
+        due_on: None,
         position: Position::Bottom,
     };
     core.dispatch(create).unwrap();

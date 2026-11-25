@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use quest_domain::{EntityId, Quest, QuestColor, QuestStatus, Settings, Snapshot, Task, TimeEntry};
+use quest_domain::{EntityId, EntryKind, Quest, QuestColor, QuestStatus, Settings, Snapshot, Task, TimeEntry};
 
 use super::*;
 use crate::types::{HomeQuery, Moment};
@@ -24,7 +24,7 @@ fn id(n: u128) -> EntityId {
 }
 
 fn quest(n: u128, title: &str, color: QuestColor, status: QuestStatus) -> Quest {
-    Quest { id: id(n), title: title.into(), color, status, sort_key: format!("{n}"), description: String::new() }
+    Quest { id: id(n), title: title.into(), color, status, sort_key: format!("{n}") }
 }
 
 fn task(n: u128, title: &str, quest: Option<u128>, day: &str, done: bool) -> Task {
@@ -32,9 +32,9 @@ fn task(n: u128, title: &str, quest: Option<u128>, day: &str, done: bool) -> Tas
         id: id(n),
         title: title.into(),
         quest_id: quest.map(id),
-        day: Some(day.parse().unwrap()),
+        planned_on: Some(day.parse().unwrap()),
+        due_on: None,
         sort_key: format!("{n}"),
-        block: None,
         completed_at: done.then(|| at("2026-11-25T09:00:00+01:00")),
         description: String::new(),
         repeat: None,
@@ -43,7 +43,15 @@ fn task(n: u128, title: &str, quest: Option<u128>, day: &str, done: bool) -> Tas
 }
 
 fn entry(n: u128, quest: Option<u128>, from: &str, to: Option<&str>) -> TimeEntry {
-    TimeEntry { id: id(n), task_id: None, quest_id: quest.map(id), started_at: at(from), ended_at: to.map(at) }
+    TimeEntry {
+        id: id(n),
+        kind: EntryKind::Task,
+        task_id: None,
+        quest_id: quest.map(id),
+        origin_task_id: None,
+        started_at: at(from),
+        ended_at: to.map(at),
+    }
 }
 
 fn snapshot() -> Snapshot {
@@ -127,8 +135,10 @@ fn cards_show_tracked_time_and_the_running_timer() {
     let mut snap = snapshot();
     snap.time_entries.push(TimeEntry {
         id: id(30),
+        kind: EntryKind::Task,
         task_id: Some(id(11)),
         quest_id: None,
+        origin_task_id: None,
         started_at: at("2026-11-25T09:40:00+01:00"),
         ended_at: None,
     });

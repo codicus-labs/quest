@@ -16,9 +16,7 @@ import androidx.compose.ui.unit.dp
 import app.quest.android.R
 import app.quest.android.WorkspaceSamples
 import app.quest.android.settings.HomePrefs
-import app.quest.android.ui.components.DayGrid
 import app.quest.android.ui.components.TaskCardActions
-import app.quest.android.ui.home.CompactView
 import app.quest.android.ui.home.HomeActions
 import app.quest.android.ui.home.HomeInputs
 import app.quest.android.ui.task.RepeatEditorState
@@ -59,26 +57,17 @@ import app.quest.android.ui.settings.SettingsUiState
 import uniffi.quest_mobile.SyncState
 import uniffi.quest_mobile.PlanData
 import app.quest.android.PlanSamples
-import app.quest.android.CalendarSamples
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.remember
-import app.quest.android.ui.calendar.CalendarActions
-import app.quest.android.ui.calendar.CalendarDragState
-import app.quest.android.ui.calendar.CalendarGrid
-import app.quest.android.ui.calendar.CalendarScreen
-import app.quest.android.ui.calendar.CalendarSheetActions
-import app.quest.android.ui.calendar.CalendarSheetContent
-import app.quest.android.ui.calendar.CalendarUiState
-import app.quest.android.ui.calendar.EntryForm
-import app.quest.android.ui.calendar.EntryState
-import app.quest.android.ui.calendar.LogWorkForm
-import app.quest.android.ui.calendar.LogWorkState
-import app.quest.android.ui.calendar.TaskPickerState
-import app.quest.android.ui.calendar.calendarDayCount
-import uniffi.quest_mobile.CalendarData
-import uniffi.quest_mobile.GridDrag
-import uniffi.quest_mobile.GridDragKind
+import app.quest.android.LogWorkSamples
+import app.quest.android.ui.logwork.LogWorkActions
+import app.quest.android.ui.logwork.LogWorkForm
+import app.quest.android.ui.logwork.LogWorkSheetContent
+import app.quest.android.ui.logwork.LogWorkSheetState
+import app.quest.android.ui.logwork.LogWorkState
+import app.quest.android.ui.logwork.TaskPickerState
+import uniffi.quest_mobile.DayValue
 import uniffi.quest_mobile.TaskChoices
 import app.quest.android.ui.plan.DropLine
 import app.quest.android.ui.plan.DropTarget
@@ -117,7 +106,7 @@ private fun homeState(
     sync: SyncState = SyncState.Live(0u),
     prefs: HomePrefs = HomePrefs(),
     inputs: HomeInputs = HomeInputs(),
-) = HomeUiState.Ready(home, Samples.grid, sync, prefs, inputs)
+) = HomeUiState.Ready(home, sync, prefs, inputs)
 
 private fun planState(plan: PlanData = PlanSamples.plan, prefs: HomePrefs = HomePrefs(), inputs: PlanInputs = PlanInputs()) =
     PlanUiState.Ready(plan, prefs, inputs, moveSheet = null, scroll = null)
@@ -150,27 +139,12 @@ internal fun SheetFrame(content: @Composable () -> Unit) {
     }
 }
 
+/** The Log work sheet's content on the sheet colour (the modal sheet itself is a separate window). */
 @Composable
-private fun Calendar(page: CalendarData) = Top(TopDestination.Calendar) {
-    CalendarScreen(CalendarUiState.Ready(page, null, null, null), CalendarActions.None)
-}
+private fun LogWorkSheet(logWork: LogWorkState, picker: TaskPickerState? = null) =
+    Box(Modifier.fillMaxSize().background(QuestTheme.colors.card).padding(top = 24.dp)) { LogWorkSheetContent(LogWorkSheetState(logWork, picker), LogWorkActions.None) }
 
-/** The page as many days wide as the form shows (phone 1, tablet a week). */
-@Composable
-private fun CalendarFitting(change: (CalendarData) -> CalendarData = { it }) = BoxWithConstraints {
-    // The tablet's rail takes 80 dp, as in the app.
-    Calendar(change(CalendarSamples.page(calendarDayCount(maxWidth - 80.dp))))
-}
-
-private fun calendarSheet(logWork: LogWorkState? = null, entry: EntryState? = null, picker: TaskPickerState? = null) =
-    CalendarUiState.Ready(CalendarSamples.page(1), logWork, entry, picker)
-
-/** A calendar sheet's content on the sheet colour (the modal sheet itself is a separate window). */
-@Composable
-private fun CalendarSheet(state: CalendarUiState.Ready) =
-    Box(Modifier.fillMaxSize().background(QuestTheme.colors.card).padding(top = 24.dp)) { CalendarSheetContent(state, CalendarSheetActions.None) }
-
-private val logWorkForm = LogWorkForm.of(CalendarSamples.logWorkDraft)
+private val logWorkForm = LogWorkForm.of(LogWorkSamples.draft)
 
 /** Every component and screen with sample data; each is captured light/dark × phone/tablet. */
 val scenes = listOf(
@@ -179,7 +153,6 @@ val scenes = listOf(
         // As in a plan board column: the time and timer wrap before the quest's name shortens.
         TaskCard(Samples.home.questWork.first(), noCardActions, Modifier.width(260.dp))
     },
-    Scene("day-grid", SceneKind.Component) { DayGrid(Samples.grid, Modifier.fillMaxWidth().height(560.dp)) },
     Scene("quest-chip", SceneKind.Component) {
         QuestChip(Samples.writing)
         QuestChip(null)
@@ -202,7 +175,6 @@ val scenes = listOf(
         Home(homeState(home = Samples.home.copy(questFilter = Samples.fitness, addQuest = null), inputs = HomeInputs(questFilter = Samples.fitness.id)))
     },
     Scene("home-empty", SceneKind.Screen) { Home(homeState(Samples.emptyHome, SyncState.SignedOut)) },
-    Scene("home-compact-grid", SceneKind.Screen) { Home(homeState(inputs = HomeInputs(compactView = CompactView.Grid))) },
     Scene("home-filtered-toast", SceneKind.Screen) {
         val home = Samples.home.copy(
             questWork = Samples.home.questWork.filter { it.quest == Samples.writing },
@@ -223,6 +195,10 @@ val scenes = listOf(
     Scene("focus-pick", SceneKind.Screen) { Focus(FocusUiState.Pick(Samples.pick.tasks)) },
     Scene("focus-pick-empty", SceneKind.Screen) { Focus(FocusUiState.Pick(emptyList())) },
     Scene("task-sheet", SceneKind.Screen) { Sheet(TaskSheetState.Open(Samples.detail, Samples.detail.title, Samples.detail.description, SheetPage.Details, null)) },
+    Scene("task-sheet-overdue", SceneKind.Screen) {
+        val overdue = Samples.detail.copy(dueOn = DayValue(iso = "2026-11-20", label = "Nov 20, 2026"), overdue = true)
+        Sheet(TaskSheetState.Open(overdue, overdue.title, overdue.description, SheetPage.Details, null))
+    },
     Scene("repeat-week", SceneKind.Screen) { Sheet(repeatState(RepeatForm.of(Samples.repeatDraft), Samples.repeatCheck)) },
     Scene("repeat-month-error", SceneKind.Screen) {
         val form = RepeatForm.of(Samples.repeatDraft).copy(every = "0", frequency = RepeatFrequency.MONTH, endsOnDate = true, ends = "2026-11-01")
@@ -246,46 +222,21 @@ val scenes = listOf(
             MoveToContent(MoveSheet("p1", "Sketch the contact sheet", PlanSamples.targets), PlanActions.None, onPickDate = {})
         }
     },
-    Scene("calendar", SceneKind.Screen) { CalendarFitting() },
-    Scene("calendar-3-days", SceneKind.Screen) { Calendar(CalendarSamples.page(3)) },
-    Scene("calendar-other-week-toast", SceneKind.Screen) {
-        CalendarFitting { it.copy(showsToday = false, toast = Samples.toast.copy(text = "Moved “Morning run”")) }
-    },
-    Scene("calendar-drag-ghost", SceneKind.Component) {
-        val drag = remember {
-            CalendarDragState().apply {
-                drag = GridDrag(GridDragKind.MOVE, "e1", "2026-11-23", 430f)
-                placement = CalendarSamples.placement
-            }
-        }
-        CalendarGrid(CalendarSamples.page(3).days, rememberScrollState(7 * 52), drag, CalendarActions.None.grid, Modifier.height(420.dp))
-    },
-    Scene("log-work", SceneKind.Screen) { CalendarSheet(calendarSheet(logWork = LogWorkState(logWorkForm, CalendarSamples.logWorkCheck, null))) },
+    Scene("log-work", SceneKind.Screen) { LogWorkSheet(LogWorkState(logWorkForm, LogWorkSamples.check, null)) },
     Scene("log-work-new-task-error", SceneKind.Screen) {
         val form = logWorkForm.copy(newTitle = "Plan the workshop", questId = "q1", startMinute = 14 * 60, endMinute = 13 * 60 + 30)
-        CalendarSheet(calendarSheet(logWork = LogWorkState(form, CalendarSamples.logWorkNewTaskError, null)))
+        LogWorkSheet(LogWorkState(form, LogWorkSamples.newTaskError, null))
     },
     Scene("log-work-existing-task", SceneKind.Screen) {
-        CalendarSheet(calendarSheet(logWork = LogWorkState(logWorkForm.copy(taskId = "t2"), CalendarSamples.logWorkExistingTask, null)))
+        LogWorkSheet(LogWorkState(logWorkForm.copy(taskId = "t2"), LogWorkSamples.existingTask, null))
     },
     Scene("log-work-task-picker", SceneKind.Screen) {
-        val picker = TaskPickerState("", CalendarSamples.choices, canCreate = true)
-        CalendarSheet(calendarSheet(logWork = LogWorkState(logWorkForm, CalendarSamples.logWorkCheck, null), picker = picker))
+        val picker = TaskPickerState("", LogWorkSamples.choices)
+        LogWorkSheet(LogWorkState(logWorkForm, LogWorkSamples.check, null), picker)
     },
     Scene("log-work-task-create", SceneKind.Screen) {
-        val picker = TaskPickerState("Plan the workshop", TaskChoices(emptyList(), "Create “Plan the workshop”"), canCreate = true)
-        CalendarSheet(calendarSheet(logWork = LogWorkState(logWorkForm, CalendarSamples.logWorkCheck, null), picker = picker))
-    },
-    Scene("entry-editor", SceneKind.Screen) {
-        CalendarSheet(calendarSheet(entry = EntryState(EntryForm.of(CalendarSamples.entryDraft), CalendarSamples.entryCheck, null)))
-    },
-    Scene("entry-editor-over-midnight", SceneKind.Screen) {
-        val form = EntryForm.of(CalendarSamples.entryDraft).copy(taskId = "t4", startMinute = 23 * 60, endDay = "2026-11-24", endMinute = 45, endsOtherDay = true)
-        CalendarSheet(calendarSheet(entry = EntryState(form, CalendarSamples.entryOverMidnight, null)))
-    },
-    Scene("entry-editor-end-date-error", SceneKind.Screen) {
-        val form = EntryForm.of(CalendarSamples.entryDraft).copy(taskId = "t4", startMinute = 23 * 60, endDay = "2026-11-22", endMinute = 45, endsOtherDay = true)
-        CalendarSheet(calendarSheet(entry = EntryState(form, CalendarSamples.entryEndDateError, null)))
+        val picker = TaskPickerState("Plan the workshop", TaskChoices(emptyList(), "Create “Plan the workshop”"))
+        LogWorkSheet(LogWorkState(logWorkForm, LogWorkSamples.check, null), picker)
     },
     Scene("account-signed-out", SceneKind.Screen) {
         val state = AccountUiState(

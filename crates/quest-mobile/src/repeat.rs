@@ -13,13 +13,13 @@ use crate::task_types::{RepeatCheck, RepeatDraft, RepeatFrequency, RepeatPinChoi
 use crate::time::Now;
 
 /// The dialog's fields when it opens on `task`: its series' rule, else daily from the task's
-/// day (today at the earliest) in the caller's time zone.
+/// plan date (today at the earliest) in the caller's time zone.
 pub(crate) fn draft_for(snapshot: &Snapshot, task: &Task, now: Now) -> RepeatDraft {
     let today = now.today();
     let rule = repeat::series_of(snapshot, task).repeat.map(|s| s.rule).unwrap_or(RepeatRule {
         every: 1,
         frequency: Frequency::Day,
-        starts: task.day.unwrap_or(today).max(today),
+        starts: task.planned_on.unwrap_or(today).max(today),
         ends: None,
         time_zone: now.tz,
         pin: RepeatPin::None,

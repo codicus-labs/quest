@@ -1,4 +1,4 @@
-use quest_domain::{EntityId, RunningFocus, Snapshot, TimeEntry, Workspace, WorkspaceContent};
+use quest_domain::{EntityId, EntryKind, RunningFocus, Snapshot, TimeEntry, Workspace, WorkspaceContent};
 
 use super::*;
 
@@ -54,6 +54,8 @@ fn a_timer_in_another_workspace_names_that_workspace() {
     assert_eq!(timer_elsewhere(&snapshot), None);
     let entry = TimeEntry {
         id: EntityId::new(),
+        kind: EntryKind::Task,
+        origin_task_id: None,
         task_id: Some(EntityId::new()),
         quest_id: None,
         started_at: chrono::Utc::now(),

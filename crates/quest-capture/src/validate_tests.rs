@@ -12,7 +12,7 @@ fn time(h: u32, m: u32) -> NaiveTime {
 fn task(title: &str) -> Value {
     json!({
         "title": title, "description": "", "quest_id": null, "new_quest_key": null, "quest_confidence": "high",
-        "day": null, "start_time": null, "duration_minutes": null, "repeat": null
+        "planned_on": null, "due_on": null, "repeat": null
     })
 }
 
@@ -43,12 +43,12 @@ fn the_brief_example_becomes_a_proposal() {
     let mut world = World::new();
     let relaunch = world.quest("Website-Relaunch");
     let output = json!({
-        "new_quests": [{ "key": "tax", "title": "Steuererklärung", "description": "", "milestones": [] }],
+        "new_quests": [{ "key": "tax", "title": "Steuererklärung" }],
         "tasks": [
             with(task("Angebot für Müller schreiben"), json!({
-                "quest_id": relaunch.to_string(), "day": "2026-11-25", "duration_minutes": 120
+                "quest_id": relaunch.to_string(), "planned_on": "2026-11-25", "due_on": "2026-11-27"
             })),
-            with(task("Belege sammeln"), json!({ "new_quest_key": "tax", "day": "2026-11-27" })),
+            with(task("Belege sammeln"), json!({ "new_quest_key": "tax", "due_on": "2026-11-30" })),
         ],
         "work_logs": [with(work("2026-11-24", "09:00", "11:00"), json!({
             "new_task_title": "Relaunch-Konzept", "quest_id": relaunch.to_string()
@@ -58,8 +58,8 @@ fn the_brief_example_becomes_a_proposal() {
     assert_eq!(proposal.quests[0].key, TempKey("q1".into()));
     let [offer, receipts] = proposal.tasks.as_slice() else { panic!("two tasks") };
     assert_eq!(offer.quest, Some(QuestRef::Existing { id: relaunch }));
-    assert_eq!(offer.day, Some(day("2026-11-25")));
-    assert_eq!(offer.block, None, "a duration without a start is an estimate, and there are none");
+    assert_eq!((offer.planned_on, offer.due_on), (Some(day("2026-11-25")), Some(day("2026-11-27"))));
+    assert_eq!((receipts.planned_on, receipts.due_on), (None, Some(day("2026-11-30"))));
     assert_eq!(receipts.quest, Some(QuestRef::New { key: TempKey("q1".into()) }));
     assert!(!receipts.quest_uncertain);
     let session = &proposal.work[0];
@@ -151,15 +151,17 @@ fn work_on_unknown_tasks_is_dropped_or_becomes_a_new_task() {
 #[test]
 fn impossible_and_far_dates_are_dropped() {
     let world = World::new();
-    let dated = |text: &str| with(task("T"), json!({ "day": text }));
+    let planned = |text: &str| with(task("T"), json!({ "planned_on": text }));
+    let due = |text: &str| with(task("T"), json!({ "due_on": text }));
     let proposal = run(
         &world,
         json!({ "tasks": [
-            dated("2026-02-30"), dated("tomorrow"), dated("3026-01-01"), dated("2020-01-01"), dated("2026-11-30")
+            planned("2026-02-30"), planned("tomorrow"), planned("3026-01-01"), due("2020-01-01"), due("2026-11-31"),
+            planned("2026-11-30")
         ] }),
     );
     assert_eq!(proposal.tasks.len(), 1);
-    assert_eq!(reasons(&proposal), [DropReason::InvalidDate; 4]);
+    assert_eq!(reasons(&proposal), [DropReason::InvalidDate; 5]);
 }
 
 #[test]
@@ -195,32 +197,37 @@ fn sessions_must_end_after_they_start_and_lie_in_the_past() {
 }
 
 #[test]
-fn a_faulty_block_or_repeat_is_left_out_but_the_task_stays() {
+fn the_plan_date_is_never_after_the_deadline() {
     let world = World::new();
-    let base = with(task("T"), json!({ "day": "2026-11-25" }));
+    let proposal = run(
+        &world,
+        json!({ "tasks": [with(task("T"), json!({ "planned_on": "2026-11-27", "due_on": "2026-11-25" }))] }),
+    );
+    let task = &proposal.tasks[0];
+    assert_eq!((task.planned_on, task.due_on), (Some(day("2026-11-25")), Some(day("2026-11-25"))));
+    assert!(proposal.dropped.is_empty());
+}
+
+#[test]
+fn a_faulty_repeat_is_left_out_but_the_task_stays() {
+    let world = World::new();
+    let daily = json!({ "every": 1, "unit": "day", "weekdays": [], "month_day": null, "until": null });
     let proposal = run(
         &world,
         json!({ "tasks": [
-            with(base.clone(), json!({ "start_time": "23:30", "duration_minutes": 60 })),
-            with(base.clone(), json!({ "start_time": "09:00", "duration_minutes": "120" })),
-            with(base.clone(), json!({ "repeat": { "every": 0, "unit": "day", "weekdays": [], "month_day": null, "until": null } })),
-            with(task("No day"), json!({ "start_time": "09:00", "duration_minutes": 30 })),
-            with(base, json!({ "start_time": "14:00", "duration_minutes": 90 })),
+            with(task("T"), json!({ "planned_on": "2026-11-25", "repeat": { "every": 0, "unit": "day", "weekdays": [], "month_day": null, "until": null } })),
+            with(task("Unplanned"), json!({ "due_on": "2026-11-25", "repeat": daily })),
         ] }),
     );
-    assert_eq!(proposal.tasks.len(), 5);
-    assert_eq!(proposal.tasks[0].block, None);
-    assert_eq!(proposal.tasks[1].block.map(|b| b.minutes), Some(60), "a duration that is not a number is ignored");
-    assert_eq!(proposal.tasks[2].repeat, None);
-    assert_eq!(proposal.tasks[3].block, None);
-    assert_eq!(proposal.tasks[4].block, Some(TimeBlock { start: time(14, 0), minutes: 90 }));
-    assert_eq!(reasons(&proposal), [DropReason::InvalidTimeRange, DropReason::Incomplete, DropReason::Incomplete]);
+    assert_eq!(proposal.tasks.len(), 2);
+    assert!(proposal.tasks.iter().all(|t| t.repeat.is_none()));
+    assert_eq!(reasons(&proposal), [DropReason::Incomplete, DropReason::Incomplete]);
 }
 
 #[test]
 fn repeats_are_checked_field_by_field() {
     let world = World::new();
-    let repeat = |rule: Value| with(task("R"), json!({ "day": "2026-11-24", "repeat": rule }));
+    let repeat = |rule: Value| with(task("R"), json!({ "planned_on": "2026-11-24", "repeat": rule }));
     let proposal = run(
         &world,
         json!({ "tasks": [
@@ -260,25 +267,19 @@ fn overlong_text_and_too_many_items_are_dropped() {
 #[test]
 fn titles_are_cleaned_and_new_quest_keys_must_be_unique() {
     let world = World::new();
-    let quest = |key: &str, title: &str| {
-        json!({ "key": key, "title": title, "description": "a\u{0}b\n\nc", "milestones": [
-        { "title": "Erste Abgabe", "date": null }, { "title": "Bad", "date": "2026-13-01" }
-    ] })
-    };
+    let quest = |key: &str, title: &str| json!({ "key": key, "title": title });
     let proposal = run(
         &world,
         json!({
             "new_quests": [quest("tax", "Steuer\u{7}\n  erklärung"), quest("tax", "Duplicate"), quest("", "No key")],
-            "tasks": [with(task("Belege\tsammeln"), json!({ "new_quest_key": "tax" }))],
+            "tasks": [with(task("Belege\tsammeln"), json!({ "new_quest_key": "tax", "description": "a\u{0}b\n\nc" }))],
         }),
     );
     assert_eq!(proposal.quests.len(), 1);
     let quest = &proposal.quests[0];
     assert_eq!(quest.title, "Steuer erklärung");
-    assert_eq!(quest.description, "ab\n\nc");
-    assert_eq!(quest.milestones.len(), 1);
-    assert_eq!(quest.milestones[0].achieved_on, day("2026-11-24"), "a milestone without a date is today's");
     assert_eq!(proposal.tasks[0].title, "Belege sammeln");
+    assert_eq!(proposal.tasks[0].description, "ab\n\nc");
     assert_eq!(proposal.tasks[0].quest, Some(QuestRef::New { key: TempKey("q1".into()) }));
-    assert_eq!(reasons(&proposal), [DropReason::InvalidDate, DropReason::Incomplete, DropReason::Incomplete]);
+    assert_eq!(reasons(&proposal), [DropReason::Incomplete, DropReason::Incomplete]);
 }

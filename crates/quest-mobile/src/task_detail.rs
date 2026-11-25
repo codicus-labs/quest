@@ -3,14 +3,14 @@
 use std::cmp::Reverse;
 
 use chrono::{DateTime, Utc};
-use quest_domain::{Snapshot, Task, TimeEntry};
+use quest_domain::{EntityId, Snapshot, Task, TimeEntry, overdue};
 use quest_view::entry_editor::duration_label;
 use quest_view::log_work::date_label;
 use quest_view::repeat;
 
 use crate::home::{chip, quest_options};
 use crate::ids::iso_day;
-use crate::task_types::{DayValue, LoggedEntry, TaskDetail};
+use crate::task_types::{DayValue, LoggedEntry, PostponedCount, TaskDetail};
 use crate::time::Now;
 
 /// How many sessions the sheet lists, as the desktop's task dialog.
@@ -26,7 +26,11 @@ pub(crate) fn task_detail(snapshot: &Snapshot, task: &Task, now: Now) -> TaskDet
         done: task.is_done(),
         quest: task.quest_id.and_then(|id| snapshot.quest(id)).map(chip),
         quest_options: quest_options(snapshot, now.at),
-        date: task.day.map(day_value),
+        planned_on: task.planned_on.map(day_value),
+        due_on: task.due_on.map(day_value),
+        overdue: overdue(task, now.today()),
+        postponed: postponed(snapshot, task.id),
+        checklist: crate::checklist::rows(snapshot, task.id),
         repeat_label: repeat::summary(snapshot, task),
         repeats: repeat::series_of(snapshot, task).repeat.is_some(),
         logged_total: format!("{} total", duration_label(snapshot.task_tracked_ms(task.id, now.at))),
@@ -36,6 +40,13 @@ pub(crate) fn task_detail(snapshot: &Snapshot, task: &Task, now: Now) -> TaskDet
 
 pub(crate) fn day_value(day: chrono::NaiveDate) -> DayValue {
     DayValue { iso: iso_day(day), label: date_label(day) }
+}
+
+/// How often the task's dates were moved later (`quest_view::lists::postponed`).
+pub(crate) fn postponed(snapshot: &Snapshot, task: EntityId) -> PostponedCount {
+    let count = quest_view::lists::postponed(snapshot, task);
+    let small = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    PostponedCount { plan: small(count.plan), due: small(count.due), total: small(count.total()) }
 }
 
 /// "Nov 23 · 09:00–10:30" and its duration, in the caller's time zone.

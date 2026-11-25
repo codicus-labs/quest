@@ -32,9 +32,8 @@ sealed interface EditorTarget : Serializable {
 data class QuestEditorInputs(
     /** null: the sheet is closed. */
     val target: EditorTarget? = null,
-    /** Title and description as typed; null shows the stored ones. */
+    /** The title as typed; null shows the stored one. */
     val title: String? = null,
-    val description: String? = null,
     /** Why Create was refused (an empty title); cleared by typing. */
     val createError: String? = null,
 ) : Serializable
@@ -43,19 +42,19 @@ sealed interface QuestEditorState {
     data object Closed : QuestEditorState
 
     /** "New quest": [hues] with the colour it will get selected. */
-    data class New(val title: String, val description: String, val hues: List<HueOption>, val error: String?) : QuestEditorState
+    data class New(val title: String, val hues: List<HueOption>, val error: String?) : QuestEditorState
 
     /** "Edit quest": the stored quest and the drafts over it. */
-    data class Editing(val detail: QuestDetail, val title: String, val description: String) : QuestEditorState
+    data class Editing(val detail: QuestDetail, val title: String) : QuestEditorState
 }
 
 private const val INPUTS_KEY = "quest.editor"
 
 /**
- * The quest editor over the Quests tab (the desktop's quest dialog): title, description and colour,
+ * The quest editor over the Quests tab (the desktop's quest dialog): title and colour,
  * Complete/Reopen quest and Delete (each with Undo), and the way to the quest's page. "New quest"
- * opens it empty; the quest exists once Create takes its title. Title and description save like
- * the task sheet's: on Done, on losing focus and on closing.
+ * opens it empty; the quest exists once Create takes its title. The title saves like the task
+ * sheet's: on Done, on losing focus and on closing.
  */
 class QuestEditorViewModel(private val core: CoreHolder, private val savedState: SavedStateHandle) : ViewModel() {
     private val inputs: StateFlow<QuestEditorInputs> = savedState.getStateFlow(INPUTS_KEY, QuestEditorInputs())
@@ -113,19 +112,7 @@ class QuestEditorViewModel(private val core: CoreHolder, private val savedState:
         report(core.perform { c, _ -> c.renameQuest(id, title) })
     }
 
-    fun editDescription(text: String) = update { it.copy(description = text) }
-
-    fun commitDescription() {
-        val id = editedQuest ?: return
-        val description = inputs.value.description ?: return
-        update { it.copy(description = null) }
-        report(core.perform { c, _ -> c.setQuestDescription(id, description) })
-    }
-
-    private fun commitDrafts() {
-        commitTitle()
-        commitDescription()
-    }
+    private fun commitDrafts() = commitTitle()
 
     fun setHue(hue: QuestHue) {
         when (inputs.value.target) {
@@ -139,7 +126,7 @@ class QuestEditorViewModel(private val core: CoreHolder, private val savedState:
     fun create() {
         val current = inputs.value
         val target = current.target as? EditorTarget.New ?: return
-        val outcome = core.perform { c, _ -> c.createQuest(current.title.orEmpty(), current.description.orEmpty(), target.hue) }
+        val outcome = core.perform { c, _ -> c.createQuest(current.title.orEmpty(), target.hue) }
         when (outcome) {
             is Outcome.Done -> update { QuestEditorInputs(target = EditorTarget.Quest(outcome.value)) }
             else -> update { it.copy(createError = outcome.failureMessage()) }
@@ -182,10 +169,10 @@ class QuestEditorViewModel(private val core: CoreHolder, private val savedState:
         is EditorTarget.New -> {
             val hues = (state as? CoreState.Ready)?.quests?.newQuestHues.orEmpty()
             val picked = target.hue?.let { hue -> hues.map { it.copy(selected = it.hue == hue) } } ?: hues
-            QuestEditorState.New(inputs.title.orEmpty(), inputs.description.orEmpty(), picked, inputs.createError)
+            QuestEditorState.New(inputs.title.orEmpty(), picked, inputs.createError)
         }
         is EditorTarget.Quest -> readDetail(target.questId)
-            ?.let { QuestEditorState.Editing(it, inputs.title ?: it.title, inputs.description ?: it.description) }
+            ?.let { QuestEditorState.Editing(it, inputs.title ?: it.title) }
             ?: QuestEditorState.Closed
     }
 

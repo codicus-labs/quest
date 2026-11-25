@@ -45,14 +45,14 @@ fn scope_label(scope: &str) -> &'static str {
     if scope.split_whitespace().any(|s| s == SCOPE_WRITE) { "Read and write" } else { "Read only" }
 }
 
-/// "Nov 3", or "Nov 3, 2025" in another year (local calendar).
+/// "Nov 3", or "Nov 3, 2025" in another year (local date).
 fn date(at: DateTime<Utc>, now: Now) -> String {
     let day = now.local(at).date();
     let format = if day.year() == now.today().year() { "%b %-d" } else { "%b %-d, %Y" };
     day.format(format).to_string()
 }
 
-/// "today", "yesterday", "3 days ago" within a week, else the date (local calendar days).
+/// "today", "yesterday", "3 days ago" within a week, else the date (local days).
 fn ago(at: DateTime<Utc>, now: Now) -> String {
     match (now.today() - now.local(at).date()).num_days() {
         ..=0 => "today".to_owned(),

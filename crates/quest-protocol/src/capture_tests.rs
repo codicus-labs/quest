@@ -1,5 +1,5 @@
 use chrono::{NaiveDate, NaiveTime};
-use quest_domain::{EntityId, TimeBlock};
+use quest_domain::EntityId;
 
 use super::*;
 
@@ -11,20 +11,15 @@ fn day(text: &str) -> NaiveDate {
 fn proposal_round_trips_as_tagged_json() {
     let quest = TempKey("q1".into());
     let proposal = CaptureProposal {
-        quests: vec![ProposedQuest {
-            key: quest.clone(),
-            title: "Steuererklärung".into(),
-            description: String::new(),
-            milestones: vec![],
-        }],
+        quests: vec![ProposedQuest { key: quest.clone(), title: "Steuererklärung".into() }],
         tasks: vec![ProposedTask {
             key: TempKey("t1".into()),
             title: "Belege sammeln".into(),
             description: String::new(),
             quest: Some(QuestRef::New { key: quest }),
             quest_uncertain: false,
-            day: Some(day("2026-11-27")),
-            block: Some(TimeBlock { start: NaiveTime::from_hms_opt(9, 0, 0).unwrap(), minutes: 60 }),
+            planned_on: Some(day("2026-11-27")),
+            due_on: Some(day("2026-11-30")),
             repeat: None,
         }],
         work: vec![ProposedWork {

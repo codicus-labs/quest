@@ -67,16 +67,16 @@ val questScenes = listOf(
     Scene("quests-toast", SceneKind.Screen) { Quests(QuestSamples.quests.copy(toast = Samples.toast.copy(text = "Deleted “Old hobby”"))) },
     // The quest editor over the tab (the desktop's "New quest" / "Edit quest" dialog).
     Scene("quest-editor-new", SceneKind.Screen) {
-        val new = QuestEditorState.New("", "", QuestSamples.quests.newQuestHues, "Enter a name.")
+        val new = QuestEditorState.New("", QuestSamples.quests.newQuestHues, "Enter a name.")
         SheetFrame { QuestSheetContent("New quest") { QuestEditorFields(new, QuestEditorActions.None, autoFocus = false) } }
     },
     Scene("quest-editor", SceneKind.Screen) {
-        val editing = QuestEditorState.Editing(QuestSamples.detail, QuestSamples.detail.title, QuestSamples.detail.description)
+        val editing = QuestEditorState.Editing(QuestSamples.detail, QuestSamples.detail.title)
         SheetFrame { QuestSheetContent("Edit quest") { QuestEditorFields(editing, QuestEditorActions.None, autoFocus = false) } }
     },
     Scene("quest-editor-completed", SceneKind.Screen) {
         val completed = QuestSamples.toggled(QuestSamples.detail)
-        SheetFrame { QuestSheetContent("Edit quest") { QuestEditorFields(QuestEditorState.Editing(completed, completed.title, ""), QuestEditorActions.None, autoFocus = false) } }
+        SheetFrame { QuestSheetContent("Edit quest") { QuestEditorFields(QuestEditorState.Editing(completed, completed.title), QuestEditorActions.None, autoFocus = false) } }
     },
     Scene("quest-detail", SceneKind.Screen) { QuestDetailScreen(detail(), QuestDetailActions.None) },
     Scene("quest-detail-editing", SceneKind.Screen) {
@@ -87,11 +87,8 @@ val questScenes = listOf(
     Scene("quest-detail-renaming", SceneKind.Screen) {
         QuestDetailScreen(detail(QuestDetailInputs(questId = "q1", title = "Write the book")), QuestDetailActions.None)
     },
-    Scene("quest-detail-no-milestones", SceneKind.Screen) {
-        QuestDetailScreen(detail(detail = QuestSamples.detail.copy(milestones = emptyList())), QuestDetailActions.None)
-    },
     Scene("quest-detail-completed", SceneKind.Screen) {
-        val completed = QuestSamples.toggled(QuestSamples.detail).copy(taskGroups = emptyList(), milestones = emptyList(), openCount = 0u, toast = Samples.toast.copy(text = "Completed quest “Write the book”"))
+        val completed = QuestSamples.toggled(QuestSamples.detail).copy(taskGroups = emptyList(), openCount = 0u, toast = Samples.toast.copy(text = "Completed quest “Write the book”"))
         QuestDetailScreen(detail(detail = completed), QuestDetailActions.None)
     },
     Scene("review", SceneKind.Screen) { Tab(TopDestination.Review) { ReviewScreen(ReviewUiState.Ready(QuestSamples.review), ReviewActions.None) } },

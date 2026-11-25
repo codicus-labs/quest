@@ -13,20 +13,15 @@ fn key(k: &str) -> TempKey {
 fn proposal() -> CaptureProposal {
     let day = NaiveDate::from_ymd_opt(2026, 10, 16);
     CaptureProposal {
-        quests: vec![ProposedQuest {
-            key: key("q1"),
-            title: "Taxes".into(),
-            description: String::new(),
-            milestones: vec![],
-        }],
+        quests: vec![ProposedQuest { key: key("q1"), title: "Taxes".into() }],
         tasks: vec![ProposedTask {
             key: key("t1"),
             title: "Collect receipts".into(),
             description: String::new(),
             quest: Some(QuestRef::New { key: key("q1") }),
             quest_uncertain: true,
-            day,
-            block: None,
+            planned_on: day,
+            due_on: None,
             repeat: None,
         }],
         work: vec![ProposedWork {

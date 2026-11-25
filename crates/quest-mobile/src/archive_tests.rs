@@ -62,5 +62,5 @@ fn quests_an_older_version_archived_come_first_to_unarchive() {
 #[test]
 fn restore_targets_match_the_kind() {
     assert_eq!(deletable(TrashKind::Session, id(1)), Deletable::Entry(id(1)));
-    assert_eq!(deletable(TrashKind::Milestone, id(1)), Deletable::Milestone(id(1)));
+    assert_eq!(deletable(TrashKind::ChecklistItem, id(1)), Deletable::ChecklistItem(id(1)));
 }

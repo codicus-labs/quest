@@ -26,7 +26,7 @@ pub(crate) fn form(snapshot: &Snapshot, shared_text: Option<&str>, now: Now) -> 
     }
 }
 
-/// The commands that create the task `id`: at the bottom of `day` (None: the backlog), with
+/// The commands that create the task `id`: at the bottom of `day` (None: unplanned), with
 /// `quest_id` (None: no quest) and, if not blank, `description`.
 pub(crate) fn commands(
     snapshot: &Snapshot,
@@ -41,8 +41,9 @@ pub(crate) fn commands(
         return Err(MobileError::EmptyTitle);
     }
     let quest_id = quest_id.map(|raw| quest(snapshot, raw)).transpose()?;
-    let day = day.map(parse_iso_day).transpose()?;
-    let mut commands = vec![Command::CreateTask { id, title, quest_id, day, position: Position::Bottom }];
+    let planned_on = day.map(parse_iso_day).transpose()?;
+    let create = Command::CreateTask { id, title, quest_id, planned_on, due_on: None, position: Position::Bottom };
+    let mut commands = vec![create];
     let description = description.trim();
     if !description.is_empty() {
         commands.push(Command::SetTaskDescription { id, description: description.to_owned() });

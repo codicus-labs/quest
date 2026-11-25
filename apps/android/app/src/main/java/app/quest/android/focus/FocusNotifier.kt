@@ -134,7 +134,8 @@ class FocusNotifier(
         val paused = shown as? ShownNotification.Paused
         if (running.session != null || paused == null) return TimerReading(running.session)
         // The task may be in another workspace than the shown one (the timer is one per person).
-        val open = core.read { c, _ -> c.isTaskOpen(paused.session.taskId) } as? Outcome.Done ?: return null
+        val taskId = paused.session.taskId ?: return TimerReading(null, pausedTaskOpen = false)
+        val open = core.read { c, _ -> c.isTaskOpen(taskId) } as? Outcome.Done ?: return null
         return TimerReading(null, pausedTaskOpen = open.value)
     }
 

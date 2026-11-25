@@ -26,9 +26,6 @@ import uniffi.quest_mobile.ArchiveData
 import uniffi.quest_mobile.QuestDetail
 import uniffi.quest_mobile.QuestsData
 import uniffi.quest_mobile.ReviewData
-import uniffi.quest_mobile.CalendarData
-import uniffi.quest_mobile.CalendarQuery
-import uniffi.quest_mobile.DayGrid
 import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.MobileException
@@ -46,8 +43,6 @@ sealed interface CoreState {
 
     data class Ready(
         val home: HomeData,
-        /** Today's day grid; re-read on every tick, so its now-line moves. */
-        val todayGrid: DayGrid,
         val sync: SyncState,
         val account: Account?,
         val settings: SettingsData,
@@ -55,8 +50,6 @@ sealed interface CoreState {
         val workspaces: WorkspacesData,
         /** The plan's days for the current [PlanQuery]; null while no plan is shown. */
         val plan: PlanData? = null,
-        /** The calendar page for the current [CalendarQuery]; null while no calendar is shown. */
-        val calendar: CalendarData? = null,
         /** The Quests tab; null while it is not shown. */
         val quests: QuestsData? = null,
         /** The open quest page; null while none is open. */
@@ -167,9 +160,6 @@ class CoreHolder(
 
     /** The plan's query while the plan is on screen; null skips reading it. */
     @Volatile private var planQuery: PlanQuery? = null
-
-    /** The calendar's page while the calendar is on screen; null skips reading it. */
-    @Volatile private var calendarQuery: CalendarQuery? = null
 
     @Volatile private var questsShown = false
 
@@ -350,13 +340,6 @@ class CoreHolder(
         markStale()
     }
 
-    /** The calendar asks for [query] from now on (null: it is not shown); [state] follows shortly. */
-    fun setCalendarQuery(query: CalendarQuery?) {
-        if (query == calendarQuery) return
-        calendarQuery = query
-        markStale()
-    }
-
     /** The Quests tab is shown or not; [state] follows shortly. */
     fun setQuestsShown(shown: Boolean) {
         if (shown == questsShown) return
@@ -419,7 +402,6 @@ class CoreHolder(
             if (query == null && planRead) core.leavePlan()
             planRead = query != null
             val plan = query?.let { core.plan(it.window, it.questFilter, now) }
-            val calendar = calendarQuery?.let { core.calendar(it, now) }
             val questPage = questPageId?.let { id ->
                 try {
                     QuestPage.Shown(core.questDetail(id, now))
@@ -429,13 +411,11 @@ class CoreHolder(
             }
             CoreState.Ready(
                 home = home,
-                todayGrid = core.dayGrid(home.dayIso, now),
                 sync = core.syncState(),
                 account = core.account(),
                 settings = core.settings(),
                 workspaces = core.workspaces(now),
                 plan = plan,
-                calendar = calendar,
                 quests = if (questsShown) core.quests(now) else null,
                 questPage = questPage,
                 review = reviewQuery?.let { core.review(it.week, now) },

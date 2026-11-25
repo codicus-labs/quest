@@ -16,7 +16,14 @@ fn setup() -> (Replica, EntityId, EntityId, EntityId) {
     r.run(Command::CreateQuest { id: quest, title: "Launch".into(), color: QuestColor::Red });
     let day = Some(NaiveDate::from_ymd_opt(2026, 10, 15).unwrap());
     for (id, quest_id) in [(quest_task, Some(quest)), (other_task, None)] {
-        r.run(Command::CreateTask { id, title: "t".into(), quest_id, day, position: Position::Bottom });
+        r.run(Command::CreateTask {
+            id,
+            title: "t".into(),
+            quest_id,
+            planned_on: day,
+            due_on: None,
+            position: Position::Bottom,
+        });
     }
     (r, quest, quest_task, other_task)
 }

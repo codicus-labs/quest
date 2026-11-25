@@ -49,15 +49,9 @@ import app.quest.android.ui.home.HomeViewModel
 import app.quest.android.ui.navigation.DetailScaffold
 import app.quest.android.ui.navigation.QuestScaffold
 import app.quest.android.ui.navigation.TopDestination
-import app.quest.android.ui.calendar.CalendarActions
-import app.quest.android.ui.calendar.CalendarGridActions
-import app.quest.android.ui.calendar.CalendarScreen
-import app.quest.android.ui.calendar.CalendarSheetActions
-import app.quest.android.ui.calendar.CalendarSheets
-import app.quest.android.ui.calendar.CalendarViewModel
-import app.quest.android.ui.calendar.calendarDayCount
-import androidx.compose.foundation.layout.BoxWithConstraints
-import uniffi.quest_mobile.GridBlockKind
+import app.quest.android.ui.logwork.LogWorkActions
+import app.quest.android.ui.logwork.LogWorkSheet
+import app.quest.android.ui.logwork.LogWorkViewModel
 import app.quest.android.ui.plan.PlanActions
 import app.quest.android.ui.plan.PlanScreen
 import app.quest.android.ui.plan.PlanViewModel
@@ -99,7 +93,7 @@ class AppViewModels(
     val settings: SettingsViewModel,
     val focus: FocusViewModel,
     val plan: PlanViewModel,
-    val calendar: CalendarViewModel,
+    val logWork: LogWorkViewModel,
     val quests: QuestsViewModel,
     val questEditor: QuestEditorViewModel,
     val questDetail: QuestDetailViewModel,
@@ -131,6 +125,9 @@ fun QuestApp(
     val focus = viewModels.focus
     val focusState by focus.state.collectAsStateWithLifecycle()
     ShowMessages(focus.message, focus::dismissMessage, snackbar)
+    val logWork = viewModels.logWork
+    val logWorkState by logWork.state.collectAsStateWithLifecycle()
+    ShowMessages(logWork.message, logWork::dismissMessage, snackbar)
 
     val open = { detail: Detail -> details = details + detail }
     val openSearch = {
@@ -145,11 +142,7 @@ fun QuestApp(
             if (focus.state.value != FocusUiState.Hidden) focus.close()
             when (request) {
                 is AppRequest.OpenTask -> viewModels.taskSheet.open(request.taskId)
-                AppRequest.LogWork -> {
-                    viewModels.questDetail.close()
-                    destination = TopDestination.Calendar
-                    viewModels.calendar.openLogWork()
-                }
+                AppRequest.LogWork -> viewModels.logWork.open()
             }
         }
     }
@@ -200,6 +193,7 @@ fun QuestApp(
             }
             ManageWorkspacesSheet(workspacesState, manageActions(workspaces))
         }
+        LogWorkSheet(logWorkState, logWorkActions(logWork))
     }
 }
 
@@ -280,7 +274,6 @@ private fun DestinationContent(destination: TopDestination, viewModels: AppViewM
     ShowMessages(sheet.message, sheet::dismissMessage, snackbar)
     when (destination) {
         TopDestination.Plan -> PlanDestination(viewModels, snackbar, timerStarted)
-        TopDestination.Calendar -> CalendarDestination(viewModels, snackbar)
         TopDestination.Quests -> QuestsDestination(viewModels, snackbar, openArchive)
         TopDestination.Review -> ReviewDestination(viewModels)
         TopDestination.Home -> {
@@ -306,52 +299,10 @@ private fun PlanDestination(viewModels: AppViewModels, snackbar: SnackbarHostSta
     PlanScreen(state, planActions(plan, viewModels.taskSheet, viewModels.focus, timerStarted))
 }
 
-/**
- * The calendar; the core builds its page only while it is composed, with as many days as fit
- * (1 compact, 3 medium, 7 expanded).
- */
-@Composable
-private fun CalendarDestination(viewModels: AppViewModels, snackbar: SnackbarHostState) {
-    val calendar = viewModels.calendar
-    val state by calendar.state.collectAsStateWithLifecycle()
-    ShowMessages(calendar.message, calendar::dismissMessage, snackbar)
-    BoxWithConstraints {
-        val dayCount = calendarDayCount(maxWidth)
-        DisposableEffect(calendar, dayCount) {
-            calendar.setShown(true, dayCount)
-            onDispose { calendar.setShown(false) }
-        }
-        CalendarScreen(state, calendarActions(calendar, viewModels.taskSheet))
-    }
-    CalendarSheets(state, calendarSheetActions(calendar, viewModels.taskSheet))
-}
-
-internal fun calendarActions(vm: CalendarViewModel, sheet: TaskSheetViewModel) = CalendarActions(
-    previous = vm::previous,
-    next = vm::next,
-    today = vm::today,
-    openLogWork = vm::openLogWork,
-    undo = vm::undo,
-    dismissToast = vm::dismissToast,
-    grid = CalendarGridActions(
-        preview = vm::preview,
-        drop = vm::drop,
-        tapBlock = { block -> if (block.kind == GridBlockKind.PLANNED) sheet.open(block.targetId) else vm.openEntry(block.targetId) },
-        edgeSpeed = RustPlanRules::edgeSpeed,
-    ),
-)
-
-internal fun calendarSheetActions(vm: CalendarViewModel, sheet: TaskSheetViewModel) = CalendarSheetActions(
-    close = vm::closeSheet,
-    editLogWork = vm::editLogWork,
-    saveLogWork = vm::saveLogWork,
-    editEntry = vm::editEntry,
-    saveEntry = vm::saveEntry,
-    deleteEntry = vm::deleteEntry,
-    openTask = { taskId ->
-        vm.closeSheet()
-        sheet.open(taskId)
-    },
+internal fun logWorkActions(vm: LogWorkViewModel) = LogWorkActions(
+    close = vm::close,
+    edit = vm::edit,
+    save = vm::save,
     openTaskPicker = vm::openTaskPicker,
     closeTaskPicker = vm::closeTaskPicker,
     editTaskQuery = vm::editTaskQuery,
@@ -424,7 +375,6 @@ internal fun homeActions(vm: HomeViewModel, sheet: TaskSheetViewModel, focus: Fo
     pickQuest = vm::pickQuest,
     setShowOther = vm::setShowOther,
     setAddPosition = vm::setAddPosition,
-    setCompactView = vm::setCompactView,
     openFocus = focus::open,
     assignQuest = vm::assignQuest,
 )

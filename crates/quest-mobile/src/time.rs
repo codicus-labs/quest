@@ -1,4 +1,4 @@
-//! Turns the caller's `Moment` into the instant and calendar the domain works with.
+//! Turns the caller's `Moment` into the instant and local dates the domain works with.
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, TimeZone, Utc};
 use chrono_tz::Tz;

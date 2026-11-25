@@ -9,9 +9,9 @@ fn task(quest: bool, done: bool) -> Task {
         id: EntityId::new(),
         title: "Ship the beta".into(),
         quest_id: quest.then(EntityId::new),
-        day: None,
+        planned_on: None,
+        due_on: None,
         sort_key: "a".into(),
-        block: None,
         completed_at: done.then(|| "2026-10-15T14:40:00Z".parse().unwrap()),
         description: String::new(),
         repeat: None,
@@ -32,7 +32,6 @@ fn open_quest_tasks_offer_everything_and_end_with_delete() {
 fn done_tasks_and_tasks_without_quest_offer_less() {
     let done = task_actions(&task(true, true), true);
     assert!(!done.contains(&Some(TaskAction::Focus)));
-    assert!(!done.contains(&Some(TaskAction::ScheduleAt)));
     let loose = task_actions(&task(false, false), false);
     assert!(!loose.contains(&Some(TaskAction::OpenQuest)));
     let orphan = task_actions(&task(true, false), false);

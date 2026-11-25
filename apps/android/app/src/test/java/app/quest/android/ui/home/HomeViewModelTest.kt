@@ -34,11 +34,10 @@ class HomeViewModelTest {
     private val HomeViewModel.ready get() = state.value as HomeUiState.Ready
 
     @Test
-    fun showsTheCoresHomeAndTodaysGridOnceOpen() = runTest(main.dispatcher) {
+    fun showsTheCoresHomeOnceOpen() = runTest(main.dispatcher) {
         val vm = viewModel()
 
-        assertEquals(HomeUiState.Ready(Samples.home, Samples.grid, SyncState.SignedOut, HomePrefs(), HomeInputs()), vm.state.value)
-        assertEquals("2026-11-23", core.gridDays.last())
+        assertEquals(HomeUiState.Ready(Samples.home, SyncState.SignedOut, HomePrefs(), HomeInputs()), vm.state.value)
     }
 
     @Test
@@ -103,12 +102,11 @@ class HomeViewModelTest {
         val first = viewModel(saved)
         first.setQuestFilter("q1")
         first.editDraft(TaskSection.OTHER, "Buy milk")
-        first.setCompactView(CompactView.Grid)
 
         val restored = viewModel(SavedStateHandle(saved.keys().associateWith { saved.get<Any>(it) }))
 
         assertEquals(
-            HomeInputs(questFilter = "q1", otherDraft = "Buy milk", compactView = CompactView.Grid),
+            HomeInputs(questFilter = "q1", otherDraft = "Buy milk"),
             restored.ready.inputs,
         )
         assertEquals(HomeQuery(questFilter = "q1", questPick = null), core.queries.last())

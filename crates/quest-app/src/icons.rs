@@ -51,7 +51,7 @@ icon!(
     r#"<path d="M6 3.5L10.5 8L6 12.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>"#
 );
 icon!(
-    CALENDAR,
+    DATE,
     r#"<rect x="2.5" y="3.5" width="11" height="10" rx="1.5" stroke="currentColor" stroke-width="1.1" fill="none"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>"#
 );
 icon!(CLOSE, r#"<path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>"#);

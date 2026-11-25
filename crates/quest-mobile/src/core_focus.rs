@@ -22,9 +22,9 @@ impl QuestCore {
         })
     }
 
-    /// The running timer's task, for the ongoing notification. None when no task's timer runs
-    /// (a session without a task, or on a deleted one, has nothing to show). The timer is one per
-    /// person: in another workspace than the shown one, it shows with that workspace's name.
+    /// The running timer, for the ongoing notification: a task's or organizing. None when nothing
+    /// runs (other work without a task, or a deleted task, has nothing to show). The timer is one
+    /// per person: in another workspace than the shown one, it shows with that workspace's name.
     pub fn running_session(&self, now: Moment) -> Result<Option<RunningSession>, MobileError> {
         guard(|| {
             let now = Now::parse(&now)?;

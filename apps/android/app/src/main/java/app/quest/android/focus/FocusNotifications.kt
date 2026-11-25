@@ -89,7 +89,7 @@ object FocusNotifications {
      * Buttons start the service as a foreground service: tapping a notification may start one
      * from the background, and Resume needs it running again.
      */
-    private fun action(context: Context, action: NotificationAction, taskId: String): Notification.Action {
+    private fun action(context: Context, action: NotificationAction, taskId: String?): Notification.Action {
         val (label, serviceAction) = when (action) {
             NotificationAction.Pause -> R.string.timer_pause to FocusService.ACTION_PAUSE
             NotificationAction.Resume -> R.string.focus_resume to FocusService.ACTION_RESUME

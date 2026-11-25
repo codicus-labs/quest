@@ -45,16 +45,16 @@ fn keys_act_on_the_task_under_the_pointer() {
 
     let today = rt.state.today();
     type_text(&mut rt, "d");
-    assert_eq!(task(&rt, "Draft this week’s essay").day, Some(today + Days::new(1)), "D: the next day");
+    assert_eq!(task(&rt, "Draft this week’s essay").planned_on, Some(today + Days::new(1)), "D: the next day");
     // The card left Home (and the pointer); its card under the pointer elsewhere stands in.
     rt.frame(0.0);
     assert_eq!(rt.state.hovered_task, None);
     rt.state.hovered_task = Some(essay);
     type_text(&mut rt, "w");
     let monday = today + Days::new(u64::from(7 - today.weekday().num_days_from_monday()));
-    assert_eq!(task(&rt, "Draft this week’s essay").day, Some(monday), "W: next week");
+    assert_eq!(task(&rt, "Draft this week’s essay").planned_on, Some(monday), "W: next week");
     type_text(&mut rt, "t");
-    assert_eq!(task(&rt, "Draft this week’s essay").day, Some(today), "T: today");
+    assert_eq!(task(&rt, "Draft this week’s essay").planned_on, Some(today), "T: today");
 
     rt.state.hovered_task = None;
     settle(&mut rt);
@@ -149,7 +149,7 @@ fn focus_complete_ends_the_session_marks_done_and_goes_home() {
 fn focus_keys_pause_resume_complete_and_leave() {
     let (mut rt, _dir) = demo_app();
     let design = task(&rt, "Design the next chapter").id;
-    command(&mut rt, '4');
+    command(&mut rt, '3');
     type_text(&mut rt, " ");
     assert!(rt.state.snap.running_entry().is_none(), "Space pauses");
     assert!(rt.find("focus-title").is_some(), "Focus keeps showing the paused task");
@@ -159,7 +159,7 @@ fn focus_keys_pause_resume_complete_and_leave() {
     press(&mut rt, key, mods);
     assert!(task(&rt, "Design the next chapter").is_done(), "⌘↵ completes");
     assert_eq!(rt.state.view, View::Home);
-    command(&mut rt, '4');
+    command(&mut rt, '3');
     press(&mut rt, Key::Escape, Mods::default());
     assert_eq!(rt.state.view, View::Home, "Esc goes Home");
 }
@@ -168,7 +168,7 @@ fn focus_keys_pause_resume_complete_and_leave() {
 fn focus_edits_the_title_and_description() {
     let (mut rt, _dir) = demo_app();
     let design = task(&rt, "Design the next chapter").id;
-    command(&mut rt, '4');
+    command(&mut rt, '3');
     click(&mut rt, "focus-description");
     type_text(&mut rt, "Start from the reader's question.");
     press(&mut rt, Key::Enter, Mods::default());
@@ -185,12 +185,12 @@ fn focus_edits_the_title_and_description() {
 #[test]
 fn letters_and_tab_switch_views_and_question_mark_shows_the_sheet() {
     let (mut rt, _dir) = demo_app();
-    type_text(&mut rt, "c");
-    assert_eq!(rt.state.view, View::Calendar);
+    type_text(&mut rt, "p");
+    assert_eq!(rt.state.view, View::Plan);
     press(&mut rt, Key::Tab, Mods::default());
     assert_eq!(rt.state.view, View::Focus);
     press(&mut rt, Key::Tab, Mods { shift: true, ..Mods::default() });
-    assert_eq!(rt.state.view, View::Calendar);
+    assert_eq!(rt.state.view, View::Plan);
     type_text(&mut rt, "q");
     assert_eq!(rt.state.view, View::Quests);
     type_text(&mut rt, "?");

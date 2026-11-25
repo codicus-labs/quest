@@ -12,7 +12,7 @@ use crate::state::{Overlay, QuestsTab, State, View};
 
 fn quests_page() -> (Runtime<State>, TempDir) {
     let (mut rt, dir) = demo_app();
-    command(&mut rt, '5');
+    command(&mut rt, '4');
     settle(&mut rt);
     (rt, dir)
 }

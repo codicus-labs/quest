@@ -6,7 +6,6 @@ import uniffi.quest_mobile.ArchiveGroup
 import uniffi.quest_mobile.ArchiveItem
 import uniffi.quest_mobile.HomeTask
 import uniffi.quest_mobile.HueOption
-import uniffi.quest_mobile.MilestoneRow
 import uniffi.quest_mobile.QuestCard
 import uniffi.quest_mobile.QuestDetail
 import uniffi.quest_mobile.QuestHue
@@ -33,8 +32,6 @@ object QuestSamples {
     fun hues(selected: QuestHue) = QuestHue.entries.mapIndexed { index, hue ->
         HueOption(hue = hue, name = hue.name.lowercase().replaceFirstChar { it.uppercase() }, colorHex = hueColors[index], selected = hue == selected)
     }
-
-    val sprint = MilestoneRow(id = "m1", title = "First draft done", dateLabel = "Nov 15, 2026", a11yLabel = "First draft done, Nov 15, 2026")
 
     val writingCard = QuestCard(
         id = "q1",
@@ -107,12 +104,11 @@ object QuestSamples {
     }
 
     private fun task(id: String, title: String, done: Boolean = false) =
-        HomeTask(id = id, title = title, done = done, quest = Samples.writing, tracked = null, timerRunning = false, canStartTimer = !done)
+        HomeTask(id = id, title = title, done = done, quest = Samples.writing, tracked = null, timerRunning = false, canStartTimer = !done, plannedOn = null, dueOn = null, overdue = false, postponed = Samples.notPostponed)
 
     val detail = QuestDetail(
         id = "q1",
         title = "Write the book",
-        description = "A novel about a lighthouse keeper.",
         colorHex = BLUE,
         hues = hues(QuestHue.BLUE),
         completed = false,
@@ -127,7 +123,6 @@ object QuestSamples {
             QuestTaskGroup("Today", listOf(task("t1", "Outline chapter 3"), task("t4", "Edit chapter 2"))),
             QuestTaskGroup("Done", listOf(task("t5", "Pick a title", done = true))),
         ),
-        milestones = listOf(sprint),
         toast = null,
     )
 

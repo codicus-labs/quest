@@ -4,7 +4,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::change::EntityId;
-use crate::model::{Task, TimeEntry};
+use crate::model::{EntryKind, Task, TimeEntry};
 use crate::snapshot::{Snapshot, overlap_ms};
 
 /// Tracked time inside a window.
@@ -12,13 +12,15 @@ use crate::snapshot::{Snapshot, overlap_ms};
 pub struct WorkTime {
     /// On tasks of a quest that exists: Quest Hours.
     pub quest_ms: i64,
+    /// Organizing between tasks.
+    pub organizing_ms: i64,
     /// Everything else.
     pub other_ms: i64,
 }
 
 impl WorkTime {
     pub fn total_ms(&self) -> i64 {
-        self.quest_ms + self.other_ms
+        self.quest_ms + self.organizing_ms + self.other_ms
     }
 }
 
@@ -39,9 +41,10 @@ impl Snapshot {
         let mut work = WorkTime::default();
         for entry in &self.time_entries {
             let ms = overlap_ms(entry, from, to, now);
-            match self.entry_quest(entry) {
-                Some(_) => work.quest_ms += ms,
-                None => work.other_ms += ms,
+            match (entry.kind, self.entry_quest(entry)) {
+                (EntryKind::Organizing, _) => work.organizing_ms += ms,
+                (EntryKind::Task, Some(_)) => work.quest_ms += ms,
+                (EntryKind::Task, None) => work.other_ms += ms,
             }
         }
         work

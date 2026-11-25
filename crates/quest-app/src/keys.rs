@@ -1,8 +1,8 @@
-//! Window shortcuts, as the shortcuts sheet (`?`) lists them: Tab / ⇧Tab and H P C F Q R views,
+//! Window shortcuts, as the shortcuts sheet (`?`) lists them: Tab / ⇧Tab and H P F Q R views,
 //! ⌘K palette, ⌘, settings, N new task, V other work, and Space X T D W ⌘⌫ on the task under the
-//! pointer (else the selected one; in Focus, its task). Also ⌘1–6, ⌘Z undo, Esc back and ⌫
-//! deletes the selected session or task. And the keys a focused task card or grid item takes:
-//! the keyboard way to do what dragging does.
+//! pointer (else the selected one; in Focus, its task). Also ⌘1–5, ⌘Z undo, Esc back and ⌫
+//! deletes the selected task. And the keys a focused task card takes: the keyboard way to do
+//! what dragging does.
 
 use chrono::{Datelike, Days, NaiveDate};
 use quest_domain::{Command, EntityId, Position};
@@ -87,29 +87,6 @@ pub fn card_key(ev: &KeyEvent) -> Option<CardKey> {
     }
 }
 
-/// What a focused block or session on a time grid does with a key.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GridKey {
-    /// ⌫ / Delete: delete a session, unplan a block.
-    Remove,
-    /// ⌥↑ / ⌥↓: earlier or later by `minutes`.
-    Shift { minutes: i32 },
-    /// ⌥⇧↑ / ⌥⇧↓: end earlier or later by `minutes`.
-    Resize { minutes: i32 },
-}
-
-pub fn grid_key(ev: &KeyEvent) -> Option<GridKey> {
-    let step = crate::timescale::SNAP_MINUTES;
-    match (&ev.key, ev.mods.alt, ev.mods.shift) {
-        (Key::Backspace | Key::Delete, false, _) => Some(GridKey::Remove),
-        (Key::Up, true, false) => Some(GridKey::Shift { minutes: -step }),
-        (Key::Down, true, false) => Some(GridKey::Shift { minutes: step }),
-        (Key::Up, true, true) => Some(GridKey::Resize { minutes: -step }),
-        (Key::Down, true, true) => Some(GridKey::Resize { minutes: step }),
-        _ => None,
-    }
-}
-
 /// Plain letters only arrive here when no text field took them (Rune's key routing gives a
 /// focused field's typing to the field first).
 pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
@@ -118,7 +95,7 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         Key::Command('k') => Some(Shortcut::TogglePalette),
         Key::Command('z') if !ev.mods.shift => Some(Shortcut::Undo),
         Key::Command(',') => Some(Shortcut::Settings),
-        Key::Command(c @ '1'..='6') => {
+        Key::Command(c @ '1'..='5') => {
             let index = (*c as usize) - ('1' as usize);
             View::ALL.get(index).map(|v| Shortcut::Go(*v))
         }
@@ -131,7 +108,6 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         Key::Text(t) if plain => match t.to_lowercase().as_str() {
             "h" => Some(Shortcut::Go(View::Home)),
             "p" => Some(Shortcut::Go(View::Plan)),
-            "c" => Some(Shortcut::Go(View::Calendar)),
             "f" => Some(Shortcut::Go(View::Focus)),
             "q" => Some(Shortcut::Go(View::Quests)),
             "r" => Some(Shortcut::Go(View::Review)),
@@ -183,7 +159,6 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Shortcut::ToggleOther => s.show_other = !s.show_other,
         Shortcut::Back if s.date_picker.is_some() => s.date_picker = None,
         Shortcut::Back if s.overlay == Overlay::LogWork => s.close_log_work(),
-        Shortcut::Back if s.overlay == Overlay::EntryEditor => s.close_entry_editor(),
         Shortcut::Back if s.overlay == Overlay::RepeatEditor => s.close_repeat_editor(),
         Shortcut::Back if s.overlay == Overlay::Capture => s.capture_back(),
         Shortcut::Back if s.overlay == Overlay::GuestImport => s.keep_guest_data(),
@@ -228,9 +203,10 @@ fn on_task_key(s: &mut State, task: EntityId, key: TaskKey, tx: &mut Tx) {
         TaskKey::Complete => {}
         TaskKey::Open => s.open_task_modal(task),
         TaskKey::Move(to) => {
-            let current = s.snap.task(task).and_then(|t| t.day);
+            let current = s.snap.task(task).and_then(|t| t.planned_on);
             let day = moved_day(to, current, s.today());
-            s.dispatch(Command::MoveTask { id: task, day: Some(day), position: Position::Bottom });
+            let at = s.clock.now();
+            s.dispatch(Command::MoveTask { id: task, planned_on: Some(day), position: Position::Bottom, at });
         }
         TaskKey::Delete => {
             tx.blur();
@@ -256,14 +232,14 @@ mod tests {
     #[test]
     fn command_digits_pick_views_in_tab_order() {
         assert_eq!(shortcut(&key(Key::Command('1'))), Some(Shortcut::Go(View::Home)));
-        assert_eq!(shortcut(&key(Key::Command('6'))), Some(Shortcut::Go(View::Review)));
-        assert_eq!(shortcut(&key(Key::Command('7'))), None);
+        assert_eq!(shortcut(&key(Key::Command('5'))), Some(Shortcut::Go(View::Review)));
+        assert_eq!(shortcut(&key(Key::Command('6'))), None);
     }
 
     #[test]
     fn letters_jump_to_views_and_tab_cycles() {
         assert_eq!(shortcut(&text("h")), Some(Shortcut::Go(View::Home)));
-        assert_eq!(shortcut(&text("C")), Some(Shortcut::Go(View::Calendar)));
+        assert_eq!(shortcut(&text("P")), Some(Shortcut::Go(View::Plan)));
         assert_eq!(shortcut(&text("f")), Some(Shortcut::Go(View::Focus)));
         assert_eq!(shortcut(&key(Key::Tab)), Some(Shortcut::Cycle { back: false }));
         let shift_tab = KeyEvent { key: Key::Tab, mods: Mods { shift: true, ..Mods::default() } };
@@ -314,13 +290,5 @@ mod tests {
         assert_eq!(card_key(&with(Key::Up, true, false)), Some(CardKey::Nudge { up: true }));
         assert_eq!(card_key(&with(Key::Right, true, false)), Some(CardKey::Day { later: true }));
         assert_eq!(card_key(&with(Key::Up, false, false)), None, "plain arrows stay focus navigation");
-    }
-
-    #[test]
-    fn grid_items_shift_resize_and_delete() {
-        assert_eq!(grid_key(&with(Key::Backspace, false, false)), Some(GridKey::Remove));
-        assert_eq!(grid_key(&with(Key::Down, true, false)), Some(GridKey::Shift { minutes: 15 }));
-        assert_eq!(grid_key(&with(Key::Up, true, true)), Some(GridKey::Resize { minutes: -15 }));
-        assert_eq!(grid_key(&with(Key::Down, false, false)), None);
     }
 }

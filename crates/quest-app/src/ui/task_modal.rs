@@ -113,7 +113,13 @@ fn main(s: &State, task: &Task, form: &TaskModal, p: &Pal) -> El {
 fn side(s: &State, task: &Task, form: &TaskModal, p: &Pal, popups: &mut Vec<El>) -> El {
     let mut side =
         col().w(300.0).h_full().padding(22.0).gap(6.0).fill(p.bar).border_sides([0.0, 0.0, 0.0, 1.0], p.border);
-    side = side.child(parts::caps("Date", p)).child(date(s, form, task.day, p, popups));
+    side = side.child(parts::caps("Date", p)).child(date(s, form, task.planned_on, p, popups));
+    if let Some(due) = task.due_on {
+        let deadline = crate::log_work::date_label(due);
+        side = side
+            .child(parts::caps("Deadline", p).mt(8.0))
+            .child(text(deadline).key("task-modal-deadline").font(ty::BODY).color(p.text));
+    }
     let repeat = super::recurrence::task_row(s, task, p);
     side = side.child(parts::caps("Repeat", p).mt(8.0)).child(repeat);
     let quest = task.quest_id.and_then(|q| s.snap.quest(q));
@@ -179,7 +185,7 @@ fn date(s: &State, form: &TaskModal, day: Option<chrono::NaiveDate>, p: &Pal, po
     date
 }
 
-/// The total and each session, newest first; editing them is the calendar's.
+/// The total and each session, newest first.
 fn logged(s: &State, task: EntityId, p: &Pal) -> El {
     let total = format!("{} total", format::hours(s.snap.task_tracked_ms(task, s.now)));
     let mut logged = col().key("task-modal-logged").w_full().gap(6.0).child(

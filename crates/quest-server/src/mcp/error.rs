@@ -15,7 +15,7 @@ pub enum ToolCode {
     TaskNotFound,
     QuestNotFound,
     WorkspaceNotFound,
-    MilestoneNotFound,
+    ChecklistItemNotFound,
     EntryNotFound,
     NotInArchive,
     InvalidTimeRange,
@@ -75,8 +75,12 @@ impl From<CommandError> for ToolError {
         match error {
             CommandError::UnknownQuest(id) => ToolError::quest_not_found(id),
             CommandError::UnknownTask(id) => ToolError::task_not_found(id),
-            CommandError::UnknownMilestone(id) => {
-                ToolError::new(ToolCode::MilestoneNotFound, format!("No milestone with id {id}; see get_quest"))
+            CommandError::UnknownChecklistItem(id) => ToolError::new(
+                ToolCode::ChecklistItemNotFound,
+                format!("No checklist item with id {id}; see get_checklist"),
+            ),
+            CommandError::UnknownPostponement(id) => {
+                ToolError::new(ToolCode::InvalidInput, format!("No postponement with id {id}"))
             }
             CommandError::UnknownEntry(id) => {
                 ToolError::new(ToolCode::EntryNotFound, format!("No time entry with id {id}; see list_time_entries"))
@@ -88,6 +92,9 @@ impl From<CommandError> for ToolError {
                 ToolCode::InvalidTimeRange,
                 "A finished session cannot be resumed; start the timer again instead",
             ),
+            CommandError::NothingToRebook | CommandError::RebookOutsideEntry => {
+                ToolError::new(ToolCode::InvalidTimeRange, error.to_string())
+            }
             CommandError::NotInTrash { kind, id } => ToolError::new(
                 ToolCode::NotInArchive,
                 format!("No archived {} with id {id}; search with include_archived to find it", kind_name(kind)),
