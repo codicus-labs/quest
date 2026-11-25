@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -41,6 +42,7 @@ import app.quest.android.ui.account.AccountDialogs
 import app.quest.android.ui.account.AccountScreen
 import app.quest.android.ui.account.AccountViewModel
 import app.quest.android.ui.archive.ArchiveViewModel
+import app.quest.android.ui.components.UndoSnackbar
 import app.quest.android.ui.components.QuestSnackbarHost
 import app.quest.android.ui.focus.FocusActions
 import app.quest.android.ui.focus.FocusScreen
@@ -69,6 +71,7 @@ import app.quest.android.ui.settings.SettingsViewModel
 import app.quest.android.ui.shell.AccountDrawer
 import app.quest.android.ui.shell.DrawerActions
 import app.quest.android.ui.shell.DrawerData
+import app.quest.android.ui.shell.OrganizingHint
 import app.quest.android.ui.shell.MiniPlayer
 import app.quest.android.ui.shell.PlayerActions
 import app.quest.android.ui.shell.PlayerViewModel
@@ -166,6 +169,8 @@ fun QuestApp(
     ShowMessages(entry.message, entry::dismissMessage, snackbar)
     val player = viewModels.player
     val playerCard by player.state.collectAsStateWithLifecycle()
+    val organizingHint by player.hint.collectAsStateWithLifecycle()
+    val playerToast by player.toast.collectAsStateWithLifecycle()
     ShowMessages(player.message, player::dismissMessage, snackbar)
     val sheet = viewModels.taskSheet
     val sheetState by sheet.state.collectAsStateWithLifecycle()
@@ -278,7 +283,15 @@ fun QuestApp(
                             }
                         },
                         timerNote = { TimerElsewhereBar(workspacesData, showTimer) },
-                        player = { MiniPlayer(playerCard, playerActions(viewModels, timerStarted)) },
+                        player = {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                if (tab == Tab.Tracked || (tab == Tab.Quests && questsPage == QuestsPage.Nav)) {
+                                    playerToast?.let { UndoSnackbar(it.text, player::undo, actionLabel = it.actionLabel, onDismiss = player::dismissToast) }
+                                }
+                                organizingHint?.let { OrganizingHint(it.leftAtLabel, player::book, player::keep) }
+                                MiniPlayer(playerCard, playerActions(viewModels, timerStarted))
+                            }
+                        },
                         snackbarHost = { QuestSnackbarHost(snackbar) },
                     ) {
                         TabContent(tab, showPlan, questsPage, viewModels, snackbar, timerStarted, openQuest, openPage = { questsPage = it }, openReview = { open(Detail.Review) })
@@ -353,7 +366,13 @@ private fun playerActions(viewModels: AppViewModels, timerStarted: () -> Unit) =
     stop = viewModels.player::stop,
     start = { taskId ->
         if (viewModels.player.start(taskId)) {
-            viewModels.focus.rememberTask(taskId)
+            viewModels.focus.open(taskId)
+            timerStarted()
+        }
+    },
+    backToTask = {
+        viewModels.player.backToTask()?.let { taskId ->
+            viewModels.focus.open(taskId)
             timerStarted()
         }
     },
@@ -405,7 +424,8 @@ private fun rememberNotificationPermissionRequest(prefs: FocusPrefs?, preference
 
 private fun focusActions(vm: FocusViewModel, timerStarted: () -> Unit) = FocusActions(
     close = vm::close,
-    pause = vm::pause,
+    stop = vm::stop,
+    organize = vm::organize,
     resume = { if (vm.resume()) timerStarted() },
     complete = vm::complete,
     pick = { if (vm.pick(it)) timerStarted() },
@@ -438,7 +458,7 @@ private fun PlanDestination(viewModels: AppViewModels, snackbar: SnackbarHostSta
                 open = viewModels.taskSheet::open,
                 startTimer = { taskId ->
                     if (plan.startTimer(taskId)) {
-                        viewModels.focus.rememberTask(taskId)
+                        viewModels.focus.open(taskId)
                         timerStarted()
                     }
                 },

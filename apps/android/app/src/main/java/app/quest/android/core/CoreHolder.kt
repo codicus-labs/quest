@@ -29,6 +29,7 @@ import uniffi.quest_mobile.ReviewData
 import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.MobileException
+import uniffi.quest_mobile.FocusExitStatus
 import uniffi.quest_mobile.Moment
 import uniffi.quest_mobile.PlanSections
 import uniffi.quest_mobile.SettingsData
@@ -67,6 +68,7 @@ sealed interface CoreState {
         val questNav: QuestNav? = null,
         /** The Tracked tab; null while it is not shown. */
         val tracked: TrackedData? = null,
+        val focusExit: FocusExitStatus? = null,
     ) : CoreState
 
     data class Failed(val message: String) : CoreState
@@ -454,6 +456,7 @@ class CoreHolder(
                 },
                 questNav = if (questNavShown) core.questNav(now) else null,
                 tracked = if (trackedShown) core.tracked(now) else null,
+                focusExit = core.focusExitStatus(now),
             )
         } catch (e: Exception) {
             _notices.tryEmit(e.userMessage("Could not read today's tasks."))

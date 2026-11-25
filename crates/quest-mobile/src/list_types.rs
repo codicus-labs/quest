@@ -109,6 +109,8 @@ pub struct TrackedBlock {
     pub end_minute: u32,
     /// "09:00–10:30", "14:00–now".
     pub range: String,
+    pub outside_since_minute: Option<u32>,
+    pub rebooked: bool,
 }
 
 /// One quest's line in "This week".

@@ -96,7 +96,7 @@ class PhoneScreenshotTest(scene: Scene, dark: Boolean) : ScreenshotTest(scene, d
     companion object {
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0} dark={1}")
-        fun parameters() = ScreenshotTest.parameters(scenes + notesScenes)
+        fun parameters() = ScreenshotTest.parameters(scenes + notesScenes + focusExitScenes)
     }
 }
 

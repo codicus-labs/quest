@@ -24,6 +24,7 @@ import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.LogWorkCheck
 import uniffi.quest_mobile.LogWorkDraft
+import uniffi.quest_mobile.FocusExitStatus
 import uniffi.quest_mobile.Moment
 import uniffi.quest_mobile.PlanSections
 import uniffi.quest_mobile.AddPosition
@@ -68,6 +69,14 @@ interface QuestCoreApi : WorkspacesApi {
     fun startTimer(taskId: String, now: Moment)
 
     fun stopTimer(now: Moment)
+
+    fun focusOpened()
+    fun focusLeft(now: Moment)
+    fun focusExitStatus(now: Moment): FocusExitStatus?
+    fun keepFocusTime(now: Moment)
+    fun bookFocusTime(now: Moment): String?
+    fun organize(now: Moment): Boolean
+    fun backToTask(now: Moment): String?
 
     fun deleteTask(taskId: String, now: Moment)
 

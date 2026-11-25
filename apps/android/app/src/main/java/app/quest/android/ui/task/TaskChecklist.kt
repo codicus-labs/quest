@@ -191,6 +191,7 @@ private fun ChecklistLine(
         CompleteToggle(
             item.done, { actions.toggle(item.id, !item.done) }, Modifier.testTag("checklist-toggle-${item.id}"),
             uncheckedBorder = colors.textMuted,
+            square = true,
             label = item.text.ifBlank { stringResource(R.string.task_checklist_item) },
         )
         if (!editable) {

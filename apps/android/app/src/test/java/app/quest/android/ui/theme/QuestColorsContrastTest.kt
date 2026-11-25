@@ -3,6 +3,8 @@ package app.quest.android.ui.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import app.quest.android.ui.components.OnAccentFill
+import app.quest.android.ui.tracked.TIMELINE_TINT
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -41,6 +43,10 @@ class QuestColorsContrastTest {
         for ((name, background) in listOf("bg" to c.bg, "card" to c.card)) {
             put("inline code on $name", contrast(c.text, c.textMuted.copy(alpha = 0.12f).compositeOver(background)))
         }
+        put("Focus Done", contrast(OnAccentFill, c.accentFill))
+        val darkestTimeline = Color.Black.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
+        val lightestTimeline = Color.White.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
+        put("timeline text", contrast(c.text, if (dark) lightestTimeline else darkestTimeline))
         val scheme = colorScheme(c, dark)
         put("onPrimary on primary", contrast(scheme.onPrimary, scheme.primary))
         // Quests' FABs and filled buttons put `card` on the accent.
@@ -59,6 +65,9 @@ class QuestColorsContrastTest {
         for ((name, fill) in listOf("accent" to c.accent, "error" to c.error)) {
             put("$name icon on its tint", contrast(fill, fill.copy(alpha = SWIPE_TINT).compositeOver(c.bg)))
         }
+        val darkestTimeline = Color.Black.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
+        val lightestTimeline = Color.White.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
+        put("outside-focus hatch", minOf(contrast(c.textMuted, darkestTimeline), contrast(c.textMuted, lightestTimeline)))
         put("checklist drop outline", contrast(c.borderStrong, c.textMuted.copy(alpha = 0.08f).compositeOver(c.card)))
     }
 

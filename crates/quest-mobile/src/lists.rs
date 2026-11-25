@@ -209,9 +209,9 @@ fn nav_row(quest: &Quest, week: &WeekBalance) -> QuestNavRow {
     }
 }
 
-pub(crate) fn tracked(snapshot: &Snapshot, now: Now) -> TrackedData {
+pub(crate) fn tracked(snapshot: &Snapshot, now: Now, focus_exit: &quest_view::focus_exit::FocusExit) -> TrackedData {
     let today = now.today();
-    let day = tracked::day_timeline(snapshot, today, &now.tz, now.at);
+    let day = tracked::day_timeline_with_focus(snapshot, today, &now.tz, now.at, focus_exit);
     let week = tracked::week_balance(snapshot, today, &now.tz, now.at);
     let clock = |minute: u32| format::hh_mm(minute);
     let blocks = day
@@ -230,6 +230,8 @@ pub(crate) fn tracked(snapshot: &Snapshot, now: Now) -> TrackedData {
             running: b.running,
             start_minute: b.start_minute,
             end_minute: b.end_minute,
+            outside_since_minute: b.outside_since_minute,
+            rebooked: b.rebooked,
         })
         .collect();
     TrackedData {

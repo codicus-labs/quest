@@ -109,6 +109,14 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
 
     override fun stopTimer(now: Moment) = core.stopTimer(now)
 
+    override fun focusOpened() = core.focusOpened()
+    override fun focusLeft(now: Moment) = core.focusLeft(now)
+    override fun focusExitStatus(now: Moment) = core.focusExitStatus(now)
+    override fun keepFocusTime(now: Moment) = core.keepFocusTime(now)
+    override fun bookFocusTime(now: Moment) = core.bookFocusTime(now)
+    override fun organize(now: Moment) = core.organize(now)
+    override fun backToTask(now: Moment) = core.backToTask(now)
+
     override fun deleteTask(taskId: String, now: Moment) = core.deleteTask(taskId, now)
 
     override fun undo(now: Moment) = core.undo(now)

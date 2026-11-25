@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.quest.android.ListSamples
@@ -54,6 +56,7 @@ internal fun Shell(
     player: PlayerCard = PlayerCard.Empty,
     workspaces: WorkspacesData = WorkspaceSamples.one,
     leading: @Composable () -> Unit = {},
+    abovePlayer: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) = QuestScaffold(
     tab = tab,
@@ -63,7 +66,12 @@ internal fun Shell(
     workspaceName = workspaces.active.name,
     leading = leading,
     timerNote = { TimerElsewhereBar(workspaces, onClick = {}) },
-    player = { MiniPlayer(player, PlayerActions.None) },
+    player = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            abovePlayer()
+            MiniPlayer(player, PlayerActions.None)
+        }
+    },
     content = content,
 )
 

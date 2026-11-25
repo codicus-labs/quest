@@ -99,12 +99,15 @@ cargo run -p quest-mobile --example desktop_peer -- /tmp/peer http://127.0.0.1:8
 
 ## Focus and the timer notification
 
-Focus opens from the running time on a task card, the stopwatch icon in the top bar, the timer
-notification, or the deep link:
+Starting a timer opens Focus. Reopen it from the mini player, the notification, or the deep link:
 
 ```sh
 adb shell am start -a android.intent.action.VIEW -d quest://focus
 ```
+
+“Back to lists” leaves the task timer running. After two minutes, the mini player offers to book the time
+since leaving as Organizing, with Undo. “Organize” switches immediately; “Back to …” resumes the task
+in Focus. Tracked shows the time outside Focus hatched and labels rebooked blocks.
 
 While a timer runs, `FocusService` (foreground service, type `specialUse`) shows an ongoing
 notification with Pause/Resume and Complete; it keeps running after the app is swiped from Recents.

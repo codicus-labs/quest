@@ -41,7 +41,17 @@
     <!-- Focus -->
     <string name="focus">Focus</string>
     <string name="focus_open">Open focus</string>
-    <string name="focus_back">Back to Home</string>
+    <string name="focus_back">Back to lists</string>
+    <string name="focus_stop">Stop</string>
+    <string name="focus_done">Done</string>
+    <string name="focus_organize">Organize</string>
+    <string name="focus_today">%1$s today</string>
+    <string name="focus_summary">%1$s · %2$s this week</string>
+    <string name="organizing_hint">Organizing?</string>
+    <string name="organizing_book">Book since %1$s</string>
+    <string name="organizing_keep">Keep</string>
+    <string name="tracked_outside_focus">Outside focus</string>
+    <string name="tracked_rebooked">%1$s · rebooked</string>
     <string name="focus_resume">Resume</string>
     <string name="focus_change_quest">Change quest</string>
     <string name="focus_pick_title">What are you working on?</string>

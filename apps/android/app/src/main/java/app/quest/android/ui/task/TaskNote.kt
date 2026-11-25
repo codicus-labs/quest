@@ -185,6 +185,7 @@ private fun MarkdownBlocks(blocks: List<MarkdownBlock>, toggleMarker: (ULong) ->
                             CompleteToggle(
                                 marker.checked, { toggleMarker(marker.offset) }, Modifier.testTag("note-marker-${marker.offset}"),
                                 uncheckedBorder = colors.textMuted,
+                                square = true,
                             )
                         } else {
                             Text(

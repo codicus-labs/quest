@@ -7,7 +7,6 @@ import app.quest.android.ui.openedHolder
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -23,9 +22,9 @@ class PlayerViewModelTest {
         val vm = viewModel()
         assertEquals(ListSamples.playerOrganizing, vm.state.value)
 
-        assertTrue(vm.start("t5"))
+        assertEquals(ListSamples.playerOrganizing.backToTaskId, vm.backToTask())
         vm.stop()
 
-        assertEquals(listOf("start t5", "stop"), core.calls)
+        assertEquals(listOf("back to task", "stop"), core.calls)
     }
 }

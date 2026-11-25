@@ -14,6 +14,7 @@ pub struct FocusExitStatus {
     pub entry_id: String,
     pub left_at_ms: i64,
     pub hint_due: bool,
+    pub left_at_label: String,
 }
 
 impl QuestCore {
@@ -42,13 +43,14 @@ impl QuestCore {
 
     pub fn focus_exit_status(&self, now: Moment) -> Result<Option<FocusExitStatus>, MobileError> {
         guard(|| {
-            let at = Now::parse(&now)?.at;
+            let now = Now::parse(&now)?;
             let snap = self.store().snapshot();
             let exit = self.focus_exit_state();
             Ok(exit.departure(&snap).map(|(entry, since)| FocusExitStatus {
                 entry_id: entry.to_string(),
                 left_at_ms: since.timestamp_millis(),
-                hint_due: exit.hint(&snap, at).is_some(),
+                hint_due: exit.hint(&snap, now.at).is_some(),
+                left_at_label: since.with_timezone(&now.tz).format("%H:%M").to_string(),
             }))
         })
     }

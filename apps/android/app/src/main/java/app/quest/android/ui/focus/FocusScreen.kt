@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import app.quest.android.R
+import app.quest.android.ui.components.OnAccentFill
 import app.quest.android.ui.components.Dot
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.components.QuestPickerSheet
@@ -78,7 +82,7 @@ import uniffi.quest_mobile.QuestChip as QuestRef
 /** Everything Focus can do, wired to [FocusViewModel]. */
 class FocusActions(
     val close: () -> Unit,
-    val pause: () -> Unit,
+    val stop: () -> Unit,
     val resume: () -> Unit,
     val complete: () -> Unit,
     val pick: (String) -> Unit,
@@ -91,6 +95,7 @@ class FocusActions(
     val checklist: ChecklistActions = ChecklistActions(),
     val undo: () -> Unit = {},
     val dismissToast: () -> Unit = {},
+    val organize: () -> Unit = {},
 ) {
     companion object {
         /** Does nothing; for screenshots. */
@@ -200,35 +205,47 @@ private fun SessionContent(state: FocusUiState.Session, actions: FocusActions, n
     val session = state.session
     val colors = QuestTheme.colors
     Column(Modifier.fillMaxSize()) {
-        TopBar(session.header, session.running, actions.close, note)
+        TopBar(stringResource(R.string.focus).uppercase(), session.running, actions.close, note)
         CenteredScroll(Modifier.weight(1f)) {
             Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 QuestPicker(session.quest, state.quests, actions.setQuest)
                 FocusTitle(state.title, actions.editTitle, actions.commitTitle, Modifier.padding(top = 20.dp))
                 BasicText(
-                    session.timer,
+                    session.runningTimer ?: session.timer,
                     style = QuestType.timer.copy(color = colors.text),
                     maxLines = 1,
                     autoSize = TextAutoSize.StepBased(minFontSize = 40.sp, maxFontSize = QuestType.timer.fontSize),
                     modifier = Modifier.padding(top = QuestSpacing.large).testTag("focus-timer"),
                 )
+                val today = stringResource(R.string.focus_today, session.trackedToday)
+                val week = session.questHoursThisWeek
                 Text(
-                    session.stateLabel,
-                    style = QuestType.caps,
-                    color = if (session.running) colors.textMuted else colors.accent,
-                    modifier = Modifier.padding(top = QuestSpacing.small).testTag("focus-state"),
+                    if (week == null) today else stringResource(R.string.focus_summary, today, week),
+                    style = QuestType.small,
+                    color = colors.textMuted,
+                    modifier = Modifier.padding(top = QuestSpacing.small),
                 )
-                Row(Modifier.padding(top = 32.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                TaskNote(session.taskId, state.description, actions.notes, "focus-description", Modifier.padding(top = QuestSpacing.medium))
+                if (state.checklist.isNotEmpty()) {
+                    TaskChecklist(session.taskId, state.checklist, actions.checklist, editable = false)
+                }
+                FlowRow(Modifier.padding(top = QuestSpacing.medium), horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)) {
                     if (session.running) {
-                        FocusButton(stringResource(R.string.timer_pause), "focus-pause", actions.pause) { Icon(QuestIcons.Pause, null, Modifier.size(18.dp)) }
+                        FocusButton(stringResource(R.string.focus_stop), "focus-stop", actions.stop) { Icon(QuestIcons.Stop, null, Modifier.size(18.dp)) }
                     } else {
                         FocusButton(stringResource(R.string.focus_resume), "focus-resume", actions.resume) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)) }
                     }
-                    FocusButton(stringResource(R.string.task_complete), "focus-complete", actions.complete) { Icon(Icons.Filled.Check, null, Modifier.size(18.dp)) }
+                    FocusButton(stringResource(R.string.focus_done), "focus-complete", actions.complete, primary = true) { Icon(Icons.Filled.Check, null, Modifier.size(18.dp)) }
                 }
-                TaskNote(session.taskId, state.description, actions.notes, "focus-description", Modifier.padding(top = 32.dp))
-                if (state.checklist.isNotEmpty()) {
-                    TaskChecklist(session.taskId, state.checklist, actions.checklist, editable = false)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                    TextButton(onClick = actions.close) {
+                        Text(stringResource(R.string.focus_back), color = colors.textMuted)
+                    }
+                    if (session.running) {
+                        TextButton(onClick = actions.organize, modifier = Modifier.testTag("focus-organize")) {
+                            Text(stringResource(R.string.focus_organize), color = colors.textMuted)
+                        }
+                    }
                 }
             }
         }
@@ -253,15 +270,17 @@ private fun CenteredScroll(modifier: Modifier, content: @Composable () -> Unit) 
 }
 
 @Composable
-private fun FocusButton(label: String, tag: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
+private fun FocusButton(label: String, tag: String, onClick: () -> Unit, primary: Boolean = false, icon: @Composable () -> Unit) {
     val colors = QuestTheme.colors
     OutlinedButton(
         onClick = onClick,
         shape = RoundedCornerShape(QuestSpacing.small),
+        colors = if (primary) ButtonDefaults.outlinedButtonColors(containerColor = colors.accentFill, contentColor = OnAccentFill)
+            else ButtonDefaults.outlinedButtonColors(contentColor = colors.text),
         modifier = Modifier.heightIn(min = QuestSpacing.touchTarget).testTag(tag),
     ) {
         Box(Modifier.padding(end = QuestSpacing.small)) { icon() }
-        Text(label, style = QuestType.bodyMedium, color = colors.text)
+        Text(label, style = QuestType.bodyMedium)
     }
 }
 

@@ -69,12 +69,15 @@ class FocusViewModelTest {
     }
 
     @Test
-    fun pauseAndResumeUseTheTimer() = runTest(main.dispatcher) {
+    fun stopReturnsToListsAndReopeningAllowsResume() = runTest(main.dispatcher) {
         val vm = viewModel()
         vm.open()
 
-        vm.pause()
+        vm.stop()
+        assertEquals(FocusUiState.Hidden, vm.state.value)
+        assertEquals(emptyList<uniffi.quest_mobile.Moment>(), core.focusDepartures)
         core.focus = FocusView.Session(Samples.pausedSession)
+        vm.open()
         vm.resume()
 
         assertEquals(listOf("stop", "start t1"), core.calls)

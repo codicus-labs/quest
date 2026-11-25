@@ -158,10 +158,13 @@ fun CompleteToggle(
     size: Dp = QuestSpacing.touchTarget,
     uncheckedBorder: Color = QuestTheme.colors.borderStrong,
     label: String = stringResource(R.string.task_complete),
+    square: Boolean = false,
 ) {
     val colors = QuestTheme.colors
     val fill = if (done) colors.accentFill else Color.Transparent
     val edge = if (done) colors.accentFill else uncheckedBorder
+    val shape = if (square) RoundedCornerShape(2.dp) else CircleShape
+    val markSize = if (square) 16.dp else QuestSpacing.checkSize
     Box(
         modifier = modifier
             .size(size)
@@ -172,11 +175,11 @@ fun CompleteToggle(
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.size(QuestSpacing.checkSize).background(fill, CircleShape).border(QuestSpacing.hairline, edge, CircleShape),
+            Modifier.size(markSize).background(fill, shape).border(QuestSpacing.hairline, edge, shape),
             contentAlignment = Alignment.Center,
         ) {
             if (done) {
-                Icon(Icons.Filled.Check, contentDescription = null, tint = OnAccentFill, modifier = Modifier.size(14.dp))
+                Icon(Icons.Filled.Check, contentDescription = null, tint = OnAccentFill, modifier = Modifier.size(if (square) 12.dp else 14.dp))
             }
         }
     }

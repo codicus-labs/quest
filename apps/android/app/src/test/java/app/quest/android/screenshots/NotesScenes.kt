@@ -57,20 +57,23 @@ internal fun sampleFocusActions(notes: NoteActions = plainNote) =
     FocusActions({}, {}, {}, {}, {}, {}, {}, {}, {}, notes = notes)
 
 @Composable
-private fun NotesSheet() {
+internal fun NotesSheet() {
     Shell(Tab.Today) { ListScreen(ListUiState.Ready(ListSamples.todayIdle, ""), rows) }
     TaskSheet(state, sampleSheetActions(sampleNote))
+}
+
+@Composable
+internal fun NoteFocus() {
+    FocusScreen(
+        FocusUiState.Session(Samples.focusSession, detail.title, SOURCE, Samples.home.quests, checklist = points),
+        sampleFocusActions(sampleNote), keepScreenOn = false,
+    )
 }
 
 internal val notesScenes = listOf(
     Scene("r4-note-checklist", SceneKind.Window) { NotesSheet() },
     Scene("r4-note-edit", SceneKind.Window, interact = { onNodeWithTag("sheet-description").performClick() }) { NotesSheet() },
-    Scene("r4-focus-checklist", SceneKind.Screen) {
-        FocusScreen(
-            FocusUiState.Session(Samples.focusSession, detail.title, SOURCE, Samples.home.quests, checklist = points),
-            sampleFocusActions(sampleNote), keepScreenOn = false,
-        )
-    },
+    Scene("r4-focus-checklist", SceneKind.Screen) { NoteFocus() },
     Scene("r4-list-progress", SceneKind.Screen) {
         val list = ListSamples.todayIdle
         val sections = list.sections.map { section ->

@@ -5,10 +5,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,6 +18,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,8 +40,8 @@ import uniffi.quest_mobile.QuestChip
 class PlayerActions(
     val openFocus: () -> Unit,
     val stop: () -> Unit,
-    /** Resume, or "Back to" from Organizing: starts this task's timer. */
     val start: (String) -> Unit,
+    val backToTask: () -> Unit = {},
 ) {
     companion object {
         val None = PlayerActions({}, {}, {})
@@ -58,6 +61,7 @@ fun MiniPlayer(card: PlayerCard, actions: PlayerActions, modifier: Modifier = Mo
             StopPill(card.timer, card.title, actions.stop, Modifier.testTag("player-stop"))
         }
         is PlayerCard.Organizing -> Frame(actions.openFocus, modifier) {
+            Dot(QuestTheme.colors.textMuted, 8.dp)
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.organizing), style = QuestType.bodyMedium, color = QuestTheme.colors.text, maxLines = 1)
                 val backTo = card.backToTaskId
@@ -69,7 +73,7 @@ fun MiniPlayer(card: PlayerCard, actions: PlayerActions, modifier: Modifier = Mo
                         color = QuestTheme.colors.accent,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable { actions.start(backTo) }.padding(vertical = 2.dp).testTag("player-back-to"),
+                        modifier = Modifier.heightIn(min = 48.dp).clickable(onClick = actions.backToTask).wrapContentHeight().testTag("player-back-to"),
                     )
                 }
             }
@@ -80,6 +84,28 @@ fun MiniPlayer(card: PlayerCard, actions: PlayerActions, modifier: Modifier = Mo
             IconButton(onClick = { actions.start(card.taskId) }, modifier = Modifier.testTag("player-resume")) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.focus_resume), tint = QuestTheme.colors.text)
             }
+        }
+    }
+}
+
+@Composable
+fun OrganizingHint(since: String, book: () -> Unit, keep: () -> Unit) {
+    val colors = QuestTheme.colors
+    val shape = RoundedCornerShape(QuestSpacing.cardRadius)
+    FlowRow(
+        Modifier.padding(horizontal = QuestSpacing.small).widthIn(max = 560.dp).fillMaxWidth()
+            .background(colors.cardRaised, shape).border(QuestSpacing.hairline, colors.border, shape)
+            .padding(horizontal = QuestSpacing.small).testTag("organizing-hint"),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.organizing_hint), style = QuestType.bodyMedium, color = colors.text,
+            modifier = Modifier.padding(QuestSpacing.small))
+        TextButton(onClick = book, modifier = Modifier.testTag("organizing-book")) {
+            Text(stringResource(R.string.organizing_book, since), color = colors.accent)
+        }
+        TextButton(onClick = keep) {
+            Text(stringResource(R.string.organizing_keep), color = colors.textMuted)
         }
     }
 }

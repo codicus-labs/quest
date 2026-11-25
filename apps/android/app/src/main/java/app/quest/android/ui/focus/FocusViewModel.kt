@@ -121,8 +121,26 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
 
     private fun sessionTask(): String? = (state.value as? FocusUiState.Session)?.session?.taskId
 
-    /** Opens Focus; with [taskId], on that task (it becomes the device's focus task). */
-    fun open(taskId: String? = null) = update { it.copy(visible = true, focusTask = taskId ?: it.focusTask) }
+    init {
+        if (inputs.value.visible) reportOpened()
+    }
+
+    fun open(taskId: String? = null) {
+        val wasVisible = inputs.value.visible
+        update { it.copy(visible = true, focusTask = taskId ?: it.focusTask) }
+        if (!wasVisible) reportOpened()
+    }
+
+    private fun reportOpened() {
+        val outcome = core.perform { c, _ -> c.focusOpened() }
+        if (outcome == Outcome.NotReady) {
+            viewModelScope.launch {
+                if (core.awaitOpen() && inputs.value.visible) report(core.perform { c, _ -> c.focusOpened() })
+            }
+        } else {
+            report(outcome)
+        }
+    }
 
     /**
      * "Start timer on last task" (launcher shortcut, maybe a cold start): starts the timer on the
@@ -145,11 +163,27 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
 
     /** Back to Home; typed title and description are saved first. */
     fun close() {
+        if (!inputs.value.visible) return
         commitDrafts()
-        update { it.copy(visible = false) }
+        if (core.state.value is CoreState.Ready) report(core.perform { c, now -> c.focusLeft(now) })
+        hide()
     }
 
-    fun pause() = report(core.perform { c, now -> c.stopTimer(now) })
+    fun stop() {
+        commitDrafts()
+        val outcome = core.perform { c, now -> c.stopTimer(now) }
+        report(outcome)
+        if (outcome is Outcome.Done) hide()
+    }
+
+    fun organize() {
+        commitDrafts()
+        val outcome = core.perform { c, now -> c.organize(now) }
+        report(outcome)
+        if ((outcome as? Outcome.Done)?.value == true) hide()
+    }
+
+    private fun hide() = update { it.copy(visible = false) }
 
     /** True if the timer started. */
     fun resume(): Boolean {
@@ -173,7 +207,7 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
         commitDrafts()
         val outcome = core.perform { c, now -> c.completeTask(taskId, now) }
         report(outcome)
-        if (outcome is Outcome.Done) update { it.copy(visible = false) }
+        if (outcome is Outcome.Done) hide()
     }
 
     /** null: "No quest". */

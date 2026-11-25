@@ -195,7 +195,7 @@ pub struct SettingsData {
 pub enum FocusView {
     /// A task to focus on: the running one, else `focus_task` if open, else the open task worked
     /// on last.
-    Session { session: FocusSession },
+    Session { session: Box<FocusSession> },
     /// Nothing to focus on: today's open tasks to start one ("What are you working on?").
     Pick { tasks: Vec<FocusPickTask> },
 }
@@ -218,6 +218,9 @@ pub struct FocusSession {
     pub running: bool,
     /// "RUNNING" / "PAUSED".
     pub state_label: String,
+    pub running_timer: Option<String>,
+    pub tracked_today: String,
+    pub quest_hours_this_week: Option<String>,
 }
 
 /// One row of Focus's "What are you working on?" list; tapping it starts the timer.

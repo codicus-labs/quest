@@ -71,7 +71,7 @@ internal fun ListDestination(
         open = viewModels.taskSheet::open,
         startTimer = { taskId ->
             if (vm.startTimer(taskId)) {
-                focus.rememberTask(taskId)
+                focus.open(taskId)
                 timerStarted()
             }
         },
@@ -223,8 +223,7 @@ private fun carryOutSearch(outcome: SearchOutcome, viewModels: AppViewModels, ti
         is SearchOutcome.Show -> navigation.show(outcome.view)
         is SearchOutcome.ShowQuest -> navigation.openQuest(outcome.questId)
         is SearchOutcome.Focus -> {
-            viewModels.focus.rememberTask(outcome.taskId)
-            viewModels.focus.open()
+            viewModels.focus.open(outcome.taskId)
             timerStarted()
         }
         // Handled by the ViewModel (the list switches); never reaches here.

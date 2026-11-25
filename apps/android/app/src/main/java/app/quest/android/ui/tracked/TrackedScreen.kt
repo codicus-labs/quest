@@ -29,7 +29,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -38,6 +47,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -63,6 +73,8 @@ private val HourHeight = 44.dp
 
 /** Room on the left for "09". */
 private val HourLabelWidth = 32.dp
+private val HatchWidth = 20.dp
+internal const val TIMELINE_TINT = 0.22f
 
 /** The Tracked tab: the review's entry, today's timeline (a block opens its session), then this week. */
 @Composable
@@ -133,6 +145,7 @@ private fun Timeline(tracked: TrackedData, open: (String) -> Unit) {
     val colors = QuestTheme.colors
     val first = tracked.firstHour.toInt()
     val hours = (tracked.lastHour.toInt() - first).coerceAtLeast(1)
+    val labelHeight = with(LocalDensity.current) { QuestType.small.lineHeight.toDp() } + 6.dp
     fun top(minute: Int): Dp = HourHeight * ((minute - first * 60) / 60f)
     Box(Modifier.fillMaxWidth().height(HourHeight * hours).testTag("timeline")) {
         for (hour in 0..hours) {
@@ -141,36 +154,81 @@ private fun Timeline(tracked: TrackedData, open: (String) -> Unit) {
                 Box(Modifier.weight(1f).height(QuestSpacing.hairline).background(colors.gridLine))
             }
         }
-        tracked.blocks.forEach { block ->
-            val start = block.startMinute.toInt()
-            val height = (top(block.endMinute.toInt()) - top(start)).coerceAtLeast(22.dp)
-            Block(block, open, Modifier.offset(x = HourLabelWidth, y = top(start)).height(height))
-        }
         if (tracked.nowMinute > 0u) {
             Box(Modifier.offset(x = HourLabelWidth - 4.dp, y = top(tracked.nowMinute.toInt()) - 1.dp).fillMaxWidth().height(2.dp).background(colors.accentLine))
+        }
+        tracked.blocks.forEachIndexed { index, block ->
+            val start = block.startMinute.toInt()
+            val next = tracked.blocks.getOrNull(index + 1)
+            val durationHeight = top(block.endMinute.toInt()) - top(start)
+            val height = if (next?.rebooked == true && next.startMinute == block.endMinute) {
+                durationHeight.coerceAtLeast(3.dp)
+            } else durationHeight.coerceAtLeast(labelHeight)
+            Block(block, open, Modifier.offset(x = HourLabelWidth, y = top(start)).height(height), showLabel = height >= labelHeight)
         }
     }
 }
 
 @Composable
-private fun Block(block: TrackedBlock, open: (String) -> Unit, modifier: Modifier) {
+private fun Block(block: TrackedBlock, open: (String) -> Unit, modifier: Modifier, showLabel: Boolean) {
     val colors = QuestTheme.colors
-    val tint = block.colorHex?.let(::questColor) ?: if (block.organizing) colors.accentFill else colors.textFaint
+    val tint = if (block.organizing) colors.textMuted else block.colorHex?.let(::questColor) ?: colors.textFaint
+    val outsideLabel = stringResource(R.string.tracked_outside_focus)
+    val title = if (block.rebooked) stringResource(R.string.tracked_rebooked, block.title) else block.title
     val shape = RoundedCornerShape(6.dp)
     Row(
         modifier
             .fillMaxWidth()
             .padding(end = HourLabelWidth, top = 1.dp, bottom = 1.dp)
             .clip(shape)
-            .background(tint.copy(alpha = 0.22f))
+            .background(tint.copy(alpha = TIMELINE_TINT).compositeOver(colors.bg))
+            .timelineMark(block, tint, colors.textMuted)
             .testTag("block:${block.title}")
             .clickable { open(block.entryId) }
-            .semantics(mergeDescendants = true) { role = Role.Button },
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                if (!showLabel) contentDescription = "$title, ${block.range}"
+                if (block.outsideSinceMinute != null) stateDescription = outsideLabel
+            },
     ) {
-        Box(Modifier.width(3.dp).fillMaxHeight().background(tint))
-        Row(Modifier.padding(horizontal = QuestSpacing.small, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(QuestSpacing.small)) {
-            Text(block.title, style = QuestType.smallMedium, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            Text(block.range, style = QuestType.small, color = colors.textMuted, maxLines = 1)
+        Box(Modifier.width(3.dp).fillMaxHeight().background(if (block.rebooked) Color.Transparent else tint))
+        if (!showLabel) return@Row
+        val endPadding = if (block.outsideSinceMinute == null) QuestSpacing.small else HatchWidth + QuestSpacing.tight
+        Row(Modifier.padding(start = QuestSpacing.small, end = endPadding, top = 2.dp, bottom = 2.dp), horizontalArrangement = Arrangement.spacedBy(QuestSpacing.small)) {
+            Text(title, style = QuestType.smallMedium, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Text(block.range, style = QuestType.small, color = colors.text, maxLines = 1)
+        }
+    }
+}
+
+private fun Modifier.timelineMark(block: TrackedBlock, tint: Color, hatch: Color): Modifier {
+    val outside = block.outsideSinceMinute
+    if (outside == null && !block.rebooked) return this
+    return drawWithContent {
+        if (outside != null) {
+            val duration = (block.endMinute.toInt() - block.startMinute.toInt()).coerceAtLeast(1)
+            val fraction = ((outside.toInt() - block.startMinute.toInt()) / duration.toFloat()).coerceIn(0f, 1f)
+            val start = (size.height * fraction).coerceAtMost((size.height - 3.dp.toPx()).coerceAtLeast(0f))
+            val height = size.height - start
+            val left = (size.width - HatchWidth.toPx()).coerceAtLeast(0f)
+            clipRect(left = left, top = start) {
+                var x = left - height
+                while (x < size.width) {
+                    drawLine(hatch, Offset(x, size.height), Offset(x + height, start), 1.dp.toPx())
+                    x += 5.dp.toPx()
+                }
+            }
+        }
+        drawContent()
+        if (block.rebooked) {
+            val inset = 1.dp.toPx()
+            val dash = 4.dp.toPx()
+            drawRoundRect(
+                tint, topLeft = Offset(inset, inset),
+                size = Size((size.width - 2 * inset).coerceAtLeast(0f), (size.height - 2 * inset).coerceAtLeast(0f)),
+                cornerRadius = CornerRadius(5.dp.toPx()),
+                style = Stroke(inset, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash))),
+            )
         }
     }
 }

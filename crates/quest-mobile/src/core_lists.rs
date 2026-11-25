@@ -55,7 +55,10 @@ impl QuestCore {
 
     /// The Tracked tab: today's timeline and this week.
     pub fn tracked(&self, now: Moment) -> Result<TrackedData, MobileError> {
-        guard(|| Ok(lists::tracked(&self.store().snapshot(), Now::parse(&now)?)))
+        guard(|| {
+            let snapshot = self.store().snapshot();
+            Ok(lists::tracked(&snapshot, Now::parse(&now)?, &self.focus_exit_state()))
+        })
     }
 
     /// The mini player above the tabs.

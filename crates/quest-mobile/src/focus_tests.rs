@@ -22,7 +22,7 @@ fn snapshot() -> Snapshot {
 
 fn session(view: FocusView) -> FocusSession {
     match view {
-        FocusView::Session { session } => session,
+        FocusView::Session { session } => *session,
         FocusView::Pick { .. } => panic!("expected a session"),
     }
 }

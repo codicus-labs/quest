@@ -4,7 +4,7 @@
 use chrono::TimeDelta;
 use quest_domain::{EntityId, EntryKind, Snapshot, Task};
 use quest_view::focus::{FocusTarget, target};
-use quest_view::format;
+use quest_view::{entry_editor, format, tracked};
 
 use crate::home::{chip, color_hex};
 use crate::time::Now;
@@ -19,8 +19,10 @@ pub(crate) fn focus(snapshot: &Snapshot, focus_task: Option<EntityId>, now: Now)
     };
     let quest = task.quest_id.and_then(|id| snapshot.quest(id));
     let header = quest.map_or("Focus".to_owned(), |q| format!("Focus · {}", q.title));
+    let today = now.today();
+    let tracked_today = tracked::task_today_ms(snapshot, task.id, today, &now.tz, now.at);
     FocusView::Session {
-        session: FocusSession {
+        session: Box::new(FocusSession {
             task_id: task.id.to_string(),
             title: task.title.clone(),
             description: task.description.clone(),
@@ -28,8 +30,15 @@ pub(crate) fn focus(snapshot: &Snapshot, focus_task: Option<EntityId>, now: Now)
             header: header.to_uppercase(),
             timer: format::timer(snapshot.task_tracked_ms(task.id, now.at)),
             running,
+            running_timer: snapshot
+                .running_entry()
+                .filter(|_| running)
+                .map(|entry| format::timer((now.at - entry.started_at).num_milliseconds())),
+            tracked_today: entry_editor::duration_label(tracked_today),
+            quest_hours_this_week: quest
+                .map(|q| format::hours(tracked::week_balance(snapshot, today, &now.tz, now.at).quest_ms_of(q.id))),
             state_label: if running { "RUNNING" } else { "PAUSED" }.to_owned(),
-        },
+        }),
     }
 }
 

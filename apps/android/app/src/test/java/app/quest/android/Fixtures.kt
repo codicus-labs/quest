@@ -171,9 +171,12 @@ object Samples {
         timer = "1:12:05",
         running = true,
         stateLabel = "RUNNING",
+        runningTimer = "36:00",
+        trackedToday = "36m",
+        questHoursThisWeek = "8.6h",
     )
 
-    val pausedSession = focusSession.copy(running = false, stateLabel = "PAUSED")
+    val pausedSession = focusSession.copy(running = false, stateLabel = "PAUSED", runningTimer = null)
 
     val pick = FocusView.Pick(
         listOf(
@@ -347,6 +350,43 @@ class FakeCore(
         running = null
     }
 
+    var focusOpenedCount = 0
+    val focusDepartures = mutableListOf<Moment>()
+    var exitStatus: uniffi.quest_mobile.FocusExitStatus? = null
+
+    override fun focusOpened() {
+        focusOpenedCount++
+        exitStatus = null
+    }
+
+    override fun focusLeft(now: Moment) {
+        focusDepartures += now
+    }
+
+    override fun focusExitStatus(now: Moment) = exitStatus
+
+    override fun keepFocusTime(now: Moment) {
+        record("keep focus time")
+        exitStatus = exitStatus?.copy(hintDue = false)
+    }
+
+    override fun bookFocusTime(now: Moment): String? {
+        record("book focus time")
+        exitStatus = null
+        home = home.copy(toast = UndoToast("Booked as Organizing", "Undo", now.epochMs + 5_000))
+        return "organizing"
+    }
+
+    override fun organize(now: Moment): Boolean {
+        record("organize")
+        return true
+    }
+
+    override fun backToTask(now: Moment): String? {
+        record("back to task")
+        return (player as? PlayerCard.Organizing)?.backToTaskId
+    }
+
     override fun deleteTask(taskId: String, now: Moment) {
         record("delete $taskId")
         details.remove(taskId)
@@ -354,6 +394,7 @@ class FakeCore(
 
     override fun undo(now: Moment) {
         record("undo")
+        home = home.copy(toast = null)
         val (oldQuests, oldDetails) = beforeStatusChange ?: return
         beforeStatusChange = null
         quests = oldQuests
