@@ -31,9 +31,11 @@ echo "$QUEST_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$work/release.jks"
     --v4-signing-enabled false --out "$signed" "$work/aligned.apk"
 
 certificates="$("$build_tools/apksigner" verify --print-certs "$signed")"
-actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<< "$certificates")"
+# build-tools up to 36 print "Signer #1 certificate …", 37 prints "V3.0 Signer: certificate …".
+digests="$(sed -nE 's/^.*[Ss]igner.* certificate SHA-256 digest: ([0-9a-f]+)$/\1/p' <<< "$certificates" | sort -u)"
+actual="$(head -1 <<< "$digests")"
 expected="$(tr -d ':' <<< "$QUEST_RELEASE_CERT_SHA256" | tr '[:upper:]' '[:lower:]')"
-if [ "$(grep -c '^Signer #[0-9]* certificate DN:' <<< "$certificates")" -ne 1 ] || [ "$actual" != "$expected" ]; then
+if [ "$(grep -c . <<< "$digests")" -ne 1 ] || [ "$actual" != "$expected" ]; then
     echo "error: the APK is signed with certificate $actual, expected $expected (QUEST_RELEASE_CERT_SHA256)." >&2
     echo "Check the keystore secret; Obtainium refuses updates signed with another key." >&2
     echo "apksigner ($build_tools) reported:" >&2
