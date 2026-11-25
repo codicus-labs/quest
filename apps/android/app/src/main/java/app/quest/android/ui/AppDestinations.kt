@@ -80,7 +80,7 @@ internal fun ListDestination(
     val quick = QuickAddActions(
         vm::questOptions, vm::suggestions, vm::setQuest, vm::setDate, vm::calendar, vm::shiftMonth,
     )
-    ListScreen(state, ListActions(rows, vm::editDraft, vm::add, vm::undo, vm::dismissToast, quick), headerActions = headerActions)
+    ListScreen(state, ListActions(rows, vm::editDraft, vm::add, vm::undo, vm::dismissToast, quick, vm::placeTask), headerActions = headerActions)
 }
 
 /** "‹ Quests" above a quest's list or the Logbook. */

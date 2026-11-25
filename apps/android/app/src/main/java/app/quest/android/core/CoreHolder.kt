@@ -29,8 +29,7 @@ import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.MobileException
 import uniffi.quest_mobile.Moment
-import uniffi.quest_mobile.PlanData
-import uniffi.quest_mobile.PlanWindow
+import uniffi.quest_mobile.PlanSections
 import uniffi.quest_mobile.SettingsData
 import uniffi.quest_mobile.SyncOutcome
 import uniffi.quest_mobile.SyncState
@@ -52,8 +51,7 @@ sealed interface CoreState {
         val settings: SettingsData,
         /** The switcher, "Manage workspaces" and a timer running in another workspace. */
         val workspaces: WorkspacesData,
-        /** The plan's days for the current [PlanQuery]; null while no plan is shown. */
-        val plan: PlanData? = null,
+        val plan: PlanPage? = null,
         /** The Quests tab; null while it is not shown. */
         val quests: QuestsData? = null,
         /** The review of the asked week; null while the review is not shown. */
@@ -88,7 +86,7 @@ sealed interface ListPage {
 data class ReviewQuery(val week: String?)
 
 /** What the plan shows: the built [window] of days, QUEST WORK filtered by [questFilter]. */
-data class PlanQuery(val window: PlanWindow, val questFilter: String?)
+data class PlanPage(val sections: PlanSections, val today: TaskList)
 
 /** The result of one action on the core. */
 sealed interface Outcome<out T> {
@@ -166,7 +164,7 @@ class CoreHolder(
     private var ticker: Job? = null
 
     /** The plan's query while the plan is on screen; null skips reading it. */
-    @Volatile private var planQuery: PlanQuery? = null
+    @Volatile private var planShown = false
 
     @Volatile private var questsShown = false
 
@@ -336,10 +334,9 @@ class CoreHolder(
         }
     }
 
-    /** The plan asks for [query] from now on (null: the plan is not shown); [state] follows shortly. */
-    fun setPlanQuery(query: PlanQuery?) {
-        if (query == planQuery) return
-        planQuery = query
+    fun setPlanShown(shown: Boolean) {
+        if (shown == planShown) return
+        planShown = shown
         markStale()
     }
 
@@ -415,11 +412,11 @@ class CoreHolder(
         _state.value = try {
             // Focus's quests and task choices; the redesigned lists replaced Home's filter and pick.
             val home = core.home(now, HomeQuery(questFilter = null, questPick = null))
-            val query = planQuery
-            // Leaving on the reader, so no plan read can come after it and remember the window again.
-            if (query == null && planRead) core.leavePlan()
-            planRead = query != null
-            val plan = query?.let { core.plan(it.window, it.questFilter, now) }
+            val showPlan = planShown
+            // Clear previews on the same reader that registers them.
+            if (!showPlan && planRead) core.leavePlan()
+            planRead = showPlan
+            val plan = if (showPlan) PlanPage(core.planSections(now), core.taskList(ListKind.Today, now)) else null
             CoreState.Ready(
                 home = home,
                 sync = core.syncState(),

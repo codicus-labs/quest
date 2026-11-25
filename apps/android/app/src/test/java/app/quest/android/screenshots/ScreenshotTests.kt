@@ -56,6 +56,7 @@ abstract class ScreenshotTest(private val scene: Scene, private val dark: Boolea
                 }
             }
         }
+        scene.interact(compose)
         val path = "src/test/screenshots/${scene.name}-$form-${if (dark) "dark" else "light"}.png"
         when (scene.kind) {
             SceneKind.Screen -> compose.onRoot().captureRoboImage(path)
@@ -77,7 +78,7 @@ abstract class ScreenshotTest(private val scene: Scene, private val dark: Boolea
 
 /** One scene per main screen and sheet, for the 200 % text size runs. */
 private val largeFontScenes = setOf(
-    "today-timer", "inbox", "quest-list", "tracked", "account-drawer", "entry-sheet", "focus-running", "focus-pick", "task-sheet", "plan", "plan-move-sheet", "log-work",
+    "today-timer", "inbox", "quest-list", "tracked", "account-drawer", "entry-sheet", "focus-running", "focus-pick", "task-sheet", "plan", "log-work",
     "quests", "workspaces-manage", "quest-editor", "review", "archive", "search", "account-signed-out", "account-signed-in",
     "settings", "quick-add-shared", "capture-dictate", "capture-listening", "capture-offline", "capture-proposal",
     "capture-proposal-task", "capture-proposal-work", "capture-applied", "settings-connections", "settings-connections-offline",

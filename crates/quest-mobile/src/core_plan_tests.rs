@@ -67,22 +67,51 @@ fn sections_and_positioned_moves_share_today_and_undo() {
     let b = add(&core, "2026-11-25", "B");
     let c = add(&core, "2026-11-26", "C");
 
-    core.place_task(b.clone(), PlanTaskList::Today, Some(a), now()).unwrap();
+    core.place_task(b.clone(), PlanTaskList::Today, Some(a.clone()), now()).unwrap();
     let plan = core.plan_sections(now()).unwrap();
     assert_eq!(plan.days.len(), 14);
     assert_eq!(titles(&plan.days[0].tasks), ["B", "A"]);
     assert!(plan.weeks[0].days[2].has_tasks);
     assert!(!plan.weeks[0].days[0].jump_enabled);
+    assert!(core.undo_state().toast().is_none());
+    core.undo(now()).unwrap();
+    assert_eq!(titles(&core.plan_sections(now()).unwrap().days[0].tasks), ["A", "B"]);
 
+    core.place_task(b.clone(), PlanTaskList::Today, Some(a), now()).unwrap();
     core.place_task(b, PlanTaskList::Day { date: "2026-11-26".into() }, Some(c), now()).unwrap();
     let plan = core.plan_sections(now()).unwrap();
     assert_eq!(titles(&plan.days[0].tasks), ["A"]);
     assert_eq!(titles(&plan.days[1].tasks), ["B", "C"]);
+    assert_eq!(core.undo_state().toast().unwrap().text, "Date changed");
 
     core.undo(now()).unwrap();
     let plan = core.plan_sections(now()).unwrap();
     assert_eq!(titles(&plan.days[0].tasks), ["B", "A"]);
     assert_eq!(titles(&plan.days[1].tasks), ["C"]);
+}
+
+#[test]
+fn explicit_today_drop_plans_a_due_but_unplanned_task_and_undo_restores_its_dates() {
+    let (_dir, core) = open();
+    let first = add(&core, "2026-11-25", "First");
+    let quest = core.create_quest("Writing".into(), None).unwrap();
+    let task = core.add_to_list(crate::ListKind::Quest { quest_id: quest }, "Unplanned".into(), now()).unwrap();
+    core.set_task_due(task.clone(), Some("2026-11-24".into()), now()).unwrap();
+
+    let plan = core.plan_sections(now()).unwrap();
+    assert!(plan.not_planned.iter().any(|row| row.id == task));
+    assert!(plan.days[0].tasks.iter().any(|row| row.id == task));
+
+    core.place_task(task.clone(), crate::PlanTaskList::Day { date: "2026-11-25".into() }, Some(first), now()).unwrap();
+    let plan = core.plan_sections(now()).unwrap();
+    assert!(plan.not_planned.is_empty());
+    assert_eq!(titles(&plan.days[0].tasks), ["Unplanned", "First"]);
+    assert_eq!(core.undo_state().toast().unwrap().text, "Date changed");
+
+    core.undo(now()).unwrap();
+    let unplanned = core.task(&task).unwrap();
+    assert_eq!(unplanned.planned_on, None);
+    assert_eq!(unplanned.due_on.map(|day| day.to_string()).as_deref(), Some("2026-11-24"));
 }
 
 #[test]

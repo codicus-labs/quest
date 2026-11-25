@@ -1,6 +1,7 @@
 use quest_domain::{Command, Placement, Position, TaskList};
 use quest_view::plan;
 
+use crate::commands;
 use crate::core::QuestCore;
 use crate::error::MobileError;
 use crate::guard::guard;
@@ -125,6 +126,9 @@ impl QuestCore {
         guard(|| {
             let now = Now::parse(&now)?;
             let task = self.task(&task_id)?;
+            let file_today = matches!(&list, PlanTaskList::Day { date } if *date == iso_day(now.today()))
+                && task.planned_on.is_none()
+                && TaskList::Today.contains(&task, now.today());
             let list = match list {
                 PlanTaskList::Today => TaskList::Today,
                 PlanTaskList::Day { date } => {
@@ -142,6 +146,14 @@ impl QuestCore {
                 today: now.today(),
                 at: now.at,
             };
+            if file_today && let Some(plan) = commands::set_planned(&task, Some(now.today()), now) {
+                let before = self.store().snapshot();
+                self.edit(|store| {
+                    store.dispatch_all(&[plan, command]).map_err(|e| MobileError::Rejected { reason: e.to_string() })
+                })?;
+                self.remember_task_date_edit(&task, &before, Some(list), now);
+                return Ok(());
+            }
             self.change_task_dates(&task, Some(command), now)
         })
     }

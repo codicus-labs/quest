@@ -263,13 +263,12 @@ class CoreHolderTest {
         assertEquals(null, (holder.state.value as CoreState.Ready).plan)
         assertEquals(emptyList<Any>(), fake.planReads)
 
-        val query = PlanQuery(PlanSamples.window, "q1")
-        holder.setPlanQuery(query)
+        holder.setPlanShown(true)
         runCurrent()
-        assertEquals(PlanSamples.plan, (holder.state.value as CoreState.Ready).plan)
-        assertEquals(listOf(PlanSamples.window to "q1"), fake.planReads)
+        assertEquals(PlanPage(PlanSamples.plan, app.quest.android.ListSamples.today), (holder.state.value as CoreState.Ready).plan)
+        assertEquals(1, fake.planReads.size)
 
-        holder.setPlanQuery(null)
+        holder.setPlanShown(false)
         runCurrent()
         assertEquals(null, (holder.state.value as CoreState.Ready).plan)
         assertEquals(listOf("leave-plan"), fake.calls)

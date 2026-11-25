@@ -94,6 +94,11 @@ impl MobileUndo {
         self.step(UndoEvent::TaskEdited(edit), now);
     }
 
+    pub fn task_placed(&mut self, edit: TaskEdit, now: DateTime<Utc>) {
+        self.completion_label = None;
+        self.step(UndoEvent::TaskPlaced(edit), now);
+    }
+
     pub fn dismiss(&mut self, now: DateTime<Utc>) {
         self.completion_label = None;
         self.step(UndoEvent::Dismiss, now);
@@ -122,6 +127,8 @@ impl MobileUndo {
                 (format!("{verb} quest “{title}”"), *until)
             }
             (None, Some(Shown { toast: Toast::Done, until })) => ("Done".into(), *until),
+            (None, Some(Shown { toast: Toast::DateChanged, until })) => ("Date changed".into(), *until),
+            (None, Some(Shown { toast: Toast::QuestChanged, until })) => ("Quest changed".into(), *until),
             (None, _) => return None,
         };
         Some(UndoToast { text, action_label: "Undo".to_owned(), expires_at_ms: until.timestamp_millis() })

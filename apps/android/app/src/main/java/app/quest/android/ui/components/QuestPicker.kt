@@ -21,16 +21,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -188,19 +187,5 @@ private fun PickerRow(name: String, color: Color, selected: Boolean, tag: String
             modifier = Modifier.weight(1f).padding(start = QuestSpacing.medium),
         )
         if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(20.dp))
-    }
-}
-
-/** The filter icon (accent while filtering) that opens the quest picker; "All quests" clears the filter. */
-@Composable
-fun QuestFilterButton(filter: QuestRef?, options: List<QuestRef>, onFilter: (String?) -> Unit, tag: String) {
-    var open by rememberSaveable { mutableStateOf(false) }
-    val label = stringResource(R.string.plan_filter)
-    val colors = QuestTheme.colors
-    IconButton(onClick = { open = true }, modifier = Modifier.testTag(tag)) {
-        Icon(QuestIcons.Filter, contentDescription = label, tint = if (filter != null) colors.accent else colors.textMuted)
-    }
-    if (open) {
-        QuestPickerSheet(label, options, filter?.id, stringResource(R.string.plan_filter_all), onPick = { onFilter(it?.id) }, onDismiss = { open = false })
     }
 }

@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import uniffi.quest_mobile.PlanTaskList
 import uniffi.quest_mobile.ListKind
 import uniffi.quest_mobile.TaskList
 
@@ -110,6 +111,9 @@ class ListViewModel(private val core: CoreHolder, private val savedState: SavedS
             savedState[DRAFT_KEY] = ""
         }
     }
+
+    fun placeTask(taskId: String, list: PlanTaskList, beforeTaskId: String?) =
+        report(core.perform { c, now -> c.placeTask(taskId, list, beforeTaskId, now) })
 
     fun toggleTask(taskId: String) = report(core.perform { c, now -> c.toggleListTask(taskId, now) })
 

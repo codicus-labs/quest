@@ -18,7 +18,6 @@ import uniffi.quest_mobile.SearchOutcome
 import uniffi.quest_mobile.SearchResult
 import uniffi.quest_mobile.SearchToken
 import uniffi.quest_mobile.TrashKind
-import uniffi.quest_mobile.AddPosition
 import uniffi.quest_mobile.DayValue
 import uniffi.quest_mobile.FocusView
 import uniffi.quest_mobile.HomeData
@@ -26,9 +25,9 @@ import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.LogWorkCheck
 import uniffi.quest_mobile.LogWorkDraft
 import uniffi.quest_mobile.Moment
-import uniffi.quest_mobile.MoveTarget
-import uniffi.quest_mobile.PlanData
-import uniffi.quest_mobile.PlanWindow
+import uniffi.quest_mobile.PlanSections
+import uniffi.quest_mobile.AddPosition
+import uniffi.quest_mobile.PlanTaskList
 import uniffi.quest_mobile.RepeatCheck
 import uniffi.quest_mobile.RepeatDraft
 import uniffi.quest_mobile.RepeatWeekday
@@ -107,26 +106,11 @@ interface QuestCoreApi : WorkspacesApi {
     /** Focus's Complete: completes the task (stops its timer, leaves the undo toast); a done task is a no-op. */
     fun completeTask(taskId: String, now: Moment)
 
-    /** The days of [window] (ISO days), QUEST WORK filtered by [questFilter]; remembers the window for preview occurrences. */
-    fun plan(window: PlanWindow, questFilter: String?, now: Moment): PlanData
+    fun planSections(now: Moment): PlanSections
 
-    /** The plan screen was left: preview occurrences are unknown again and moves sort as on Home. */
     fun leavePlan()
 
-    /** Adds a task without a quest to [day] at [position]. Returns the new id. */
-    fun planAddTask(day: String, title: String, position: AddPosition, now: Moment): String
-
-    /** A drop: [taskId] to [day] (null: backlog), right before [beforeTaskId] (same day and section) or at the end. */
-    fun planMoveTask(taskId: String, day: String?, beforeTaskId: String?, now: Moment)
-
-    /** One place up or down within its day and section. */
-    fun planNudgeTask(taskId: String, up: Boolean, now: Moment)
-
-    /** To the bottom of the day before ([later] false) or after its day. */
-    fun planShiftTask(taskId: String, later: Boolean, now: Moment)
-
-    /** The "Move to…" entries ("Today", "Tomorrow", …, "Backlog · someday"). */
-    fun moveTargets(now: Moment): List<MoveTarget>
+    fun placeTask(taskId: String, list: PlanTaskList, beforeTaskId: String?, now: Moment)
 
     /** Tasks to pick for Log work, matching [query]. */
     fun taskChoices(query: String): TaskChoices
@@ -314,18 +298,6 @@ interface RepeatRules {
     fun check(draft: RepeatDraft, now: Moment): RepeatCheck
 
     fun toggleWeekday(draft: RepeatDraft, day: RepeatWeekday, now: Moment): RepeatDraft
-}
-
-/** The plan's pure rules: which window of days to build, and how fast a drag at the edge scrolls. */
-interface PlanRules {
-    /**
-     * The window to build around [firstVisible] (null: today) with [visibleDays] on screen; returns
-     * [built] unchanged while it still covers the visible days with room to spare.
-     */
-    fun window(firstVisible: String?, visibleDays: Int, built: PlanWindow?, now: Moment): PlanWindow
-
-    /** Auto-scroll speed in dp/s for a drag at [pos] in a board spanning [start]..[end] (dp); 0 outside the edge zones. */
-    fun edgeSpeed(pos: Float, start: Float, end: Float): Float
 }
 
 /** Checks a server URL before signing in; returns the problem to show, or null when it is allowed. */

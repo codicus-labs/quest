@@ -31,7 +31,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.quest.android.R
-import app.quest.android.core.RustPlanRules
+import app.quest.android.quickadd.QuickAddActivity
+import app.quest.android.ui.lists.RowActions
 import app.quest.android.settings.FocusPreferences
 import app.quest.android.settings.FocusPrefs
 import app.quest.android.ui.account.AccountActions
@@ -426,7 +427,27 @@ private fun PlanDestination(viewModels: AppViewModels, snackbar: SnackbarHostSta
     }
     val state by plan.state.collectAsStateWithLifecycle()
     ShowMessages(plan.message, plan::dismissMessage, snackbar)
-    PlanScreen(state, planActions(plan, viewModels.taskSheet, viewModels.focus, timerStarted))
+    val context = LocalContext.current
+    PlanScreen(
+        state,
+        PlanActions(
+            rows = RowActions(
+                toggle = plan::toggleTask,
+                open = viewModels.taskSheet::open,
+                startTimer = { taskId ->
+                    if (plan.startTimer(taskId)) {
+                        viewModels.focus.rememberTask(taskId)
+                        timerStarted()
+                    }
+                },
+                stopTimer = plan::stopTimer,
+            ),
+            add = { context.startActivity(QuickAddActivity.forDay(context, it)) },
+            place = plan::placeTask,
+            undo = plan::undo,
+            dismissToast = plan::dismissToast,
+        ),
+    )
 }
 
 internal fun logWorkActions(vm: LogWorkViewModel) = LogWorkActions(
@@ -438,38 +459,6 @@ internal fun logWorkActions(vm: LogWorkViewModel) = LogWorkActions(
     editTaskQuery = vm::editTaskQuery,
     pickTask = vm::pickTask,
     createTask = vm::createTask,
-)
-
-/** The plan's actions; as on Home, a started timer makes its task Focus's task. */
-internal fun planActions(vm: PlanViewModel, sheet: TaskSheetViewModel, focus: FocusViewModel, timerStarted: () -> Unit = {}, edgeSpeed: (Float, Float, Float) -> Float = RustPlanRules::edgeSpeed) = PlanActions(
-    toggleTask = vm::toggleTask,
-    openTask = sheet::open,
-    startTimer = { taskId ->
-        if (vm.startTimer(taskId)) {
-            focus.rememberTask(taskId)
-            timerStarted()
-        }
-    },
-    stopTimer = vm::stopTimer,
-    deleteTask = vm::deleteTask,
-    undo = vm::undo,
-    dismissToast = vm::dismissToast,
-    editDraft = vm::editDraft,
-    addTask = vm::addTask,
-    setAddPosition = vm::setAddPosition,
-    setQuestFilter = vm::setQuestFilter,
-    setShowOther = vm::setShowOther,
-    visibleRange = vm::onVisibleRange,
-    jumpTo = vm::jumpTo,
-    scrolled = vm::scrolled,
-    moveTask = vm::moveTask,
-    nudgeTask = vm::nudgeTask,
-    shiftTask = vm::shiftTask,
-    openMoveTo = vm::openMoveTo,
-    moveTo = vm::moveTo,
-    closeMoveTo = vm::closeMoveTo,
-    edgeSpeed = edgeSpeed,
-    assignQuest = vm::assignQuest,
 )
 
 /** Shows a ViewModel's failed action as a snackbar, then clears it. */

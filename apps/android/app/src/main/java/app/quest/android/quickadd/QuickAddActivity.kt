@@ -1,5 +1,6 @@
 package app.quest.android.quickadd
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -18,6 +19,7 @@ import app.quest.android.capture.CaptureActivity
 import app.quest.android.core.RustDayLabels
 import app.quest.android.settings.Appearance
 import app.quest.android.ui.theme.QuestTheme
+import java.time.LocalDate
 
 /**
  * A slim, transparent activity with the quick-add sheet: the share target for text, the "New task"
@@ -27,7 +29,7 @@ class QuickAddActivity : ComponentActivity() {
     private val app get() = application as QuestApplication
 
     private val quickAdd: QuickAddViewModel by viewModels {
-        viewModelFactory { initializer { QuickAddViewModel(app.core, createSavedStateHandle(), RustDayLabels, sharedText(intent)) } }
+        viewModelFactory { initializer { QuickAddViewModel(app.core, createSavedStateHandle(), RustDayLabels, sharedText(intent), planDay(intent)) } }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,6 +71,15 @@ class QuickAddActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val PLAN_DAY = "app.quest.android.extra.PLAN_DAY"
+
+        fun forDay(context: Context, date: String) =
+            Intent(context, QuickAddActivity::class.java).putExtra(PLAN_DAY, date)
+
+        private fun planDay(intent: Intent): String? = intent.getStringExtra(PLAN_DAY)?.let {
+            runCatching { LocalDate.parse(it).toString() }.getOrNull()
+        }
+
         /** Shared text with its subject (a page title, say) as the first line, so the core makes it the title. */
         fun sharedText(intent: Intent?): String? {
             if (intent?.action != Intent.ACTION_SEND) return null

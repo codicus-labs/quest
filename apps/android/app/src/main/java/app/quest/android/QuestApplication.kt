@@ -22,9 +22,7 @@ import app.quest.android.settings.CapturePreferences
 import app.quest.android.settings.DataStoreCapturePreferences
 import app.quest.android.settings.DataStoreAppearanceRepository
 import app.quest.android.settings.DataStoreFocusPreferences
-import app.quest.android.settings.DataStoreHomePreferences
 import app.quest.android.settings.FocusPreferences
-import app.quest.android.settings.HomePreferences
 import app.quest.android.platform.AppShortcuts
 import app.quest.android.sync.SyncHost
 import app.quest.android.sync.SyncScheduler
@@ -55,9 +53,6 @@ class QuestApplication :
         private set
 
     lateinit var appearance: AppearanceRepository
-        private set
-
-    lateinit var homePreferences: HomePreferences
         private set
 
     lateinit var focusPreferences: FocusPreferences
@@ -103,7 +98,6 @@ class QuestApplication :
         val tokens = EncryptedTokenStore(File(noBackupFilesDir, "tokens"), KeystoreKey::get)
         core = CoreHolder(scope, Dispatchers.IO, SystemClock) { onChange -> RustQuestCore.open(dataDir, tokens, onChange) }
         appearance = DataStoreAppearanceRepository(appPreferences)
-        homePreferences = DataStoreHomePreferences(appPreferences)
         focusPreferences = DataStoreFocusPreferences(appPreferences)
         capturePreferences = DataStoreCapturePreferences(appPreferences)
         // Package manager and shortcut service calls are binder IPC: off the main thread.

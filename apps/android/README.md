@@ -115,17 +115,12 @@ runs but Android shows no notification. Check the service with
 
 ## Plan
 
-Compact: one list of days with sticky heads; from 600 dp wide: day columns side by side. Long-press a
-card to drag it (to the edge to scroll), or long-press without moving for “Move to…”. Each card also has
-accessibility actions to move it. Drag with adb (long press, then move in steps):
+Plan shows Today and the next 13 days, followed by month groups and a collapsed “Not planned” section.
+Swipe the week strip and tap a date to jump to it; the day’s plus presets that date in Quick Add.
 
-```sh
-adb shell "input motionevent DOWN 540 1300; sleep 0.8; input motionevent MOVE 540 1500; \
-  input motionevent MOVE 540 1700; input motionevent UP 540 1700"
-```
-
-Tablet layout on the phone emulator: `adb shell wm size 2560x1600; adb shell wm density 320`, back with
-`wm size reset` and `wm density reset`. Numbers: `docs/perf/plan-android.md`.
+Long-press a task to lift it and drag it to reorder. In Plan, drop it in another day to reschedule,
+including from “Not planned”. A date change offers Undo; you can also change dates in the task’s
+calendar sheet. Planned rows have “Move up” and “Move down” accessibility actions.
 
 ## Log work
 

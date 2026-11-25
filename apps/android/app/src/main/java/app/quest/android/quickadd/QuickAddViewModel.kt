@@ -58,6 +58,7 @@ class QuickAddViewModel(
     private val savedState: SavedStateHandle,
     private val dayLabels: DayLabels,
     private val sharedText: String?,
+    private val planDay: String? = null,
 ) : ViewModel() {
     private val inputs: StateFlow<QuickAddInputs> = savedState.getStateFlow(INPUTS_KEY, QuickAddInputs())
     private val form = MutableStateFlow<Outcome<QuickAddForm>?>(null)
@@ -76,7 +77,7 @@ class QuickAddViewModel(
             val read = core.read { c, now -> c.quickAddForm(sharedText, now) }
             if (read is Outcome.Done && !inputs.value.filled) {
                 val preset = read.value
-                update { QuickAddInputs(filled = true, title = preset.title, description = preset.description, questId = preset.quest?.id, day = preset.today.iso) }
+                update { QuickAddInputs(filled = true, title = preset.title, description = preset.description, questId = if (planDay == null) preset.quest?.id else null, day = planDay ?: preset.today.iso) }
             }
             form.value = read
         }

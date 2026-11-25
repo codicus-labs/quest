@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.quest.android.ListSamples
+import app.quest.android.ui.liftAndDrag
 import app.quest.android.LogWorkSamples
 import app.quest.android.Samples
 import app.quest.android.WorkspaceSamples
@@ -79,6 +80,9 @@ private val entryForm = EntryForm.of(ListSamples.entryDraft)
 
 /** The redesigned shell: lists, Quests, Tracked, the drawer, the entry sheet and the mini player. */
 val shellScenes = listOf(
+    Scene("today-sort-drag", SceneKind.Screen, interact = {
+        liftAndDrag("row:Draft this week’s essay", "row:Sketch a pricing page")
+    }) { TodayList(ListSamples.todayIdle, PlayerCard.Empty) },
     Scene("today-timer", SceneKind.Screen) { TodayList(ListSamples.today, ListSamples.playerRunning) },
     Scene("today-add-draft", SceneKind.Screen) { TodayList(ListSamples.todayIdle, ListSamples.playerResume, draft = "Book the train") },
     Scene("player-organizing", SceneKind.Screen) { TodayList(ListSamples.todayIdle, ListSamples.playerOrganizing) },

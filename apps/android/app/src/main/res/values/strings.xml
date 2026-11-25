@@ -156,21 +156,14 @@
     <string name="settings_keep_screen_on">Keep screen on</string>
     <string name="settings_keep_screen_on_note">While Focus is shown. This device only.</string>
     <string name="plan_today">Today</string>
-    <string name="plan_pick_date">Go to date</string>
-    <string name="plan_filter">Filter by quest</string>
-    <string name="plan_filter_all">All quests</string>
-    <string name="plan_filter_clear">Clear the quest filter</string>
-    <string name="plan_show_other">Show other tasks</string>
-    <string name="plan_hide_other">Hide other tasks</string>
-    <string name="plan_other">Other</string>
-    <string name="plan_add_task">Add a task…</string>
-    <string name="plan_move_to">Move to…</string>
-    <string name="plan_move_title">Move “%1$s” to</string>
-    <string name="plan_move_pick_date">Pick a date…</string>
+    <string name="plan_tomorrow">Tomorrow</string>
+    <string name="plan_month_rest">Rest of %1$s</string>
+    <string name="plan_due_marker">⚑ Due: %1$s</string>
+    <string name="plan_not_planned">Not planned</string>
+    <string name="plan_add_for_day">Add task for %1$s</string>
+    <string name="plan_week_has_tasks">%1$s, tasks scheduled</string>
     <string name="plan_move_up">Move up</string>
     <string name="plan_move_down">Move down</string>
-    <string name="plan_move_previous_day">Move to previous day</string>
-    <string name="plan_move_next_day">Move to next day</string>
     <!-- Log work (desktop log_work.rs, task_picker.rs) -->
     <string name="log_work">Log work</string>
     <string name="log_work_new_task">New completed task</string>

@@ -14,8 +14,6 @@ import app.quest.android.core.WorkspacesApi
 import app.quest.android.core.RepeatRules
 import app.quest.android.settings.FocusPreferences
 import app.quest.android.settings.FocusPrefs
-import app.quest.android.settings.HomePreferences
-import app.quest.android.settings.HomePrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.quest.android.core.ConnectionsException
 import uniffi.quest_mobile.EntryCheck
@@ -41,9 +39,8 @@ import uniffi.quest_mobile.HomeTask
 import uniffi.quest_mobile.LoggedEntry
 import uniffi.quest_mobile.MobileException
 import uniffi.quest_mobile.Moment
-import uniffi.quest_mobile.MoveTarget
-import uniffi.quest_mobile.PlanData
-import uniffi.quest_mobile.PlanWindow
+import uniffi.quest_mobile.PlanSections
+import uniffi.quest_mobile.PlanTaskList
 import uniffi.quest_mobile.QuestChip
 import uniffi.quest_mobile.RepeatCheck
 import uniffi.quest_mobile.RepeatDraft
@@ -224,7 +221,7 @@ class FakeCore(
     val details: MutableMap<String, TaskDetail> = mutableMapOf("t1" to Samples.detail),
     var focus: FocusView = FocusView.Session(Samples.focusSession),
     var running: RunningSession? = null,
-    var plan: PlanData = PlanSamples.plan,
+    var plan: PlanSections = PlanSamples.plan,
     var logWorkCheck: LogWorkCheck = LogWorkSamples.check,
     var quests: QuestsData = QuestSamples.quests,
     /** Quest pages by id; a missing id is an unknown quest. */
@@ -290,7 +287,8 @@ class FakeCore(
     val choiceQueries = mutableListOf<String>()
 
     /** The window and filter of every [plan] read. */
-    val planReads = mutableListOf<Pair<PlanWindow, String?>>()
+    val planReads = mutableListOf<Moment>()
+    val placements = mutableListOf<Triple<String, PlanTaskList, String?>>()
 
     val ticks = mutableListOf<Long>()
     val toggled = mutableListOf<String>()
@@ -410,29 +408,17 @@ class FakeCore(
         if (running?.taskId == taskId) running = null
     }
 
-    override fun plan(window: PlanWindow, questFilter: String?, now: Moment): PlanData {
+    override fun planSections(now: Moment): PlanSections {
         maybeFail()
-        planReads += window to questFilter
+        planReads += now
         return plan
     }
 
     override fun leavePlan() = record("leave-plan")
 
-    override fun planAddTask(day: String, title: String, position: AddPosition, now: Moment): String {
-        if (title.isBlank()) throw MobileException.EmptyTitle("Enter a title.")
-        record("plan-add $day $title $position")
-        return "new"
-    }
-
-    override fun planMoveTask(taskId: String, day: String?, beforeTaskId: String?, now: Moment) = record("plan-move $taskId $day $beforeTaskId")
-
-    override fun planNudgeTask(taskId: String, up: Boolean, now: Moment) = record("plan-nudge $taskId ${if (up) "up" else "down"}")
-
-    override fun planShiftTask(taskId: String, later: Boolean, now: Moment) = record("plan-shift $taskId ${if (later) "later" else "earlier"}")
-
-    override fun moveTargets(now: Moment): List<MoveTarget> {
+    override fun placeTask(taskId: String, list: PlanTaskList, beforeTaskId: String?, now: Moment) {
         maybeFail()
-        return PlanSamples.targets
+        placements += Triple(taskId, list, beforeTaskId)
     }
 
     override fun taskChoices(query: String): TaskChoices {
@@ -741,19 +727,6 @@ class FakeRepeatRules(var error: String? = null) : RepeatRules {
 
     override fun toggleWeekday(draft: RepeatDraft, day: RepeatWeekday, now: Moment): RepeatDraft =
         draft.copy(weekdays = if (day in draft.weekdays) draft.weekdays - day else draft.weekdays + day)
-}
-
-/** [HomePreferences] in memory. */
-class FakeHomePreferences(initial: HomePrefs = HomePrefs()) : HomePreferences {
-    override val prefs = MutableStateFlow(initial)
-
-    override suspend fun setShowOther(show: Boolean) {
-        prefs.value = prefs.value.copy(showOther = show)
-    }
-
-    override suspend fun setAddPosition(position: AddPosition) {
-        prefs.value = prefs.value.copy(addPosition = position)
-    }
 }
 
 /** [FocusPreferences] in memory. */

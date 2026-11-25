@@ -1,7 +1,7 @@
 //! `QuestCore`'s task actions: the card (rename, timer, delete, undo) and the task sheet.
 //! Memory-only like the rest of the core; decisions live in the pure modules.
 
-use quest_domain::{Command, EntityId};
+use quest_domain::{Command, EntityId, Snapshot, TaskList};
 use quest_store::SyncStatus;
 use quest_view::undo::{Deletable, TaskEdit};
 
@@ -25,19 +25,34 @@ impl QuestCore {
         let Some(command) = command else { return Ok(()) };
         let before = self.store().snapshot();
         let placement = match &command {
-            Command::PlaceTask { placement, today, .. } => Some((placement.list(), *today)),
+            Command::PlaceTask { placement, .. } => Some(placement.list()),
             _ => None,
         };
         self.dispatch(command)?;
+        self.remember_task_date_edit(task, &before, placement, now);
+        Ok(())
+    }
+
+    pub(crate) fn remember_task_date_edit(
+        &self,
+        task: &quest_domain::Task,
+        before: &Snapshot,
+        placement: Option<TaskList>,
+        now: Now,
+    ) {
         let after = self.store().snapshot();
         let edit = after.task(task.id).and_then(|updated| match placement {
-            Some((list, today)) => TaskEdit::placement(task, updated, &before, &after, list, today),
-            None => TaskEdit::dates(task, updated, &before, &after),
+            Some(list) => TaskEdit::placement(task, updated, before, &after, list, now.today()),
+            None => TaskEdit::dates(task, updated, before, &after),
         });
         if let Some(edit) = edit {
-            self.undo_state().task_edited(edit, now.at);
+            let mut undo = self.undo_state();
+            if placement.is_some() {
+                undo.task_placed(edit, now.at);
+            } else {
+                undo.task_edited(edit, now.at);
+            }
         }
-        Ok(())
     }
 }
 

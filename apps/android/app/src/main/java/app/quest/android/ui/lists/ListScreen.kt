@@ -12,13 +12,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -36,7 +37,7 @@ import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
 import uniffi.quest_mobile.ListKind
-import uniffi.quest_mobile.ListSection
+import uniffi.quest_mobile.PlanTaskList
 import uniffi.quest_mobile.TaskList
 
 /** The widest a list grows (tablets); centred beyond. */
@@ -49,6 +50,7 @@ class ListActions(
     val undo: () -> Unit,
     val dismissToast: () -> Unit,
     val quick: QuickAddActions = QuickAddActions(),
+    val place: (String, PlanTaskList, String?) -> Unit = { _, _, _ -> },
 )
 
 /**
@@ -85,32 +87,43 @@ fun ListScreen(
 @Composable
 private fun ListContent(state: ListUiState.Ready, actions: ListActions, top: @Composable () -> Unit, headerActions: @Composable () -> Unit) {
     val list = state.list
-    LazyColumn(
-        Modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = ListMaxWidth).testTag("list-${list.kind.tag}"),
-        contentPadding = PaddingValues(start = QuestSpacing.medium, end = QuestSpacing.medium, bottom = 88.dp),
-    ) {
-        item(key = "top") { Box(Modifier.padding(horizontal = QuestSpacing.small)) { top() } }
-        item(key = "header") { ListHeader(list, headerActions) }
-        if (list.kind != ListKind.Logbook) {
-            item(key = "add") { ListQuickAdd(state.draft, state.quick, actions) }
+    val placementList = when (val kind = list.kind) {
+        ListKind.Today -> PlanTaskList.Today
+        ListKind.Inbox -> PlanTaskList.Inbox
+        is ListKind.Quest -> PlanTaskList.Quest(kind.questId)
+        ListKind.Logbook -> null
+    }
+    val entries = buildList {
+        add(SortItem.Decoration("top") { Box(Modifier.padding(horizontal = QuestSpacing.small)) { top() } })
+        add(SortItem.Decoration("header") { ListHeader(list, headerActions) })
+        if (placementList != null) add(SortItem.Decoration("add") { ListQuickAdd(state.draft, state.quick, actions) })
+        if (list.empty) add(SortItem.Decoration("empty") { EmptyList(list.kind) })
+        list.sections.forEachIndexed { index, section ->
+            section.label?.let { label -> add(SortItem.Decoration("label-$index", placementList) { ListSectionLabel(label) }) }
+            section.rows.forEach { add(SortItem.Row("$index-${it.id}", placementList, it)) }
         }
-        if (list.empty) item(key = "empty") { EmptyList(list.kind) }
-        list.sections.forEachIndexed { index, section -> section(index, section, actions.rows) }
+    }
+    val scroll = rememberLazyListState()
+    SortableTaskList(
+        scroll, entries, actions.rows, actions.place,
+        Modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = ListMaxWidth).padding(horizontal = QuestSpacing.medium).clipToBounds(),
+    ) { placed, draw ->
+        LazyColumn(
+            Modifier.fillMaxSize().testTag("list-${list.kind.tag}"),
+            state = scroll,
+            contentPadding = PaddingValues(bottom = 88.dp),
+        ) { sortItems(placed, draw) }
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.section(index: Int, section: ListSection, actions: RowActions) {
-    section.label?.let { label ->
-        item(key = "label-$index") {
-            Text(
-                label,
-                style = QuestType.caps,
-                color = QuestTheme.colors.textMuted,
-                modifier = Modifier.padding(start = QuestSpacing.small, top = QuestSpacing.section, bottom = QuestSpacing.tight).semantics { heading() },
-            )
-        }
-    }
-    items(section.rows, key = { "$index-${it.id}" }) { row -> TaskRow(row, actions) }
+@Composable
+internal fun ListSectionLabel(label: String) {
+    Text(
+        label,
+        style = QuestType.caps,
+        color = QuestTheme.colors.textMuted,
+        modifier = Modifier.padding(start = QuestSpacing.small, top = QuestSpacing.section, bottom = QuestSpacing.tight).semantics { heading() },
+    )
 }
 
 /** Short and stable, for test tags: today, inbox, logbook, quest. */

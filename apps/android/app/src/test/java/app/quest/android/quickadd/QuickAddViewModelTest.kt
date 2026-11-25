@@ -47,6 +47,17 @@ class QuickAddViewModelTest {
     }
 
     @Test
+    fun dayQuickAddKeepsThePlanDateWithoutSelectingAQuest() = runTest(main.dispatcher) {
+        val vm = QuickAddViewModel(openedHolder(core, backgroundScope, main.dispatcher), savedState, labels, null, "2026-11-27")
+        assertEquals(DayValue("2026-11-27", "Label 2026-11-27"), vm.ready().day)
+        assertNull(vm.ready().inputs.questId)
+
+        vm.editTitle("Book the train")
+        vm.add()
+        assertEquals(listOf("quick-add Book the train||null|2026-11-27"), core.calls)
+    }
+
+    @Test
     fun addsWithWhatWasTypedAndChosen() = runTest(main.dispatcher) {
         val vm = viewModel()
         vm.editTitle("Buy\nstamps")

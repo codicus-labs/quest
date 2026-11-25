@@ -3,7 +3,7 @@ package app.quest.android.ui
 /**
  * What a workspace switch resets, as on the desktop (`quest-app` `state/workspaces.rs`): open sheets
  * save into the workspace they belong to and close (task, quest editor, Log work, a tracked
- * session); the plan's quest filter goes, and Focus forgets its task. The tab, Search, Account,
+ * session); Focus forgets its task. The tab, Search, Account,
  * Settings and the archive page stay; typed "New task" text stays and lands in the workspace then
  * shown. A quest's list gives way to the quests ([QuestApp]). The core drops its undo; the focus
  * timer is one per person and keeps running.
@@ -16,6 +16,5 @@ internal fun AppViewModels.leaveWorkspace() {
     questEditor.close()
     logWork.close()
     entry.close()
-    plan.setQuestFilter(null)
     focus.leaveWorkspace()
 }

@@ -1,70 +1,56 @@
 package app.quest.android
 
-import app.quest.android.core.PlanRules
+import app.quest.android.core.PlanPage
+import java.time.LocalDate
+import uniffi.quest_mobile.DayValue
 import uniffi.quest_mobile.HomeTask
-import uniffi.quest_mobile.Moment
-import uniffi.quest_mobile.MoveTarget
-import uniffi.quest_mobile.PlanData
-import uniffi.quest_mobile.PlanDay
-import uniffi.quest_mobile.PlanWindow
+import uniffi.quest_mobile.PlanDaySection
+import uniffi.quest_mobile.PlanDueMarker
+import uniffi.quest_mobile.PlanMonthSection
+import uniffi.quest_mobile.PlanSections
+import uniffi.quest_mobile.PlanWeek
+import uniffi.quest_mobile.PlanWeekDay
+import uniffi.quest_mobile.QuestChip
 
-/** A plan around Monday 2026-11-23 (today): Saturday 21 to Friday 27. */
 object PlanSamples {
-    private fun task(id: String, title: String, quest: uniffi.quest_mobile.QuestChip?, done: Boolean = false, tracked: String? = null) =
-        HomeTask(id = id, title = title, done = done, quest = quest, tracked = tracked, timerRunning = false, canStartTimer = !done, plannedOn = null, dueOn = null, overdue = false, postponed = Samples.notPostponed)
+    const val today = "2026-11-25"
+    const val thursday = "2026-11-26"
+    const val friday = "2026-11-27"
 
-    private val names = listOf("Saturday" to "Sat", "Sunday" to "Sun", "Monday" to "Mon", "Tuesday" to "Tue", "Wednesday" to "Wed", "Thursday" to "Thu", "Friday" to "Fri")
-
-    fun day(number: Int, questWork: List<HomeTask> = emptyList(), other: List<HomeTask> = emptyList()): PlanDay {
-        val (name, short) = names[number - 21]
-        return PlanDay(
-            dayIso = "2026-11-$number",
-            weekday = short,
-            dayNumber = "$number",
-            label = "$name, November $number",
-            monthLabel = "November 2026",
-            isToday = number == 23,
-            isPast = number < 23,
-            questWork = questWork,
-            other = other,
-        )
-    }
-
-    val window = PlanWindow(firstDay = "2026-11-21", count = 7u)
-
-    val days = listOf(
-        day(21, questWork = listOf(task("p0", "Pick three motifs", Samples.writing, done = true, tracked = "40:00"))),
-        day(22),
-        day(23, questWork = Samples.home.questWork, other = Samples.home.other),
-        day(24, questWork = listOf(task("p1", "Sketch the contact sheet", Samples.writing), task("p2", "Interval run", Samples.fitness))),
-        day(25, other = listOf(task("p3", "Water the plants", null))),
-        day(26, questWork = listOf(task("p4", "Edit chapter 3", Samples.writing))),
-        day(27),
+    private fun task(id: String, title: String, quest: QuestChip?, date: String? = null) = HomeTask(
+        id, title, false, quest, null, false, true,
+        date?.let { DayValue(it, it) }, null, false, Samples.notPostponed,
     )
 
-    val plan = PlanData(window = window, days = days, todayIso = "2026-11-23", questFilter = null, quests = Samples.home.quests, toast = null)
-
-    val targets = listOf(
-        MoveTarget("Today", "2026-11-23"),
-        MoveTarget("Tomorrow", "2026-11-24"),
-        MoveTarget("Wednesday, Nov 25", "2026-11-25"),
-        MoveTarget("Backlog · someday", null),
-    )
-}
-
-/**
- * Plan rules for tests: a window of [count] days starting at the first visible day (today:
- * 2026-11-23) unless [built] already starts there; edge speed is [speed].
- */
-class FakePlanRules(var count: UInt = 7u, var speed: Float = 0f) : PlanRules {
-    val windows = mutableListOf<String?>()
-
-    override fun window(firstVisible: String?, visibleDays: Int, built: PlanWindow?, now: Moment): PlanWindow {
-        windows += firstVisible
-        val first = firstVisible ?: "2026-11-23"
-        if (built != null && built.firstDay <= first) return built
-        return PlanWindow(first, count)
+    private val days = List(14) { LocalDate.parse(today).plusDays(it.toLong()).toString() }.map { date ->
+        when (date) {
+            today -> PlanDaySection(date, Samples.home.questWork.filterNot { it.done }, emptyList())
+            thursday -> PlanDaySection(date, listOf(
+                task("p1", "Sketch the contact sheet", Samples.writing, date),
+                task("p2", "Interval run", Samples.fitness, date),
+            ), emptyList())
+            friday -> PlanDaySection(date, listOf(task("p3", "Water the plants", null, date)), listOf(PlanDueMarker("p2", "Interval run")))
+            else -> PlanDaySection(date, emptyList(), emptyList())
+        }
     }
 
-    override fun edgeSpeed(pos: Float, start: Float, end: Float) = speed
+    private val weeks = List(21) { LocalDate.parse("2026-11-23").plusDays(it.toLong()).toString() }.chunked(7).map { dates ->
+        PlanWeek(dates.map { date ->
+            val section = days.find { it.date == date }
+            PlanWeekDay(date, section != null && (section.tasks.isNotEmpty() || section.due.isNotEmpty()), section != null)
+        })
+    }
+
+    val plan = PlanSections(
+        days,
+        listOf(
+            PlanMonthSection("2026-12-01", true, listOf(PlanDaySection("2026-12-18", emptyList(), emptyList()))),
+            PlanMonthSection("2027-01-01", false, listOf(PlanDaySection("2027-01-07", listOf(task("p4", "Edit chapter 3", Samples.writing, "2027-01-07")), emptyList()))),
+        ),
+        Samples.home.questWork.filter { it.done },
+        listOf(task("p5", "Choose a cover photo", Samples.writing), task("p6", "Check the race route", Samples.fitness)),
+        weeks,
+    )
+
+    val page = PlanPage(plan, ListSamples.todayIdle)
 }

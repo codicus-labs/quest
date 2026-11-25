@@ -4,8 +4,6 @@ import androidx.lifecycle.SavedStateHandle
 import app.quest.android.FakeCapturePreferences
 import app.quest.android.FakeClock
 import app.quest.android.FakeFocusPreferences
-import app.quest.android.FakeHomePreferences
-import app.quest.android.FakePlanRules
 import app.quest.android.FakeRepeatRules
 import app.quest.android.core.CoreHolder
 import app.quest.android.core.ServerUrlPolicy
@@ -46,7 +44,7 @@ fun testAppViewModels(holder: CoreHolder, appearance: AppearanceRepository = Fix
     account = AccountViewModel(holder, ServerUrlPolicy { null }, SavedStateHandle(), emptyFlow()),
     settings = SettingsViewModel(holder, appearance, FakeFocusPreferences(), FakeCapturePreferences()),
     focus = FocusViewModel(holder, SavedStateHandle()),
-    plan = PlanViewModel(holder, SavedStateHandle(), FakeHomePreferences(), FakePlanRules(), FakeClock()),
+    plan = PlanViewModel(holder),
     logWork = LogWorkViewModel(holder, SavedStateHandle()),
     questNav = QuestNavViewModel(holder),
     questEditor = QuestEditorViewModel(holder, SavedStateHandle()),

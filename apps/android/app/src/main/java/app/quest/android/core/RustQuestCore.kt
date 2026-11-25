@@ -20,7 +20,6 @@ import uniffi.quest_mobile.SearchOutcome
 import uniffi.quest_mobile.SearchResult
 import uniffi.quest_mobile.SearchToken
 import uniffi.quest_mobile.TrashKind
-import uniffi.quest_mobile.AddPosition
 import uniffi.quest_mobile.ChangeListener
 import uniffi.quest_mobile.FocusView
 import uniffi.quest_mobile.HomeData
@@ -29,9 +28,8 @@ import uniffi.quest_mobile.LogWorkCheck
 import uniffi.quest_mobile.LogWorkDraft
 import uniffi.quest_mobile.MobileException
 import uniffi.quest_mobile.Moment
-import uniffi.quest_mobile.MoveTarget
-import uniffi.quest_mobile.PlanData
-import uniffi.quest_mobile.PlanWindow
+import uniffi.quest_mobile.AddPosition
+import uniffi.quest_mobile.PlanTaskList
 import uniffi.quest_mobile.QuestCore
 import uniffi.quest_mobile.RepeatCheck
 import uniffi.quest_mobile.RepeatDraft
@@ -56,8 +54,6 @@ import uniffi.quest_mobile.checkRepeat
 import uniffi.quest_mobile.checkServerUrl
 import uniffi.quest_mobile.pickedDay
 import uniffi.quest_mobile.DayValue
-import uniffi.quest_mobile.planEdgeSpeed
-import uniffi.quest_mobile.planWindow
 import uniffi.quest_mobile.toggleRepeatWeekday
 
 /** [QuestCoreApi] over the UniFFI bindings of `crates/quest-mobile`. */
@@ -155,19 +151,12 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
 
     override fun completeTask(taskId: String, now: Moment) = core.completeTask(taskId, now)
 
-    override fun plan(window: PlanWindow, questFilter: String?, now: Moment): PlanData = core.plan(window, questFilter, now)
+    override fun planSections(now: Moment) = core.planSections(now)
 
     override fun leavePlan() = core.leavePlan()
 
-    override fun planAddTask(day: String, title: String, position: AddPosition, now: Moment): String = core.planAddTask(day, title, position, now)
-
-    override fun planMoveTask(taskId: String, day: String?, beforeTaskId: String?, now: Moment) = core.planMoveTask(taskId, day, beforeTaskId, now)
-
-    override fun planNudgeTask(taskId: String, up: Boolean, now: Moment) = core.planNudgeTask(taskId, up, now)
-
-    override fun planShiftTask(taskId: String, later: Boolean, now: Moment) = core.planShiftTask(taskId, later, now)
-
-    override fun moveTargets(now: Moment): List<MoveTarget> = core.moveTargets(now)
+    override fun placeTask(taskId: String, list: PlanTaskList, beforeTaskId: String?, now: Moment) =
+        core.placeTask(taskId, list, beforeTaskId, now)
 
     override fun taskChoices(query: String): TaskChoices = core.taskChoices(query)
 
@@ -277,14 +266,6 @@ object RustRepeatRules : RepeatRules {
     override fun check(draft: RepeatDraft, now: Moment): RepeatCheck = checkRepeat(draft, now)
 
     override fun toggleWeekday(draft: RepeatDraft, day: RepeatWeekday, now: Moment): RepeatDraft = toggleRepeatWeekday(draft, day, now)
-}
-
-/** The core's plan rules; pure, safe on the main thread (also per frame while dragging). */
-object RustPlanRules : PlanRules {
-    override fun window(firstVisible: String?, visibleDays: Int, built: PlanWindow?, now: Moment): PlanWindow =
-        planWindow(firstVisible, visibleDays.coerceAtLeast(1).toUInt(), built, now)
-
-    override fun edgeSpeed(pos: Float, start: Float, end: Float): Float = planEdgeSpeed(pos, start, end)
 }
 
 /**

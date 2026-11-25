@@ -26,7 +26,6 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import app.quest.android.core.RustPlanRules
 import app.quest.android.core.RustRepeatRules
 import app.quest.android.core.RustServerUrlPolicy
 import app.quest.android.core.SystemClock
@@ -83,7 +82,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val plan: PlanViewModel by viewModels {
-        viewModelFactory { initializer { PlanViewModel(app.core, createSavedStateHandle(), app.homePreferences, RustPlanRules, SystemClock) } }
+        viewModelFactory { initializer { PlanViewModel(app.core) } }
     }
 
     private val logWork: LogWorkViewModel by viewModels {

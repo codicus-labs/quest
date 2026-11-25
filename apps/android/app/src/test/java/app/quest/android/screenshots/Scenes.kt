@@ -10,7 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.quest.android.settings.HomePrefs
 import app.quest.android.ui.components.TaskCardActions
 import app.quest.android.ui.task.RepeatEditorState
 import app.quest.android.ui.task.RepeatForm
@@ -44,8 +43,13 @@ import app.quest.android.ui.settings.SettingsActions
 import app.quest.android.ui.settings.SettingsScreen
 import app.quest.android.ui.settings.SettingsUiState
 import uniffi.quest_mobile.SyncState
-import uniffi.quest_mobile.PlanData
 import app.quest.android.PlanSamples
+import app.quest.android.ui.lists.RowActions
+import app.quest.android.ui.liftAndDrag
+import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToKey
 import app.quest.android.LogWorkSamples
 import app.quest.android.ui.logwork.LogWorkActions
 import app.quest.android.ui.logwork.LogWorkForm
@@ -55,18 +59,9 @@ import app.quest.android.ui.logwork.LogWorkState
 import app.quest.android.ui.logwork.TaskPickerState
 import uniffi.quest_mobile.DayValue
 import uniffi.quest_mobile.TaskChoices
-import app.quest.android.ui.plan.DropLine
-import app.quest.android.ui.plan.DropTarget
-import app.quest.android.ui.plan.MoveSheet
-import app.quest.android.ui.plan.MoveToContent
 import app.quest.android.ui.plan.PlanActions
-import app.quest.android.ui.plan.PlanDragState
-import app.quest.android.ui.plan.PlanInputs
-import app.quest.android.ui.plan.PlanRow
-import app.quest.android.ui.plan.PlanRowContent
 import app.quest.android.ui.plan.PlanScreen
 import app.quest.android.ui.plan.PlanUiState
-import app.quest.android.ui.plan.dayRows
 
 /**
  * What a scene shows: a whole screen (window-sized), a component strip (as tall as it needs), or a
@@ -74,7 +69,12 @@ import app.quest.android.ui.plan.dayRows
  */
 enum class SceneKind { Screen, Component, Window }
 
-class Scene(val name: String, val kind: SceneKind, val content: @Composable () -> Unit) {
+class Scene(
+    val name: String,
+    val kind: SceneKind,
+    val interact: ComposeTestRule.() -> Unit = {},
+    val content: @Composable () -> Unit,
+) {
     override fun toString() = name
 }
 
@@ -83,11 +83,13 @@ internal val noSettingsActions = SettingsActions(changeWeeklyTarget = {}, setApp
 
 private val noCardActions = TaskCardActions({}, {}, {})
 
-private fun planState(plan: PlanData = PlanSamples.plan, prefs: HomePrefs = HomePrefs(), inputs: PlanInputs = PlanInputs()) =
-    PlanUiState.Ready(plan, prefs, inputs, moveSheet = null, scroll = null)
-
 @Composable
-private fun Plan(state: PlanUiState.Ready) = Shell(Tab.Today, leading = { TodaySegment(showPlan = true, onChange = {}) }) { PlanScreen(state, PlanActions.None) }
+private fun Plan() = Shell(Tab.Today, leading = { TodaySegment(showPlan = true, onChange = {}) }) {
+    PlanScreen(
+        PlanUiState.Ready(PlanSamples.page),
+        PlanActions(RowActions({}, {}, {}, {}), {}, { _, _, _ -> }, {}, {}),
+    )
+}
 
 /** Focus over the app, as in [app.quest.android.ui.QuestApp]. */
 @Composable
@@ -158,24 +160,16 @@ val scenes = listOf(
         val form = RepeatForm.of(Samples.repeatDraft).copy(every = "0", frequency = RepeatFrequency.MONTH, endsOnDate = true, ends = "2026-11-01")
         Sheet(repeatState(form, Samples.repeatCheck.copy(summary = "", error = "Enter an interval from 1 to 999.")), repeats = true)
     },
-    Scene("plan", SceneKind.Screen) { Plan(planState()) },
-    Scene("plan-filtered-toast", SceneKind.Screen) {
-        val plan = PlanSamples.plan.copy(
-            days = PlanSamples.plan.days.map { day -> day.copy(questWork = day.questWork.filter { it.quest == Samples.writing }) },
-            questFilter = Samples.writing,
-            toast = Samples.toast,
-        )
-        Plan(planState(plan, prefs = HomePrefs(showOther = false), inputs = PlanInputs(questFilter = "q1", drafts = mapOf("2026-11-24" to "Call the printer"))))
-    },
-    Scene("plan-drop-line", SceneKind.Component) {
-        val drag = PlanDragState().apply { target = DropTarget("2026-11-24", "p2", DropLine(PlanRow.cardKey("p2"), above = true)) }
-        PlanSamples.days[3].let { day -> dayRows(day, showOther = true) }.forEach { PlanRowContent(it, planState(), drag, PlanActions.None) }
-    },
-    Scene("plan-move-sheet", SceneKind.Screen) {
-        Box(Modifier.fillMaxSize().background(QuestTheme.colors.card).padding(top = 24.dp)) {
-            MoveToContent(MoveSheet("p1", "Sketch the contact sheet", PlanSamples.targets), PlanActions.None, onPickDate = {})
-        }
-    },
+    Scene("plan", SceneKind.Screen) { Plan() },
+    Scene("plan-not-planned", SceneKind.Screen, interact = {
+        onNodeWithTag("plan-sections").performScrollToKey("not-planned")
+        onNodeWithTag("not-planned").performClick()
+        onNodeWithTag("plan-sections").performScrollToKey("unplanned-p5")
+    }) { Plan() },
+    Scene("plan-drag", SceneKind.Screen, interact = {
+        onNodeWithTag("plan-week-${PlanSamples.thursday}").performClick()
+        liftAndDrag("row:Water the plants", "row:Interval run")
+    }) { Plan() },
     Scene("log-work", SceneKind.Screen) { LogWorkSheet(LogWorkState(logWorkForm, LogWorkSamples.check, null)) },
     Scene("log-work-new-task-error", SceneKind.Screen) {
         val form = logWorkForm.copy(newTitle = "Plan the workshop", questId = "q1", startMinute = 14 * 60, endMinute = 13 * 60 + 30)
