@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Rust core's databases (files/quest: the guest's and one per account) hold this device's node ids.
+  A copy on a second device would sync as the same node, so they never leave the device: not in cloud
+  backups, not in device-to-device transfers. The tokens live in no_backup/tokens, encrypted with a
+  Keystore key that cannot leave the device either.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="quest/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="quest/" />
+    </device-transfer>
+</data-extraction-rules>

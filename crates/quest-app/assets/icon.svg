@@ -1,0 +1,10 @@
+<!-- Quest app icon (macOS grid: 824 px body on a 1024 px canvas). The Android launcher icon draws the same
+     ring and check (apps/android/app/src/main/res/drawable/ic_launcher_foreground.xml); keep both in step.
+     Quest.icns is made from this file by make-icns.sh. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#151515"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="185" fill="none" stroke="#2a2420" stroke-width="3"/>
+  <!-- The ring stops where the check breaks out of it. -->
+  <path d="M719.5 505.6 A230 230 0 1 1 670 376.8" fill="none" stroke="#e5b45a" stroke-width="60"/>
+  <path d="M420 540 L515 635 L770 360" fill="none" stroke="#e5b45a" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

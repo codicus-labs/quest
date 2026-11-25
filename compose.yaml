@@ -1,0 +1,21 @@
+# Local identity provider for quest-server (development only): Keycloak with the realm `quest`
+# from keycloak/quest-realm.json (client quest-server, users anna/anna and ben/ben).
+#
+#   docker compose up keycloak        # admin console http://localhost:8091 (admin/admin)
+#   QUEST_OIDC_ISSUER=http://localhost:8091/realms/quest \
+#   QUEST_OIDC_CLIENT_ID=quest-server QUEST_OIDC_CLIENT_SECRET=quest-dev-secret \
+#   cargo run -p quest-server
+#
+# Without Docker, `mise run oidc-fake` is the lighter stand-in (see docs/auth.md).
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    command: ["start-dev", "--import-realm", "--http-port=8091"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8091
+    ports:
+      - "127.0.0.1:8091:8091"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro

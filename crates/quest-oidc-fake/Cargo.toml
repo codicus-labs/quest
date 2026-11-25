@@ -1,0 +1,29 @@
+[package]
+name = "quest-oidc-fake"
+version = "0.1.0"
+description = "In-process OpenID Connect provider for tests and local development, plus a browserless app sign-in for tests."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+quest-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+axum = { version = "0.8", features = ["form", "query"] }
+base64 = "0.22"
+clap = { version = "4.6", features = ["derive", "env"] }
+# Plain http only: the fake and the servers it is used with run on loopback.
+reqwest = { version = "0.13", default-features = false, features = ["json", "form", "query", "cookies"] }
+# The same major as openidconnect's, so the workspace builds one copy.
+rsa = { version = "0.9", features = ["getrandom"] }
+sha2 = { version = "0.10", features = ["oid"] }
+tokio = { version = "1.54", features = ["macros", "rt-multi-thread", "net", "signal", "sync"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+
+[lints]
+workspace = true

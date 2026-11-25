@@ -1,0 +1,10 @@
+[
+  {"t": 1.5, "type": "key", "name": "k", "cmd": true},
+  {"t": 1.8, "type": "type", "text": "capture with", "every": 0.01},
+  {"t": 2.2, "type": "key", "name": "Enter"},
+  {"t": 2.8, "type": "tap", "key": "capture-text"},
+  {"t": 2.9, "type": "type", "text": "Today the captured task", "every": 0.01},
+  {"t": 3.5, "type": "tap", "key": "capture-structure"},
+  {"t": 4.5, "type": "tap", "key": "capture-create"},
+  {"t": 6.0, "type": "mark", "name": "end"}
+]

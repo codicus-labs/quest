@@ -1,0 +1,13 @@
+# Only what `cargo build -p quest-server` needs: the workspace manifests and crates/.
+target
+.git
+.github
+.env
+**/*.sqlite
+**/*.sqlite-*
+apps
+docs
+keycloak
+crates/quest-app/e2e
+crates/quest-app/screenshots
+crates/quest-app/snapshots

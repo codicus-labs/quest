@@ -1,0 +1,115 @@
+# quest-server: checks and image build on every push and pull request that touches the server;
+# publishes ghcr.io/<owner>/quest-server from main (:main, :sha-<short>) and from tags server-vX.Y.Z
+# (:X.Y.Z, :latest).
+name: Server
+
+on:
+  push:
+    branches: ["**"]
+    # Releases only: server-v1.2.3, not server-v1.2.3-rc.1 (that would overwrite :1.2.3 and :latest).
+    # Path filters do not apply to tag pushes, so every such tag builds.
+    tags: ["server-v[0-9]+.[0-9]+.[0-9]+"]
+    paths: &server-paths
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "rustfmt.toml"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/server.yml"
+  pull_request:
+    paths: *server-paths
+
+# Checks and builds run third-party code (crates, base images); only the publish job may write packages.
+permissions:
+  contents: read
+
+# A newer push to the same ref replaces an older run, so an older commit cannot publish :main last.
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The toolchain and components of rust-toolchain.toml.
+      - name: Rust toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --locked -p quest-server -p quest-protocol --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --locked -p quest-server -p quest-protocol
+
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=quest-server
+          cache-to: type=gha,scope=quest-server,mode=max
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/server-v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      # Image names must be lowercase; the owner may not be.
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/quest-server" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=short,enable=${{ github.ref == 'refs/heads/main' }}
+            type=match,pattern=^server-v(\d+\.\d+\.\d+)$,group=1
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/server-v') }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=quest-server

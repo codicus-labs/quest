@@ -1,0 +1,19 @@
+[package]
+name = "quest-view"
+version = "0.1.0"
+description = "Quest presentation logic shared by the clients. Pure, no UI framework, no IO."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+quest-domain.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true
+
+[lints]
+workspace = true

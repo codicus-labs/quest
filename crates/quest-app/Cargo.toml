@@ -1,0 +1,28 @@
+[package]
+name = "quest-app"
+version = "0.2.0"
+description = "Quest macOS client built with Rune."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+quest-domain.workspace = true
+quest-store = { path = "../quest-store", features = ["keychain"] }
+quest-view.workspace = true
+quest-capture.workspace = true
+quest-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sys-locale.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+pulldown-cmark.workspace = true
+chrono-tz.workspace = true
+iana-time-zone.workspace = true
+rune = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669", features = ["tooling"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669", features = ["markdown"] }
+
+[lints]
+workspace = true

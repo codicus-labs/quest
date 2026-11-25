@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker preview (layout/widget_preview.xml): theme.json tokens (dark). -->
+<resources>
+    <color name="widget_bg">#111111</color>
+    <color name="widget_text">#ededed</color>
+    <color name="widget_muted">#8c8c8c</color>
+    <color name="widget_faint">#5c5c5c</color>
+</resources>

@@ -1,0 +1,29 @@
+# Dev tasks for the repo root. apps/android has its own mise.toml for the Android toolchain.
+
+# quest-server with AI capture via OpenRouter. The key comes from OPENROUTER_API_KEY in the
+# git-ignored .env here; it never goes into the repo. Port and other settings: see crates/quest-server/README.md.
+# Sign-in goes to the local fake identity provider: start `mise run oidc-fake` first (or point QUEST_OIDC_*
+# at Keycloak from compose.yaml, see docs/auth.md).
+[tasks.server]
+description = "Run quest-server with AI capture (OpenRouter) and sign-in at the local OIDC fake"
+# Model and fallbacks: see docs/ai-models.md (eval results).
+env = { _.file = ".env", QUEST_OIDC_ISSUER = "http://127.0.0.1:8792", QUEST_OIDC_CLIENT_ID = "quest-server", QUEST_OIDC_CLIENT_SECRET = "quest-dev-secret", QUEST_AI_BASE_URL = "https://openrouter.ai/api/v1", QUEST_AI_MODEL = "anthropic/claude-haiku-5.5", QUEST_AI_FALLBACK_MODELS = "openai/gpt-6-luna,deepseek/deepseek-v4.1-flash-1017", QUEST_AI_REASONING_EFFORT = "none", QUEST_AI_APP_TITLE = "Quest", QUEST_AI_API_KEY = "{{env.OPENROUTER_API_KEY}}" }
+run = "cargo run -p quest-server --"
+
+# Development identity provider for `mise run server` (users anna and ben, no passwords; never for
+# production). `--auto-login anna` skips the user picker.
+[tasks.oidc-fake]
+description = "Run the fake OpenID Connect provider on 127.0.0.1:8792"
+run = "cargo run -p quest-oidc-fake --"
+
+# Capture eval against a real model: `mise run ai-eval --model <provider/model>`. Each case is one paid
+# call (synthetic texts only); see docs/ai-models.md. Needs OPENROUTER_API_KEY in .env.
+[tasks.ai-eval]
+description = "Score AI capture on the synthetic eval set (paid OpenRouter calls)"
+env = { _.file = ".env" }
+run = "cargo run -q -p quest-ai-eval --"
+
+# Quest.app and a .dmg for this Mac (ad-hoc signed, no Apple Developer ID), in target/package/.
+[tasks.package-macos]
+description = "Build Quest.app and a .dmg for this Mac"
+run = "bash crates/quest-app/package-macos.sh"

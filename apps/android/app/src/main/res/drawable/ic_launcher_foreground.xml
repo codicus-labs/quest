@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon: the ring and check of crates/quest-app/assets/icon.svg (same 1024 coordinates), scaled into
+     the adaptive icon's safe zone. Also the monochrome layer of themed icons, so it uses no background-coloured
+     strokes: the ring's gap is a real gap. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <group
+        android:pivotX="512"
+        android:pivotY="512"
+        android:scaleX="0.85"
+        android:scaleY="0.85"
+        android:translateX="-5">
+        <path
+            android:pathData="M719.5,505.6 A230,230 0 1,1 670,376.8"
+            android:strokeColor="#E5B45A"
+            android:strokeWidth="60" />
+        <path
+            android:pathData="M420,540 L515,635 L770,360"
+            android:strokeColor="#E5B45A"
+            android:strokeWidth="60"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

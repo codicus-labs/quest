@@ -1,0 +1,9 @@
+[
+  {"t": 1.0, "type": "tap", "key": "workspace-switcher"},
+  {"t": 1.5, "type": "tap", "key": "workspace-menu-item2"},
+  {"t": 2.2, "type": "tap", "key": "workspace-restore-__WORKSPACE__"},
+  {"t": 2.8, "type": "key", "name": "Escape"},
+  {"t": 3.4, "type": "tap", "key": "workspace-switcher"},
+  {"t": 3.9, "type": "tap", "key": "workspace-menu-item1"},
+  {"t": 7.0, "type": "mark", "name": "end"}
+]

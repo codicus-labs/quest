@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shortcut icon for Dictate: a microphone (QuestIcons.Mic). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:pathData="M6 3.5a2 2 0 0 1 4 0v4a2 2 0 0 1-4 0Z M3.8 7.5a4.2 4.2 0 0 0 8.4 0 M8 11.7v2.3 M6 14h4"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FF2B2A27"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

@@ -1,0 +1,8 @@
+[
+  {"t": 0.5, "type": "tap", "key": "avatar"},
+  {"t": 1.0, "type": "tap", "key": "account-server"},
+  {"t": 1.1, "type": "key", "name": "a", "cmd": true},
+  {"t": 1.2, "type": "type", "text": "__SERVER__", "every": 0.01},
+  {"t": 2.0, "type": "tap", "key": "account-sign-in"},
+  {"t": 6.0, "type": "mark", "name": "end"}
+]

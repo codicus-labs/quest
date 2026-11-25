@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Focus: the ongoing timer notification and its foreground service (docs/mobile.md, Phase 2). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- AI capture: dictation, asked for at the first tap on the mic (docs/mobile.md, Phase 8). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- SpeechRecognizer binds the system's recognition service; Android 11+ only shows it when declared. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
+    <!-- networkSecurityConfig: release builds use the file of rustls-platform-verifier (no cleartext except to
+         the CAs' CRL servers, which its HTTPS check needs for certificates without OCSP). A file of the same
+         name in this app would replace it; debug builds do that for the dev server (src/debug/res/xml). -->
+    <application
+        android:name=".QuestApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Quest"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@style/Theme.Quest">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- quest://focus opens Focus (notification tap, deep links). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="quest" android:host="focus" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+        <!-- Sign-in answers and the return from signing out (RFC 8252 private-use scheme, docs/mobile.md Phase 11).
+             Exported so the browser can reach it; the core accepts only the answer to the sign-in it started. -->
+        <activity
+            android:name=".auth.AuthRedirectActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="app.quest.android" android:path="/oauth2redirect" />
+            </intent-filter>
+        </activity>
+        <!-- The app's own entry for widget rows (quest://task/<id>) and the launcher shortcuts: not exported,
+             so other apps cannot start a timer through it (shortcuts and PendingIntents run as this app). -->
+        <activity-alias
+            android:name=".InternalEntry"
+            android:exported="false"
+            android:targetActivity=".MainActivity" />
+        <!-- Quick add: share target for text, "New task" shortcut and tile. Own task affinity, so it does not pull the app forward; each share is a fresh sheet. -->
+        <activity
+            android:name=".quickadd.QuickAddActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/quick_add_title"
+            android:taskAffinity="app.quest.android.quickadd"
+            android:theme="@style/Theme.Quest.Transparent"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="app.quest.android.action.QUICK_ADD" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <!-- AI capture: dictation and the proposal. Not exported: only this app's shortcut, quick add and search
+             start it; other apps share text through the alias below, which only fills in the text. -->
+        <activity
+            android:name=".capture.CaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:label="@string/capture_title"
+            android:taskAffinity="app.quest.android.capture"
+            android:theme="@style/Theme.Quest.Transparent"
+            android:windowSoftInputMode="adjustResize" />
+        <!-- Share target "Structure with AI"; disabled with the AI capture setting (CaptureEntries). -->
+        <activity-alias
+            android:name=".capture.StructureWithAi"
+            android:exported="true"
+            android:label="@string/capture_share_label"
+            android:targetActivity=".capture.CaptureActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+        <receiver
+            android:name=".widget.QuestWidgetReceiver"
+            android:exported="true"
+            android:label="Quest">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/quest_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.DayChangeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <service
+            android:name=".platform.NewTaskTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_new_task"
+            android:label="@string/tile_new_task"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="false" />
+        </service>
+        <!-- A user-started stopwatch kept in sync with other devices; no specific FGS type fits. -->
+        <service
+            android:name=".focus.FocusService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Focus timer: shows the user-started task timer with pause and complete, and keeps it in sync with the user's other devices while it runs." />
+        </service>
+    </application>
+</manifest>

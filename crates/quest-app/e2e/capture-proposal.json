@@ -1,0 +1,13 @@
+{
+  "quests": [{ "key": "q1", "title": "E2E capture quest", "description": "", "milestones": [] }],
+  "tasks": [{
+    "key": "t1", "title": "E2E captured task", "description": "",
+    "quest": { "type": "new", "key": "q1" }, "quest_uncertain": false,
+    "day": "__TODAY__", "block": null, "repeat": null
+  }],
+  "work": [{
+    "key": "w1", "task": { "type": "new", "title": "E2E captured work", "quest": null },
+    "uncertain": false, "day": "__YESTERDAY__", "start": "09:00:00", "end": "10:00:00"
+  }],
+  "dropped": []
+}

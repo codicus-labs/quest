@@ -1,0 +1,248 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "new_quests": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "Details from the text; empty if none.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Short key such as q1, used by new_quest_key.",
+            "type": "string"
+          },
+          "milestones": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "description": "Short title of the achievement.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "date",
+                "title"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "Short quest title.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "key",
+          "milestones",
+          "title"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tasks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "day": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "description": "Details from the text; empty if none.",
+            "type": "string"
+          },
+          "duration_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "new_quest_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quest_confidence": {
+            "enum": [
+              "high",
+              "low"
+            ],
+            "type": "string"
+          },
+          "quest_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repeat": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "every": {
+                    "description": "Every N units, 1 or more.",
+                    "type": "integer"
+                  },
+                  "month_day": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "enum": [
+                      "day",
+                      "week",
+                      "month",
+                      "year"
+                    ],
+                    "type": "string"
+                  },
+                  "until": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "weekdays": {
+                    "items": {
+                      "enum": [
+                        "mon",
+                        "tue",
+                        "wed",
+                        "thu",
+                        "fri",
+                        "sat",
+                        "sun"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "every",
+                  "month_day",
+                  "unit",
+                  "until",
+                  "weekdays"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "description": "Short, clean task title.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "description",
+          "duration_minutes",
+          "new_quest_key",
+          "quest_confidence",
+          "quest_id",
+          "repeat",
+          "start_time",
+          "title"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "work_logs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "enum": [
+              "high",
+              "low"
+            ],
+            "type": "string"
+          },
+          "date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          },
+          "end_time": {
+            "description": "HH:MM, or 24:00 for midnight.",
+            "type": "string"
+          },
+          "new_quest_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "new_task_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quest_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_time": {
+            "description": "HH:MM",
+            "type": "string"
+          },
+          "task_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "confidence",
+          "date",
+          "end_time",
+          "new_quest_key",
+          "new_task_title",
+          "quest_id",
+          "start_time",
+          "task_id"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "new_quests",
+    "tasks",
+    "work_logs"
+  ],
+  "type": "object"
+}

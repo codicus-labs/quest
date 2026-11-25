@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window background before Compose draws: theme.json "bg" (dark). -->
+    <style name="Theme.Quest" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#111111</item>
+        <!-- Splash: the app's appearance (setApplicationNightMode), not white. -->
+        <item name="android:windowSplashScreenBackground">#111111</item>
+    </style>
+    <!-- Quick add (share, shortcut, tile): only its sheet shows, over whatever was on screen. -->
+    <style name="Theme.Quest.Transparent" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+</resources>

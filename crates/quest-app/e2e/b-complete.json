@@ -1,0 +1,4 @@
+[
+  { "t": 3.0, "type": "tap", "key": "home-check-__TASK_ID__" },
+  { "t": 7.0, "type": "mark", "name": "end" }
+]

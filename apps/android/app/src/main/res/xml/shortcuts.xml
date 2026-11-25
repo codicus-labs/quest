@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static launcher shortcuts; "Start timer" is dynamic (AppShortcuts), named after its task. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new-task"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutShortLabel="@string/shortcut_new_task">
+        <intent
+            android:action="app.quest.android.action.QUICK_ADD"
+            android:targetClass="app.quest.android.quickadd.QuickAddActivity"
+            android:targetPackage="app.quest.android" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="log-work"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_log"
+        android:shortcutShortLabel="@string/shortcut_log_work">
+        <intent
+            android:action="app.quest.android.action.LOG_WORK"
+            android:targetClass="app.quest.android.InternalEntry"
+            android:targetPackage="app.quest.android" />
+    </shortcut>
+</shortcuts>

@@ -1,0 +1,49 @@
+[package]
+name = "quest-store"
+version = "0.1.0"
+description = "Quest client persistence (SQLite) and sync engine (WebSocket). UI-agnostic."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Token storage in the macOS keychain (`KeychainVault`); the desktop app turns it on.
+keychain = ["dep:security-framework"]
+
+[dependencies]
+base64 = "0.22"
+quest-domain.workspace = true
+quest-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+rand = "0.10"
+reqwest = { version = "0.13", default-features = false, features = ["form", "json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier.workspace = true
+rusqlite = { version = "0.43", features = ["bundled"] }
+sha2 = "0.11"
+tokio = { version = "1.54", features = ["rt", "macros", "net", "sync", "time"] }
+tracing = "0.1"
+# `__rustls-tls` only enables rustls support; the root certificates come from the platform verifier
+# we pass in (`remote::tls_config`), like for `reqwest`. The public `rustls-tls-*` features would add a
+# bundled or native root store instead. `__rustls-tls` is internal (no SemVer promise), hence the exact
+# pin: on every update check that the feature still exists and still only enables rustls.
+tokio-tungstenite = { version = "=0.30.0", features = ["__rustls-tls"] }
+url = { version = "2.5", features = ["serde"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = { version = "3", optional = true }
+
+[dev-dependencies]
+chrono.workspace = true
+quest-server = { path = "../quest-server" }
+quest-oidc-fake = { path = "../quest-oidc-fake" }
+tempfile.workspace = true
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

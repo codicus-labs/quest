@@ -1,0 +1,82 @@
+{
+  "realm": "quest",
+  "enabled": true,
+  "displayName": "Quest (development)",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "clients": [
+    {
+      "clientId": "quest-server",
+      "name": "Quest",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "quest-dev-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "redirectUris": [
+        "http://127.0.0.1:8787/auth/callback",
+        "http://localhost:8787/auth/callback",
+        "http://127.0.0.1:8788/auth/callback",
+        "http://127.0.0.1:8799/auth/callback",
+        "https://quest.example.com/auth/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://127.0.0.1:8787/auth/logged-out##http://localhost:8787/auth/logged-out##http://127.0.0.1:8788/auth/logged-out##http://127.0.0.1:8799/auth/logged-out##https://quest.example.com/auth/logged-out"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "microprofile-jwt"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "anna",
+      "enabled": true,
+      "email": "anna@example.test",
+      "emailVerified": true,
+      "firstName": "Anna",
+      "lastName": "Example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "anna",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "ben",
+      "enabled": true,
+      "email": "ben@example.test",
+      "emailVerified": true,
+      "firstName": "Ben",
+      "lastName": "Example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ben",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[
+ {
+  "t": 0.3,
+  "type": "tap",
+  "key": "plan-next"
+ },
+ {
+  "t": 1.6,
+  "type": "mark",
+  "name": "end"
+ }
+]

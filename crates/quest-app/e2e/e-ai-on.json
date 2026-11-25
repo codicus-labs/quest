@@ -1,0 +1,6 @@
+[
+  {"t": 1.0, "type": "tap", "key": "avatar"},
+  {"t": 1.5, "type": "tap", "key": "account-ai-features"},
+  {"t": 2.0, "type": "tap", "key": "ai-notice-accept"},
+  {"t": 5.0, "type": "mark", "name": "end"}
+]

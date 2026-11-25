@@ -1,0 +1,56 @@
+[package]
+name = "quest-server"
+version = "0.2.0"
+description = "Quest sync and auth server: axum HTTP + WebSocket, SQLite via sqlx."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+quest-domain.workspace = true
+quest-protocol.workspace = true
+quest-capture.workspace = true
+quest-view.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+axum = { version = "0.8", features = ["ws", "form", "query"] }
+base64 = "0.22"
+clap = { version = "4.6", features = ["derive", "env"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+hex = "0.4"
+# OpenID Connect client towards the identity provider (discovery, PKCE, ID-token validation over JWKS).
+# Without its reqwest feature: HTTP goes through our own reqwest client (`oidc::http`).
+openidconnect = { version = "4.1", default-features = false }
+http = "1"
+url = "2"
+rand = "0.10"
+# MCP server: Streamable HTTP transport, served under /mcp inside the axum router.
+rmcp = { version = "3.11", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
+schemars = { version = "1.0", features = ["chrono04"] }
+# `rustls-no-provider`: the AI client brings its own ring provider and platform verifier
+# (`ai::openai::tls_config`), like quest-store, so no global crypto provider is needed.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier.workspace = true
+sha2 = "0.11"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+tokio = { version = "1.54", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+quest-oidc-fake.workspace = true
+tempfile.workspace = true
+# The OAuth tests post forms and query strings like a browser.
+reqwest = { version = "0.13", default-features = false, features = ["form", "query"] }
+tokio-tungstenite = "0.30"
+rmcp = { version = "3.11", default-features = false, features = ["client", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }
+
+[lints]
+workspace = true

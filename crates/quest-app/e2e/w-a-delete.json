@@ -1,0 +1,7 @@
+[
+  {"t": 1.0, "type": "tap", "key": "workspace-switcher"},
+  {"t": 1.5, "type": "tap", "key": "workspace-menu-item3"},
+  {"t": 2.2, "type": "tap", "key": "workspace-delete-__WORKSPACE__"},
+  {"t": 2.8, "type": "tap", "key": "workspace-delete-confirm"},
+  {"t": 6.0, "type": "mark", "name": "end"}
+]

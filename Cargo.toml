@@ -1,0 +1,64 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+pulldown-cmark = { version = "0.13", default-features = false }
+quest-domain = { path = "crates/quest-domain" }
+quest-protocol = { path = "crates/quest-protocol" }
+quest-capture = { path = "crates/quest-capture" }
+quest-store = { path = "crates/quest-store" }
+quest-mobile = { path = "crates/quest-mobile" }
+quest-view = { path = "crates/quest-view" }
+quest-server = { path = "crates/quest-server" }
+quest-oidc-fake = { path = "crates/quest-oidc-fake" }
+uniffi = "0.32"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+chrono-tz = { version = "0.10", features = ["serde"] }
+iana-time-zone = "0.1"
+sys-locale = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v5", "v7", "serde"] }
+tempfile = "3.27"
+rustls-platform-verifier = "0.7"
+# TLS with the ring provider (no aws-lc build); crates enable more features where they need them.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio = "1.54"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# Unoptimized Rune/wgpu cannot hold 120 Hz (see docs/perf/plan-scroll.md); our own crates stay at O0.
+[profile.dev.package."*"]
+opt-level = 2
+
+# libquest_mobile.so for the Android app (apps/android/build-rust.sh); sizes in docs/mobile.md.
+# Panics stay `unwind`: quest-mobile's `guard` turns them into `MobileError::Internal` instead of
+# killing the app, which `abort` would do.
+[profile.mobile-release]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+opt-level = "s"
+
+# Rune (UI framework) pinned to one dev revision. Cargo doesn't inherit a dependency's
+# [patch] table, so every crate Rune patches is patched here at the same rev (see Rune's root
+# Cargo.toml). Bump all of these together.
+[patch.crates-io]
+winit = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+sctk-adwaita = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }

@@ -1,0 +1,154 @@
+# Builds the signed Android APK for a tag android-v<major.minor.patch> and attaches it to a GitHub release
+# (what Obtainium watches). The tag must match apps/android/version.properties. A manual run
+# (workflow_dispatch) is a dry run: it builds, signs and checks the APK and keeps it as an artifact, without a
+# release.
+#
+# Runs on GitHub-hosted runners: mise installs the tools of apps/android/mise.toml (Java, Gradle, cargo-ndk),
+# rustup the toolchain of rust-toolchain.toml with the Android targets, sdkmanager the NDK and platform of
+# app/build.gradle.kts.
+#
+# Secrets: QUEST_RELEASE_KEYSTORE_BASE64 (the .jks, base64), QUEST_RELEASE_STORE_PASSWORD,
+# QUEST_RELEASE_KEY_ALIAS, QUEST_RELEASE_KEY_PASSWORD. Variable: QUEST_RELEASE_CERT_SHA256 (the signing
+# certificate's SHA-256; the release fails if the APK is signed with another key). There is no pull_request
+# trigger, so pull requests from forks never run this workflow.
+name: Android release
+
+on:
+  push:
+    tags: ["android-v*"]
+  workflow_dispatch:
+
+# The build runs third-party code (Gradle plugins, crates); only the release job may write.
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      # Fails before the long build when the repository has no signing setup (for example in a fork).
+      - name: Check the signing secrets
+        env:
+          HAS_KEYSTORE: ${{ secrets.QUEST_RELEASE_KEYSTORE_BASE64 != '' }}
+          HAS_STORE_PASSWORD: ${{ secrets.QUEST_RELEASE_STORE_PASSWORD != '' }}
+          HAS_KEY_ALIAS: ${{ secrets.QUEST_RELEASE_KEY_ALIAS != '' }}
+          HAS_KEY_PASSWORD: ${{ secrets.QUEST_RELEASE_KEY_PASSWORD != '' }}
+        working-directory: .
+        run: |
+          if [ "$HAS_KEYSTORE" != true ] || [ "$HAS_STORE_PASSWORD" != true ] \
+              || [ "$HAS_KEY_ALIAS" != true ] || [ "$HAS_KEY_PASSWORD" != true ]; then
+            echo "::error::Signing secrets missing. Set QUEST_RELEASE_KEYSTORE_BASE64, QUEST_RELEASE_STORE_PASSWORD, QUEST_RELEASE_KEY_ALIAS and QUEST_RELEASE_KEY_PASSWORD (see apps/android/README.md, Releases on GitHub)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the tag against version.properties
+        id: version
+        run: |
+          declared="$(sed -n 's/^versionName=//p' version.properties)"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            echo "Dry run: version $declared from version.properties, no release."
+            echo "version=$declared" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version="${GITHUB_REF_NAME#android-v}"
+          if [ "$version" != "$declared" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match versionName=$declared in apps/android/version.properties."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Java, Gradle and cargo-ndk of mise.toml; cargo-ndk is compiled from crates.io, not taken as an
+      # unchecked binary from cargo-binstall.
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          working_directory: apps/android
+        env:
+          MISE_CARGO_BINSTALL: "false"
+
+      - name: Rust toolchain and the Android targets of build-rust.sh
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-linux-android x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: android
+
+      # The versions of app/build.gradle.kts (ndkVersion, compileSdk 37.2) and the build-tools for
+      # sign-release.sh (zipalign -P needs 35 or later).
+      - name: Android NDK, platform and build-tools
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | mise exec -- "$sdkmanager" --sdk_root="$ANDROID_HOME" --licenses > /dev/null
+          mise exec -- "$sdkmanager" --sdk_root="$ANDROID_HOME" \
+            "ndk;30.0.16248370" "platforms;android-37.2" "build-tools;36.0.0" > /dev/null
+
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      # Without signing values the build leaves app-release-unsigned.apk; Gradle plugins and crates never see
+      # the secrets.
+      - name: Build the release APK
+        run: mise exec -- ./gradlew --no-daemon assembleRelease
+
+      - name: Sign, check the certificate and name the APK
+        env:
+          QUEST_RELEASE_KEYSTORE_BASE64: ${{ secrets.QUEST_RELEASE_KEYSTORE_BASE64 }}
+          QUEST_RELEASE_STORE_PASSWORD: ${{ secrets.QUEST_RELEASE_STORE_PASSWORD }}
+          QUEST_RELEASE_KEY_ALIAS: ${{ secrets.QUEST_RELEASE_KEY_ALIAS }}
+          QUEST_RELEASE_KEY_PASSWORD: ${{ secrets.QUEST_RELEASE_KEY_PASSWORD }}
+          QUEST_RELEASE_CERT_SHA256: ${{ vars.QUEST_RELEASE_CERT_SHA256 }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          mise exec -- ./sign-release.sh app/build/outputs/apk/release/app-release-unsigned.apk "dist/quest-$VERSION.apk"
+          (cd dist && sha256sum "quest-$VERSION.apk" > "quest-$VERSION.apk.sha256")
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apk
+          path: apps/android/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: apk
+          path: dist
+
+      # A re-run after a partial failure finds the release already there and replaces the files.
+      - name: Attach to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="${GITHUB_REF_NAME#android-v}"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "Quest for Android $version" \
+            --notes "Signed APK for Android 12 and later. Install or update with Obtainium or adb (see apps/android/README.md)." \
+            --verify-tag

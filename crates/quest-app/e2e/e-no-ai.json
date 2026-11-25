@@ -1,0 +1,11 @@
+[
+  {"t": 0.5, "type": "tap", "key": "avatar"},
+  {"t": 1.0, "type": "tap", "key": "account-server"},
+  {"t": 1.1, "type": "key", "name": "a", "cmd": true},
+  {"t": 1.2, "type": "type", "text": "__SERVER__", "every": 0.01},
+  {"t": 2.0, "type": "tap", "key": "account-sign-in"},
+  {"t": 5.0, "type": "key", "name": "Escape"},
+  {"t": 5.5, "type": "key", "name": "k", "cmd": true},
+  {"t": 5.8, "type": "type", "text": "capture with", "every": 0.01},
+  {"t": 6.5, "type": "mark", "name": "end"}
+]

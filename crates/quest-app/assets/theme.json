@@ -1,0 +1,51 @@
+{
+  "name": "quest",
+  "palette": {
+    "black": "#0c0c0c",
+    "ink": "#111111",
+    "amber": "#e5b45a",
+    "amber-deep": "#8c6014"
+  },
+  "dark": {
+    "bg": "#111111",
+    "bar": "#0c0c0c",
+    "card": "#151515",
+    "card-raised": "#1a1a1a",
+    "border": "#262626",
+    "border-strong": "#333333",
+    "text": "#ededed",
+    "text-muted": "#8c8c8c",
+    "text-faint": "#5c5c5c",
+    "chip": "#181818",
+    "hover": "#1f1f1f",
+    "selected": "#1e1e1e",
+    "grid": "#2a2420",
+    "grid-line": "#352e29",
+    "bar-track": "#262626",
+    "bar-idle": "#3a3a40",
+    "accent": "amber",
+    "error": "#d9625c",
+    "scrim": "#000000aa"
+  },
+  "light": {
+    "bg": "#f7f6f3",
+    "bar": "#efede8",
+    "card": "#ffffff",
+    "card-raised": "#ffffff",
+    "border": "#e3e0da",
+    "border-strong": "#d2cec6",
+    "text": "#1a1a1a",
+    "text-muted": "#686868",
+    "text-faint": "#a3a19c",
+    "chip": "#f5f3ef",
+    "hover": "#efede8",
+    "selected": "#ebe8e2",
+    "grid": "#f4eee4",
+    "grid-line": "#e6ddd0",
+    "bar-track": "#e7e4de",
+    "bar-idle": "#cfcbc4",
+    "accent": "amber-deep",
+    "error": "#c1342d",
+    "scrim": "#00000055"
+  }
+}

@@ -1,0 +1,5 @@
+[
+  {"t": 1.0, "type": "tap", "key": "workspace-switcher"},
+  {"t": 1.5, "type": "tap", "key": "workspace-menu-item3"},
+  {"t": 3.0, "type": "mark", "name": "end"}
+]
