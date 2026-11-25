@@ -141,7 +141,7 @@ function efFocus(mobile) {
       <div class="ftitle">${esc(t.title)}</div>
       <div class="fclock tnum" data-elapsed></div>
       <div class="muted small tnum">${fmtDur(today)} today${q ? ` · ${fmtH(questMins(q.id))} / ${q.goal}h this week` : ''}</div>
-      <textarea class="fnotes" id="fnotes" data-notes="${t.id}" placeholder="Notes">${esc(t.notes || '')}</textarea>
+      ${noteBlock(t, 'focus')}${checklist(t, 'focus')}
       <div class="row factions"><button class="efbig" data-a="focusStop">${ic('stop')}Stop</button><button class="efbig acc" data-a="focusDone">${ic('check')}Done</button></div>
       ${leave}
     </div></div>`;

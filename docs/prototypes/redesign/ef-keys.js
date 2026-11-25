@@ -5,9 +5,11 @@ const VIEW_KEYS = ['inbox', 'today', 'plan', 'logbook', ...Q.map(q => 'q:' + q.i
 const FIELD_CHORDS = { l: 'quest', p: 'plan', d: 'due' }; // ⌘⇧L / ⌘⇧P / ⌘⇧D in the Quick-Add field
 const KEY_TABLE = [
   ['Lists', [['N', 'New to-do (Quick-Add)'], ['⌘1 … ⌘4', 'Inbox · Today · Plan · Logbook'], ['⌘5 … ⌘8', 'Quests'], ['T · ⌥⌘I', 'Tracked column'], ['?', 'Shortcuts']]],
-  ['Selected to-do', [['↑ ↓ · J K', 'Select'], ['↵', 'Open / close'], ['Space', 'Start / stop timer'], ['F', 'Focus'], ['X', 'Done'], ['L', 'Quest'], ['P', 'Plan'], ['D', 'Deadline'], ['Esc', 'Close / deselect']]],
+  ['Selected to-do', [['↑ ↓ · J K', 'Select'], ['↵', 'Open / close'], ['Space', 'Start / stop timer'], ['F', 'Focus'], ['X', 'Done'], ['E', 'Edit notes'], ['⌘⌫', 'Delete'], ['L', 'Quest'], ['P', 'Plan'], ['D', 'Deadline'], ['Esc', 'Close / deselect']]],
   ['Quick-Add', [['⌘⇧L · L', 'Quest'], ['⌘⇧P · P', 'Plan'], ['⌘⇧D · D', 'Deadline'], ['#  @  !', 'Quest · plan · deadline inline']]],
   ['Calendar', [['← → ↑ ↓', 'Day · week'], ['PgUp PgDn', 'Month'], ['T M N', 'Today · tomorrow · next Monday'], ['⌫', 'None'], ['↵', 'Set'], ['Esc', 'Cancel']]],
+  ['Notes & checklist', [['E · ↵', 'Edit notes (Markdown)'], ['Esc', 'Save notes'], ['↵', 'Next item'], ['⌫', 'Delete empty item'], ['⌥↑ ⌥↓', 'Move item'], ['⌘↵', 'Check item']]],
+  ['Undo', [['⌘Z', 'Done · delete · date · quest']]],
   ['Timer', [['O', 'Organize'], ['B', 'Book on Organizing (hint)'], ['Esc', 'Leave focus']]],
 ];
 function efKeys() {
@@ -39,6 +41,7 @@ function efKey(e) {
   // Chords that also work inside the Quick-Add field.
   if (cmd && e.shiftKey && FIELD_CHORDS[lower] && e.target.id === 'qa-ef') { openPop('qa', FIELD_CHORDS[lower], 'qa'); return true; }
   if (inScene()) return globalKey(e); // fake macOS desktop (ef-global.js): only the global hotkey and Esc
+  if (detailKey(e)) return true; // notes, undo, delete (ef-detail.js)
   if (cmd && !e.shiftKey && !e.altKey && /^[1-9]$/.test(k) && VIEW_KEYS[k - 1]) { goView(VIEW_KEYS[k - 1]); return true; }
   // ⌥⌘I is the macOS inspector key; the browser keeps it for DevTools, so the prototype also takes ⌃⌥I.
   if (cmd && e.altKey && !e.shiftKey && e.code === 'KeyI') { ef.right = !ef.right; return true; }

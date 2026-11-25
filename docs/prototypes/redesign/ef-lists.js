@@ -50,17 +50,21 @@ const dnum = off => new Date(noon(off)).getDate();
 const dayName = off => off === 0 ? 'Today' : off === 1 ? 'Tomorrow' : off === -1 ? 'Yesterday' : Math.abs(off) < 7 ? wd(off) : new Date(noon(off)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const pastDay = off => `${wd(off)} ${dnum(off)}`;
 
-/* ---------- Lists ---------- */
-const isEfInbox = t => !t.done && !t.quests.length && !has(t.plan);
+/* ---------- Lists ----------
+   Deleted tasks are soft-deleted (undo); a task just ticked off still looks open for a moment (ef-detail.js). */
+const liveT = () => T.filter(t => !t.deleted);
+const isLingering = t => !!t.lingerUntil && Date.now() < t.lingerUntil;
+const looksOpen = t => !t.done || isLingering(t);
+const isEfInbox = t => looksOpen(t) && !t.quests.length && !has(t.plan);
 const isEfToday = t => (has(t.plan) && t.plan <= 0) || (has(t.due) && t.due <= 0);
 const todayRank = t => has(t.due) && t.due < 0 ? 0 : has(t.plan) && t.plan < 0 ? 1 : has(t.due) && t.due === 0 ? 2 : 3;
 const EF_LISTS = {
-  inbox: () => T.filter(isEfInbox),
-  today: () => T.filter(t => t.done ? t.doneToday || t.plan === 0 : isEfToday(t)).sort((a, b) => todayRank(a) - todayRank(b)),
-  plan: () => T.filter(t => !t.done && has(t.plan) && t.plan > 0),
-  logbook: () => T.filter(t => t.done),
+  inbox: () => liveT().filter(isEfInbox),
+  today: () => liveT().filter(t => t.done ? t.doneToday || t.plan === 0 : isEfToday(t)).sort((a, b) => todayRank(a) - todayRank(b)),
+  plan: () => liveT().filter(t => looksOpen(t) && has(t.plan) && t.plan > 0),
+  logbook: () => liveT().filter(t => t.done),
 };
-const efListOf = v => v.startsWith('q:') ? T.filter(t => t.quests.includes(v.slice(2))) : EF_LISTS[v]();
+const efListOf = v => v.startsWith('q:') ? liveT().filter(t => t.quests.includes(v.slice(2))) : EF_LISTS[v]();
 
 const EF_NAV = [['inbox', 'Inbox', 'inbox'], ['today', 'Today', 'sun'], ['plan', 'Plan', 'cal'], ['logbook', 'Logbook', 'book']];
 function efNav() {
@@ -80,7 +84,10 @@ function efHead() {
   return `<h1 class="${v}">${ic(i)}${label}</h1><div class="sub">${sub}</div>`;
 }
 
-/* ---------- Rows ---------- */
+/* ---------- Rows ----------
+   The row keeps what decides the next step: dates, checklist progress, quest. Notes and postponements live in the detail.
+   ?dueflag=0 drops the flag before "due …"; ?rowtime=0 drops the tracked duration (a running timer still shows). */
+const DUE_FLAG = params.get('dueflag') !== '0', ROW_TIME = params.get('rowtime') !== '0';
 function dateMarks(t, inPlanCol) {
   const marks = [];
   if (!t.done && has(t.plan) && t.plan < 0) marks.push(`<span class="dmark">since ${pastDay(t.plan)}</span>`);
@@ -88,23 +95,22 @@ function dateMarks(t, inPlanCol) {
   if (!t.done && has(t.due)) {
     const cls = t.due < 0 ? 'over' : t.due === 0 ? 'today' : '';
     const label = t.due < 0 ? `overdue · ${pastDay(t.due)}` : t.due === 0 ? 'due today' : `due ${dayName(t.due)}`;
-    marks.push(`<span class="dmark ${cls}">${ic('flag')}${label}</span>`);
+    marks.push(`<span class="dmark ${cls}">${DUE_FLAG ? ic('flag') : ''}${label}</span>`);
   }
-  marks.push(postMark(t.id));
   return marks.join('');
 }
 function efRow(t) {
   const q = primary(t), isOpen = st.sel === t.id, mins = taskMins(t), mobile = ui.device === 'mobile';
-  const showQuest = q && !st.view.startsWith('q:'), marks = dateMarks(t, st.view === 'plan');
+  const showQuest = q && !st.view.startsWith('q:'), marks = dateMarks(t, st.view === 'plan') + itemProgress(t);
   return `<div class="item ${isOpen ? 'open' : ''} ${t.done ? 'done' : ''} ${ef.cur === t.id ? 'kb' : ''}" data-tid="${t.id}">
     <div class="line" data-a="sel" data-id="${t.id}">${chk(t)}
       <span class="title">${esc(t.title)}${mobile && marks ? `<span class="msub">${marks}</span>` : ''}</span>
-      <span class="meta">${mobile ? '' : marks}${t.notes && !isOpen && !mobile ? ic('note') : ''}${showQuest ? `<span class="row" style="gap:5px"><span class="dot" style="--c:${q.color}"></span>${mobile ? '' : esc(q.title)}</span>` : ''}${mins && !(run && run.task === t.id) && !mobile ? `<span class="tnum">${fmtDur(mins)}</span>` : ''}</span>
+      <span class="meta">${mobile ? '' : marks}${showQuest ? `<span class="row" style="gap:5px"><span class="dot" style="--c:${q.color}"></span>${mobile ? '' : esc(q.title)}</span>` : ''}${ROW_TIME && mins && !(run && run.task === t.id) && !mobile ? `<span class="tnum">${fmtDur(mins)}</span>` : ''}</span>
       ${playBtn(t)}</div>
     ${isOpen ? `<div class="detail">
-      <div class="notes">${t.notes ? esc(t.notes) : '<span class="faint">Notes</span>'}</div>
+      ${noteBlock(t, 'detail')}${checklist(t, 'detail')}
       ${efFields(t.id)}
-      <div><div class="lbl2">Tracked · ${fmtDur(mins)}</div>${entryLines(t)}</div>
+      ${timeBlock(t)}
     </div>` : ''}</div>`;
 }
 function efList() {
@@ -113,19 +119,19 @@ function efList() {
   const items = efListOf(v);
   if (v === 'logbook') return items.map(efRow).join('');
   if (!items.length) return `<div class="empty">${v === 'inbox' ? 'Inbox zero' : 'Nothing here.'}</div>`;
-  const openItems = items.filter(t => !t.done), done = items.filter(t => t.done);
+  const openItems = items.filter(looksOpen), done = items.filter(t => !looksOpen(t));
   return openItems.map(efRow).join('') + (done.length ? `<div class="grp faint" style="font-weight:500">${done.length} done</div>${done.map(efRow).join('')}` : '');
 }
 
 /* ---------- Plan (next seven days) ---------- */
-const openTasks = () => T.filter(t => !t.done);
+const openTasks = () => liveT().filter(looksOpen);
 const plannedOn = off => openTasks().filter(t => has(t.plan) && (off === 0 ? t.plan <= 0 : t.plan === off));
 const dueOn = off => openTasks().filter(t => has(t.due) && (off === 0 ? t.due <= 0 : t.due === off));
 const unplanned = () => openTasks().filter(t => !has(t.plan));
 function planCard(t) {
   const q = primary(t), marks = dateMarks(t, true);
   const pop = ef.pop && ef.pop.target === t.id && ui.device !== 'mobile' ? efPopover(has(t.plan) && t.plan >= 4 ? 'right:0' : 'left:0') : '';
-  return `<div class="pcard ${ef.cur === t.id ? 'kb' : ''}" draggable="true" data-drag="${t.id}" data-tid="${t.id}">${esc(t.title)}<div class="m">${q ? `<span class="dot" style="--c:${q.color}"></span>` : '<span class="faint">Inbox</span>'}${marks}</div>${pop}</div>`;
+  return `<div class="pcard ${ef.cur === t.id ? 'kb' : ''} ${t.done ? 'done' : ''}" draggable="true" data-drag="${t.id}" data-tid="${t.id}">${esc(t.title)}<div class="m">${q ? `<span class="dot" style="--c:${q.color}"></span>` : '<span class="faint">Inbox</span>'}${marks}</div>${pop}</div>`;
 }
 const dueMark = (t, mobile) => {
   const q = primary(t), over = t.due < 0;
