@@ -1,0 +1,816 @@
+<!doctype html>
+<!-- Plan: Quest redesigns switchable via ?variant=A|B|C|D|E|F&device=desktop|mobile&theme=light|dark; A–D are the P22 references, E/F (ef*.css/js) merge A with C's tracked column, F is the chosen direction (soft focus + Organize, keyboard control). -->
+<!-- PROTOTYPE – throwaway. In-memory only, no persistence, no production code. Delete once a direction is chosen. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quest redesign – PROTOTYPE</title>
+<style>
+:root {
+  --acc: #e5b45a;
+  font: 14px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+[data-theme="light"] {
+  color-scheme: light;
+  /* Surfaces: card > bg > side > hover > sel. Text, muted and faint reach 4.5:1 on every surface (sel included);
+     line2 (control borders, icons) and acc-line (focus, active field) 3:1. line stays a faint decorative divider. */
+  --bg: #f7f6f3; --side: #efede8; --card: #ffffff; --line: #e3e0da; --line2: #807c75;
+  --text: #1a1a1a; --muted: #505050; --faint: #615f5a; --hover: #e9e6e0; --sel: #e2ddd4;
+  --acc-text: #7d5510; --acc-soft: #f6ead2; --acc-line: #a87318; --shadow: 0 1px 2px #0000000d, 0 6px 20px #00000012;
+  --page: #dcd8d0; --red: #a83e38;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* Steps: bg < side < card < hover. Text, muted, faint and red reach 4.5:1 on every surface (sel included); line2 (control borders) 3:1. */
+  --bg: #232326; --side: #2a2a2e; --card: #313136; --line: #3a3a40; --line2: #86868e;
+  --text: #ececec; --muted: #b4b4ba; --faint: #a7a7ae; --hover: #38383d; --sel: #3f3b33;
+  --acc-text: #e5b45a; --acc-soft: #45392a; --acc-line: #e5b45a; --red: #ee8f89; --shadow: 0 1px 2px #0005, 0 8px 24px #0006;
+  --page: #18181a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--page); color: var(--text); }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input { font: inherit; color: inherit; }
+svg.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tnum { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.grow { flex: 1; min-width: 0; }
+.row { display: flex; align-items: center; gap: 8px; }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; display: inline-block; }
+
+/* Frames */
+.desk { height: 100vh; min-width: 1100px; background: var(--bg); display: flex; overflow: hidden; }
+.stage { min-height: 100vh; display: grid; place-items: center; padding: 24px 0 90px; }
+.phone { width: 390px; height: 844px; border-radius: 54px; background: var(--bg); position: relative; overflow: hidden;
+  box-shadow: 0 0 0 11px #1b1b1b, 0 0 0 12px #3a3a3a, 0 30px 80px #0007; display: flex; flex-direction: column; transform-origin: top center; }
+.status { height: 50px; flex: none; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 30px 6px 36px; font-weight: 600; font-size: 15px; }
+.status .isl { position: absolute; left: 50%; top: 11px; width: 120px; height: 34px; margin-left: -60px; border-radius: 20px; background: #000; }
+.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.scroll { overflow-y: auto; min-height: 0; flex: 1; scrollbar-width: thin; }
+.homebar { position: absolute; bottom: 8px; left: 50%; width: 134px; margin-left: -67px; height: 5px; border-radius: 3px; background: var(--text); opacity: .85; z-index: 9; }
+
+/* Shared atoms */
+.chk { width: 20px; height: 20px; border-radius: 50%; border: 1.6px solid var(--line2); flex: none; display: grid; place-items: center; color: transparent; transition: .15s; }
+.chk:hover { border-color: var(--acc); }
+.chk svg { width: 12px; height: 12px; stroke-width: 3; }
+.chk.on { background: var(--acc); border-color: var(--acc); color: #1a1a1a; }
+.play { height: 26px; min-width: 26px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); flex: none; }
+.play svg { width: 14px; height: 14px; }
+.play:hover { background: var(--hover); color: var(--text); }
+.play.on { background: var(--acc); color: #1a1a1a; padding: 0 10px 0 8px; font-weight: 600; font-size: 12.5px; }
+.play.on svg { width: 12px; height: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--line); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.chip:hover { background: var(--hover); }
+.chip.on { border-color: var(--c, var(--acc)); color: var(--text); background: color-mix(in srgb, var(--c, var(--acc)) 14%, transparent); }
+.qadd { display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 12px; border-radius: 10px; color: var(--muted); }
+.qadd input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 14.5px; }
+.qadd input::placeholder { color: var(--faint); }
+.qadd kbd { font: 11px/1 inherit; color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 3px 5px; }
+.wsbtn { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; font-weight: 600; }
+.wsbtn:hover { background: var(--hover); }
+svg.logo { width: 24px; height: 24px; flex: none; }
+.menu { position: absolute; z-index: 30; min-width: 200px; padding: 6px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.menu button { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 6px; text-align: left; }
+.menu button:hover, .menu button.on { background: var(--hover); }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px 0; }
+.toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 100; box-shadow: var(--shadow); }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; position: relative; }
+.bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--c, var(--acc)); }
+.pulse { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+.empty { padding: 40px 20px; text-align: center; color: var(--faint); }
+
+/* Switcher pill (not part of the design) */
+.pill { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 1000; display: flex; align-items: center; gap: 4px;
+  padding: 5px; border-radius: 999px; background: #0b0b0b; color: #f3f3f3; box-shadow: 0 0 0 1px #ffffff26, 0 10px 30px #0008; font: 13px/1 Inter, system-ui, sans-serif; }
+.pill.raise { bottom: 88px; }
+.pill button { white-space: nowrap; height: 30px; padding: 0 11px; border-radius: 999px; color: #f3f3f3; }
+.pill button:hover { background: #ffffff1c; }
+.pill .lbl { min-width: 170px; text-align: center; font-weight: 600; }
+.pill .sep { width: 1px; height: 18px; background: #ffffff30; margin: 0 4px; }
+.pill .tag { color: #e5b45a; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; padding: 0 8px; }
+
+/* ===== A: Klare Listen ===== */
+.vA .side { width: 250px; flex: none; background: var(--side); display: flex; flex-direction: column; padding: 14px 10px 10px; position: relative; }
+.vA .nav { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 7px; width: 100%; text-align: left; }
+.vA .nav:hover { background: var(--hover); }
+.vA .nav.on { background: var(--sel); font-weight: 600; }
+.vA .nav .n { margin-left: auto; color: var(--faint); font-size: 12px; }
+.vA .nav svg.i { color: var(--muted); }
+.vA .nav.inbox svg.i { color: #5c8fd9; } .vA .nav.today svg.i { color: var(--acc); } .vA .nav.upcoming svg.i { color: #d9625c; }
+.vA h1.inbox svg.i { color: #5c8fd9; } .vA h1.today svg.i { color: var(--acc); } .vA h1.upcoming svg.i { color: #d9625c; } .vA h1.anytime svg.i { color: #4cb5a8; } .vA h1.logbook svg.i { color: #62b87a; }
+.vA .nav.anytime svg.i { color: #4cb5a8; } .vA .nav.logbook svg.i { color: #62b87a; }
+.vA .sec { margin: 18px 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.vA .timer { margin-top: auto; border-radius: 12px; padding: 12px; background: var(--card); border: 1px solid var(--line); }
+.vA .timer .t { font-size: 26px; font-weight: 600; letter-spacing: -.5px; }
+.vA .main { flex: 1; overflow-y: auto; }
+.vA .col { max-width: 720px; margin: 0 auto; padding: 56px 40px 120px; }
+.vA h1 { font-size: 28px; margin: 0; font-weight: 700; letter-spacing: -.4px; display: flex; align-items: center; gap: 12px; }
+.vA h1 svg.i { width: 26px; height: 26px; }
+.vA .sub { color: var(--muted); margin: 6px 0 22px 38px; }
+.vA .qadd { border: 1px dashed var(--line2); margin-bottom: 14px; }
+.vA .grp { margin: 22px 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+.vA .item { border-radius: 9px; transition: background .12s; }
+.vA .item.open { background: var(--card); box-shadow: var(--shadow); margin: 10px -12px; padding: 2px 12px 12px; }
+.vA .line { display: flex; align-items: center; gap: 12px; min-height: 38px; cursor: default; }
+.vA .item:not(.open) .line:hover { background: var(--hover); margin: 0 -10px; padding: 0 10px; border-radius: 8px; }
+.vA .line .title { flex: 1; min-width: 0; }
+.vA .item.done .title { color: var(--faint); text-decoration: line-through; }
+.vA .meta { display: flex; gap: 10px; align-items: center; color: var(--faint); font-size: 12.5px; }
+.vA .line .play:not(.on) { opacity: 0; }
+.vA .line:hover .play, .phone.vA .line .play { opacity: 1; }
+.vA .detail { padding: 4px 0 0 32px; display: grid; gap: 12px; }
+.vA .notes { color: var(--muted); font-size: 13.5px; }
+.vA .lbl2 { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+.vA .entry { display: flex; gap: 10px; font-size: 13px; color: var(--muted); padding: 2px 0; }
+.vA .week { border-radius: 12px; background: var(--card); border: 1px solid var(--line); padding: 16px 18px; margin-bottom: 10px; display: grid; gap: 10px; }
+.vA .fab { position: absolute; right: 22px; bottom: 96px; width: 56px; height: 56px; border-radius: 50%; background: var(--acc); color: #1a1a1a; display: grid; place-items: center; box-shadow: 0 6px 18px #0004; z-index: 5; }
+.vA .fab svg.i { width: 26px; height: 26px; stroke-width: 2.2; }
+.vA .mtimer { position: absolute; left: 14px; right: 90px; bottom: 100px; height: 48px; border-radius: 24px; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); display: flex; align-items: center; gap: 10px; padding: 0 6px 0 16px; z-index: 5; }
+.vA .compose { position: absolute; inset: auto 0 0 0; z-index: 8; background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px #0003; padding: 14px 16px 40px; }
+.phone.vA .col { padding: 6px 20px 170px; }
+.phone.vA h1 { font-size: 26px; }
+.phone.vA .sub { margin-bottom: 14px; }
+.phone.vA .mhome .nav { height: 46px; font-size: 16px; padding: 0 6px; }
+.phone.vA .mhome .nav svg.i { width: 22px; height: 22px; }
+
+/* ===== B: Mein Tag ===== */
+.vB .side { width: 270px; flex: none; background: var(--side); display: flex; flex-direction: column; padding: 14px 10px; position: relative; border-right: 1px solid var(--line); }
+.vB .prof { display: flex; align-items: center; gap: 10px; padding: 6px 8px 14px; }
+.vB .av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--acc); color: #1a1a1a; font-weight: 700; }
+.vB .search { display: flex; gap: 8px; align-items: center; height: 32px; padding: 0 10px; border-radius: 7px; background: var(--card); border: 1px solid var(--line); color: var(--faint); margin: 0 4px 12px; }
+.vB .nav { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 10px; border-radius: 7px; width: 100%; text-align: left; position: relative; }
+.vB .nav:hover { background: var(--hover); }
+.vB .nav.on { background: var(--sel); }
+.vB .nav.on::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 2px; background: var(--c, var(--acc)); }
+.vB .nav .n { margin-left: auto; color: var(--faint); font-size: 12px; }
+.vB .qicon { width: 18px; height: 18px; border-radius: 5px; background: var(--c); display: grid; place-items: center; }
+.vB .qicon svg { width: 12px; height: 12px; stroke: #fff; stroke-width: 2.4; fill: none; }
+.vB hr { border: 0; border-top: 1px solid var(--line); margin: 10px 8px; }
+.vB .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.vB .banner { flex: none; height: 168px; padding: 0 36px 22px; display: flex; flex-direction: column; justify-content: flex-end; color: #fff; position: relative; overflow: hidden;
+  background: radial-gradient(circle at 85% 20%, #ffffff40 0 60px, transparent 61px), radial-gradient(circle at 92% 110%, #ffffff26 0 120px, transparent 121px), linear-gradient(135deg, var(--c), color-mix(in srgb, var(--c) 55%, #1a1a1a)); }
+.vB .banner h1 { margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -.5px; text-shadow: 0 1px 6px #0003; }
+.vB .banner .s { opacity: .9; margin-top: 2px; }
+.vB .banner .wk { position: absolute; right: 36px; bottom: 22px; text-align: right; }
+.vB .banner .wk b { font-size: 22px; display: block; }
+.vB .list { flex: 1; overflow-y: auto; padding: 18px 36px 120px; display: flex; flex-direction: column; gap: 6px; }
+.vB .qadd { background: var(--card); border: 1px solid var(--line); height: 48px; margin-bottom: 8px; }
+.vB .qadd svg.i { color: var(--c, var(--acc-text)); }
+.vB .card { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 9px; background: var(--card); border: 1px solid var(--line); cursor: default; }
+.vB .card:hover { border-color: var(--line2); }
+.vB .card.sel { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.vB .card .t { display: block; }
+.vB .card.done .t { color: var(--faint); text-decoration: line-through; }
+.vB .card .m { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.vB .card .m svg.i { width: 13px; height: 13px; }
+.vB .grp { margin: 14px 0 4px; font-weight: 600; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.vB .detail { width: 340px; flex: none; border-left: 1px solid var(--line); background: var(--side); display: flex; flex-direction: column; }
+.vB .detail .body { flex: 1; overflow-y: auto; padding: 18px; display: grid; gap: 10px; align-content: start; }
+.vB .box { background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; }
+.vB .box.btn { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+.vB .box.btn.on { color: var(--acc-text); }
+.vB .clock { font-size: 34px; font-weight: 600; letter-spacing: -.5px; }
+.vB .big { height: 38px; border-radius: 8px; padding: 0 16px; background: var(--acc); color: #1a1a1a; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.vB .big.stop { background: var(--text); color: var(--bg); }
+.vB .foot { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; color: var(--faint); font-size: 12px; align-items: center; }
+.vB .wrow { display: grid; grid-template-columns: 1fr 110px; gap: 6px 16px; align-items: center; padding: 14px 16px; }
+.phone.vB .banner { height: 190px; padding: 0 20px 18px; }
+.phone.vB .banner .wk { right: 20px; bottom: 18px; }
+.phone.vB .list { padding: 14px 14px 120px; }
+.phone.vB .mhome { padding: 4px 14px 40px; }
+.phone.vB .mhome .nav { height: 48px; font-size: 16px; }
+.vB .sheet-bg { position: absolute; inset: 0; background: #0006; z-index: 10; }
+.vB .sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 80%; z-index: 11; background: var(--side); border-radius: 20px 20px 0 0; display: flex; flex-direction: column; }
+.vB .sheet .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line2); margin: 8px auto 2px; }
+.vB .maddbar { position: absolute; left: 12px; right: 12px; bottom: 30px; z-index: 5; }
+.vB .maddbar .qadd { box-shadow: var(--shadow); }
+
+/* ===== C: Zeit zuerst ===== */
+.vC.desk { display: grid; grid-template-columns: 230px 1fr 320px; grid-template-rows: 1fr 72px; }
+.vC .side { grid-row: 1 / 3; background: var(--side); border-right: 1px solid var(--line); padding: 14px 10px; display: flex; flex-direction: column; position: relative; }
+.vC .nav { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 7px; width: 100%; text-align: left; }
+.vC .nav:hover { background: var(--hover); }
+.vC .nav.on { background: var(--sel); font-weight: 600; }
+.vC .nav .n { margin-left: auto; color: var(--faint); font-size: 12px; }
+.vC .sec { margin: 18px 10px 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.vC .qnav { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; padding: 7px 10px; border-radius: 7px; width: 100%; text-align: left; }
+.vC .qnav:hover { background: var(--hover); } .vC .qnav.on { background: var(--sel); }
+.vC .qnav .bar { grid-column: 1 / 3; height: 4px; }
+.vC .main { overflow-y: auto; padding: 34px 36px 40px; min-width: 0; }
+.vC h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.4px; }
+.vC .qadd { border: 1px solid var(--line); background: var(--card); margin: 16px 0 6px; }
+.vC .grp { display: flex; align-items: center; gap: 8px; margin: 20px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.vC .grp .h { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.vC .line { display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 10px; border-radius: 8px; border-left: 3px solid transparent; }
+.vC .line:hover { background: var(--hover); }
+.vC .line.run { background: var(--acc-soft); border-left-color: var(--acc); }
+.vC .line.done .t { color: var(--faint); text-decoration: line-through; }
+.vC .line .mins { color: var(--muted); font-size: 12.5px; min-width: 48px; text-align: right; }
+.vC .line .qsel { font-size: 12px; color: var(--muted); }
+.vC .right { border-left: 1px solid var(--line); background: var(--side); overflow-y: auto; padding: 22px 20px 30px; }
+.vC h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+.vC .total { font-size: 30px; font-weight: 700; letter-spacing: -.5px; }
+.vC .tl { position: relative; margin: 14px 0 22px 38px; border-left: 1px solid var(--line2); }
+.vC .tl .hr { position: absolute; left: -38px; font-size: 10.5px; color: var(--faint); transform: translateY(-50%); }
+.vC .tl .hl { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line); }
+.vC .tl .blk { position: absolute; left: 6px; right: 0; border-radius: 6px; background: color-mix(in srgb, var(--c) 22%, var(--card)); border-left: 3px solid var(--c); padding: 3px 8px; font-size: 11.5px; overflow: hidden; line-height: 1.3; }
+.vC .tl .blk.run { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 30%, var(--card)) 0 6px, color-mix(in srgb, var(--c) 18%, var(--card)) 6px 12px); }
+.vC .tl .now { position: absolute; left: -4px; right: 0; border-top: 2px solid var(--acc); }
+.vC .tl .now::before { content: ""; position: absolute; left: -4px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--acc); }
+.vC .wq { display: grid; grid-template-columns: 1fr auto; gap: 5px 8px; margin-bottom: 12px; font-size: 13px; }
+.vC .wq .bar { grid-column: 1 / 3; }
+.vC .wq .bar b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: .5; }
+.vC .player { grid-column: 2 / 4; border-top: 1px solid var(--line); background: var(--card); display: flex; align-items: center; gap: 16px; padding: 0 22px; position: relative; }
+.vC .player::before { content: ""; position: absolute; left: 0; top: -1px; height: 2px; width: var(--p, 0%); background: var(--acc); }
+.vC .pbtn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--acc); color: #1a1a1a; flex: none; }
+.vC .pbtn svg.i { width: 18px; height: 18px; }
+.vC .pclock { font-size: 24px; font-weight: 600; letter-spacing: -.4px; }
+.phone.vC .main { padding: 6px 18px 150px; }
+.phone.vC .mplayer { position: absolute; left: 8px; right: 8px; bottom: 92px; height: 60px; border-radius: 14px; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); display: flex; align-items: center; gap: 12px; padding: 0 8px 0 14px; z-index: 6; overflow: hidden; }
+.phone.vC .mplayer .pbtn { width: 40px; height: 40px; }
+.phone.vC .tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 86px; padding-bottom: 26px; display: flex; border-top: 1px solid var(--line); background: var(--side); z-index: 5; }
+.phone.vC .tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; color: var(--faint); }
+.phone.vC .tabs button.on { color: var(--acc-text); }
+.phone.vC .tabs svg.i { width: 22px; height: 22px; }
+
+/* ===== D: Quests als Tags ===== */
+.vD .side { width: 240px; flex: none; background: var(--side); padding: 18px 10px 10px; display: flex; flex-direction: column; position: relative; border-right: 1px solid var(--line); }
+.vD .nav { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 7px; width: 100%; text-align: left; }
+.vD .nav:hover { background: var(--hover); }
+.vD .nav.on { background: var(--sel); font-weight: 600; }
+.vD .nav .n { margin-left: auto; color: var(--faint); font-size: 12px; }
+.vD .sec { margin: 20px 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); display: flex; }
+.vD .tagnav { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 7px; width: 100%; text-align: left; }
+.vD .tagnav:hover { background: var(--hover); }
+.vD .tagnav.on { background: color-mix(in srgb, var(--c) 16%, transparent); }
+.vD .tagnav .hash { color: var(--c); font-weight: 700; }
+.vD .tagnav .h { margin-left: auto; font-size: 12px; color: var(--muted); }
+.vD .main { flex: 1; overflow-y: auto; }
+.vD .col { max-width: 780px; margin: 0 auto; padding: 40px 40px 120px; }
+.vD .top { display: flex; align-items: center; gap: 12px; }
+.vD h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.4px; }
+.vD .runchip { margin-left: auto; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 6px 0 12px; border-radius: 17px; background: var(--acc-soft); color: var(--acc-text); font-weight: 600; font-size: 13px; }
+.vD .runchip .play.on { height: 24px; }
+.vD .strip { margin: 18px 0 6px; }
+.vD .stack { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); gap: 2px; }
+.vD .stack i { background: var(--c); }
+.vD .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.vD .qadd { border-bottom: 1px solid var(--line); border-radius: 0; padding: 0 2px; margin: 14px 0 6px; height: 46px; }
+.vD .tagtxt { color: var(--c); font-weight: 600; }
+.vD .line { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 10px; margin: 0 -10px; border-radius: 8px; }
+.vD .line:hover, .vD .line.sel { background: var(--hover); }
+.vD .line.done .t { color: var(--faint); text-decoration: line-through; }
+.vD .tg { font-size: 12.5px; font-weight: 600; color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); padding: 2px 7px; border-radius: 5px; white-space: nowrap; }
+.vD .addtag { font-size: 12px; color: var(--faint); padding: 2px 6px; border-radius: 5px; border: 1px dashed var(--line2); }
+.vD .tagpick { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 10px 32px; }
+.vD .mins { color: var(--muted); font-size: 12.5px; }
+.vD .note { font-size: 12px; color: var(--faint); margin-top: 6px; }
+.phone.vD .col { padding: 4px 18px 130px; }
+.phone.vD .seg { display: flex; margin: 10px 0; padding: 3px; border-radius: 9px; background: var(--hover); }
+.phone.vD .seg button { flex: 1; height: 30px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.phone.vD .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px #0002; }
+.phone.vD .chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 18px 8px; margin: 0 -18px; scrollbar-width: none; }
+.phone.vD .maddbar { position: absolute; left: 12px; right: 12px; bottom: 30px; z-index: 5; background: var(--card); border-radius: 14px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+.phone.vD .maddbar .qadd { border: 0; margin: 0; padding: 0 14px; }
+</style>
+<link rel="stylesheet" href="ef.css">
+</head>
+<body>
+<div id="app"></div>
+<div id="pill"></div>
+<script>
+/* ---------- In-memory demo data (close to crates/quest-app/src/demo.rs) ---------- */
+const LOAD = Date.now();
+const base = new Date(); base.setHours(14, 36, 0, 0);
+const now = () => base.getTime() + (Date.now() - LOAD);
+const at = (dayOffset, h, m = 0) => { const d = new Date(base); d.setDate(d.getDate() + dayOffset); d.setHours(h, m, 0, 0); return d.getTime(); };
+
+const Q = [
+  { id: 'launch', title: 'Launch my idea', tag: 'launch', color: '#d9625c', goal: 10 },
+  { id: 'write', title: 'Write every week', tag: 'writing', color: '#d98a4e', goal: 4 },
+  { id: 'run', title: 'Run a half marathon', tag: 'running', color: '#b3c94c', goal: 5 },
+  { id: 'learn', title: 'Keep learning', tag: 'learning', color: '#62b87a', goal: 3 },
+];
+const WEEK_GOAL_H = 20;
+let seq = 100;
+const T = [
+  { id: 't1', title: 'Design the next chapter', quests: ['launch'], day: 'today', notes: 'Three screens: onboarding, first list, first tracked hour.' },
+  { id: 't2', title: 'Make the first impression feel effortless', quests: ['launch'], day: 'today' },
+  { id: 't3', title: 'Draft this week’s essay', quests: ['write'], day: 'today', notes: 'Topic: why tracking beats planning.' },
+  { id: 't4', title: 'Easy 5 km. Leave the headphones at home.', quests: ['run'], day: 'today' },
+  { id: 't5', title: 'Read a chapter, take a few notes', quests: ['learn'], day: 'today', done: true },
+  { id: 't6', title: 'Map the ideas worth pursuing', quests: ['launch'], day: 'today', done: true },
+  { id: 't7', title: 'Polish the details that matter', quests: ['launch'], day: 'upcoming', when: 'Tomorrow' },
+  { id: 't8', title: 'Publish this week’s essay', quests: ['write'], day: 'upcoming', when: 'Tomorrow' },
+  { id: 't9', title: 'Long run · enjoy the route', quests: ['run'], day: 'upcoming', when: 'Saturday' },
+  { id: 't10', title: 'A slow morning with a good book', quests: ['learn'], day: 'upcoming', when: 'Saturday' },
+  { id: 't11', title: 'Sketch a pricing page', quests: ['launch'], day: null },
+  { id: 't12', title: 'Write the launch announcement', quests: ['launch', 'write'], day: null },
+  { id: 't13', title: 'Outline the launch plan', quests: ['launch'], day: null, done: true },
+  { id: 't14', title: 'Tempo run', quests: ['run'], day: null, done: true },
+  { id: 't15', title: 'Build the first prototype', quests: ['launch'], day: null, done: true },
+  { id: 't16', title: 'Hill repeats – stay consistent', quests: ['run', 'learn'], day: null, done: true },
+  { id: 't17', title: 'Pick up the dry cleaning', quests: [], day: null },
+  { id: 't18', title: 'Call the landlord', quests: [], day: null },
+  { id: 't19', title: 'Newsletter about the launch?', quests: [], day: null },
+  { id: 't20', title: 'Try the new running shoes', quests: [], day: null },
+  { id: 't21', title: 'Look into “Deep Work” (Anna’s tip)', quests: [], day: null },
+];
+const E = [
+  { task: 't13', start: at(-3, 9), mins: 150 }, { task: 't14', start: at(-3, 18), mins: 60 },
+  { task: 't3', start: at(-2, 10), mins: 72 }, { task: 't12', start: at(-2, 14), mins: 45 },
+  { task: 't15', start: at(-1, 9), mins: 150 }, { task: 't18', start: at(-1, 13), mins: 20 }, { task: 't16', start: at(-1, 17, 30), mins: 75 },
+  { task: 't6', start: at(0, 9), mins: 90 }, { task: 't2', start: at(0, 11), mins: 60 }, { task: 't5', start: at(0, 13), mins: 30 },
+  { task: 'org', start: at(-1, 8, 40), mins: 20 }, { task: 'org', start: at(0, 10, 35), mins: 20 },
+];
+// Built-in time bucket without a quest (E/F): time spent sorting the lists instead of doing a task.
+const ORG = { id: 'org', title: 'Organizing', quests: [], builtin: true };
+let run = { task: 't1', start: now() - 36 * 60e3 - 12e3 };
+let lastRun = 't1';
+let workspace = 'Personal';
+const WORKSPACES = ['Personal', 'Studio'];
+
+/* ---------- UI state ---------- */
+const VARIANTS = [['A', 'Klare Listen'], ['B', 'Mein Tag'], ['C', 'Zeit zuerst'], ['D', 'Quests als Tags'], ['E', 'Fokus streng'], ['F', 'Fokus weich']];
+const params = new URLSearchParams(location.search);
+const ui = {
+  v: Math.max(0, VARIANTS.findIndex(([k]) => k === (params.get('variant') || 'A').toUpperCase())),
+  device: params.get('device') === 'mobile' ? 'mobile' : 'desktop',
+  theme: params.get('theme') === 'dark' ? 'dark' : 'light',
+};
+const st = { view: 'today', sel: null, screen: 'home', menu: null, compose: false, tag: null, tab: 'today', showDone: false };
+for (const k of ['view', 'sel', 'screen', 'tab', 'tag']) if (params.get(k)) st[k] = params.get(k);
+const resetNav = () => Object.assign(st, { view: 'today', sel: null, screen: 'home', menu: null, compose: false, tag: null, tab: 'today', showDone: false });
+
+/* ---------- Derived data ---------- */
+const quest = id => Q.find(q => q.id === id);
+const task = id => id === ORG.id ? ORG : T.find(t => t.id === id);
+const primary = t => quest(t.quests[0]);
+const isInbox = t => !t.done && !t.quests.length && !t.day;
+const runMins = () => run ? (now() - run.start) / 60e3 : 0;
+const taskMins = t => E.filter(e => e.task === t.id).reduce((s, e) => s + e.mins, 0) + (run && run.task === t.id ? runMins() : 0);
+const questMins = qid => T.filter(t => t.quests.includes(qid)).reduce((s, t) => s + taskMins(t), 0);
+const weekMins = () => E.reduce((s, e) => s + e.mins, 0) + runMins();
+const questWeekMins = () => T.filter(t => t.quests.length).reduce((s, t) => s + taskMins(t), 0);
+const isToday = ms => new Date(ms).toDateString() === base.toDateString();
+const todayMins = () => E.filter(e => isToday(e.start)).reduce((s, e) => s + e.mins, 0) + runMins();
+const open = list => list.filter(t => !t.done);
+const lists = {
+  inbox: () => T.filter(isInbox),
+  today: () => T.filter(t => t.day === 'today'),
+  upcoming: () => T.filter(t => !t.done && t.day === 'upcoming'),
+  anytime: () => T.filter(t => !t.done && !t.day && t.quests.length),
+  later: () => T.filter(t => !t.done && t.day !== 'today' && !isInbox(t)),
+  logbook: () => T.filter(t => t.done),
+};
+const listOf = view => view.startsWith('q:') ? T.filter(t => t.quests.includes(view.slice(2))) : lists[view]();
+
+/* ---------- Formatting ---------- */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const fmtH = m => (m / 60).toFixed(1) + 'h';
+const fmtDur = m => { m = Math.round(m); if (m < 60) return m + 'm'; return Math.floor(m / 60) + 'h' + (m % 60 ? ' ' + (m % 60) + 'm' : ''); };
+const fmtClock = ms => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ':' + pad(m) : m) + ':' + pad(s % 60); };
+const hm = ms => { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const dayLabel = ms => isToday(ms) ? 'Today' : new Date(ms).toLocaleDateString('en-GB', { weekday: 'short' });
+const dateLabel = base.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+/* ---------- Icons ---------- */
+const P = {
+  inbox: '<path d="M4 13h4l2 3h4l2-3h4"/><path d="M6 5h12l2 8v6H4v-6z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M2.5 12h2M19.5 12h2M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  cal: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  layers: '<path d="M12 4l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/>',
+  book: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 11.5l2 2 4-4"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/>',
+  stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  chev: '<path d="M7 10l5 5 5-5"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  hash: '<path d="M5 9h15M4 15h15M10 4L8 20M16 4l-2 16"/>',
+  chart: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  note: '<path d="M6 4h9l4 4v12H6z"/><path d="M9 12h7M9 16h5"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" stroke-width="2.6"/>',
+  flag: '<path d="M5 21V4h11l-2 4 2 4H5"/>',
+  more: '<path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3"/>',
+};
+const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${P[n]}</svg>`;
+const logo = (withBg = true) => `<svg class="logo" viewBox="100 100 824 824">${withBg ? '<rect x="100" y="100" width="824" height="824" rx="185" fill="#151515"/>' : ''}<path d="M719.5 505.6 A230 230 0 1 1 670 376.8" fill="none" stroke="#e5b45a" stroke-width="60"/><path d="M420 540 L515 635 L770 360" fill="none" stroke="#e5b45a" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ring = (frac, color, size = 18, w = 2.4) => {
+  const r = size / 2 - w, c = 2 * Math.PI * r, f = Math.min(frac, 1);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex:none"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--line2)" stroke-width="${w}"/><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-dasharray="${c * f} ${c}" transform="rotate(-90 ${size / 2} ${size / 2})"/></svg>`;
+};
+const bar = (frac, color, goalMark) => `<div class="bar" style="--c:${color}"><i style="width:${Math.min(frac, 1) * 100}%"></i>${goalMark ? `<b style="left:${goalMark * 100}%"></b>` : ''}</div>`;
+const chk = t => `<button class="chk ${t.done ? 'on' : ''}" data-a="toggle" data-id="${t.id}" aria-label="Complete">${ic('check')}</button>`;
+const playBtn = t => run && run.task === t.id
+  ? `<button class="play on" data-a="play" data-id="${t.id}" title="Stop timer">${ic('stop')}<span class="tnum" data-elapsed></span></button>`
+  : t.done ? '' : `<button class="play" data-a="play" data-id="${t.id}" title="Start timer">${ic('play')}</button>`;
+const entriesOf = t => E.filter(e => e.task === t.id).sort((a, b) => b.start - a.start);
+const entryLines = (t, cls = 'entry') => {
+  const rows = entriesOf(t).map(e => `<div class="${cls}"><span style="width:44px">${dayLabel(e.start)}</span><span class="tnum">${hm(e.start)}–${hm(e.start + e.mins * 60e3)}</span><span class="grow"></span><span class="tnum">${fmtDur(e.mins)}</span></div>`);
+  if (run && run.task === t.id) rows.unshift(`<div class="${cls}" style="color:var(--acc-text)"><span style="width:44px">Now</span><span class="tnum">${hm(run.start)}–…</span><span class="grow"></span><span class="tnum" data-elapsed></span></div>`);
+  return rows.join('') || `<div class="${cls} faint">No time tracked yet</div>`;
+};
+const questPicker = (t, multi = false) => `<div class="row" style="flex-wrap:wrap;gap:6px">${Q.map(q =>
+  `<button class="chip ${t.quests.includes(q.id) ? 'on' : ''}" style="--c:${q.color}" data-a="assign" data-id="${t.id}" data-q="${q.id}"><span class="dot"></span>${multi ? '#' + q.tag : esc(q.title)}</button>`).join('')}
+  ${multi ? '' : `<button class="chip ${t.quests.length ? '' : 'on'}" data-a="assign" data-id="${t.id}" data-q="">No quest</button>`}</div>`;
+const wsMenu = (style) => st.menu !== 'ws' ? '' : `<div class="menu" style="${style}">${WORKSPACES.map(w => `<button class="${w === workspace ? 'on' : ''}" data-a="ws" data-w="${w}">${ic('layers')}${w}${w === workspace ? `<span class="grow"></span>${ic('check')}` : ''}</button>`).join('')}<hr><button data-a="noop">Manage workspaces…</button></div>`;
+const wsBtn = (label = workspace) => `<button class="wsbtn" data-a="menu" data-m="ws">${logo()}<span>${label}</span>${ic('chev', 'faint')}</button>`;
+const quickAdd = (ctx, placeholder, extra = '') => `<label class="qadd">${ic('plus')}<input id="qa-${ctx}" data-add="${ctx}" placeholder="${placeholder}" autocomplete="off">${extra}</label>`;
+
+/* ---------- Variant A: Klare Listen ---------- */
+const A_NAV = [['inbox', 'Inbox', 'inbox'], ['today', 'Today', 'sun'], ['upcoming', 'Upcoming', 'cal'], ['anytime', 'Anytime', 'layers'], ['logbook', 'Logbook', 'book']];
+function aNav() {
+  return A_NAV.map(([v, label, i]) => {
+    const n = v === 'logbook' ? '' : open(listOf(v)).length || '';
+    return `<button class="nav ${v} ${st.view === v ? 'on' : ''}" data-a="nav" data-v="${v}">${ic(i)}<span>${label}</span><span class="n">${n}</span></button>`;
+  }).join('');
+}
+function aQuestNav() {
+  return Q.map(q => `<button class="nav ${st.view === 'q:' + q.id ? 'on' : ''}" data-a="nav" data-v="q:${q.id}">${ring(questMins(q.id) / 60 / q.goal, q.color)}<span class="grow ell">${esc(q.title)}</span><span class="n tnum">${fmtH(questMins(q.id))}</span></button>`).join('');
+}
+function aRow(t) {
+  const q = primary(t), isOpen = st.sel === t.id, mins = taskMins(t);
+  const showQuest = q && !st.view.startsWith('q:');
+  return `<div class="item ${isOpen ? 'open' : ''} ${t.done ? 'done' : ''}">
+    <div class="line" data-a="sel" data-id="${t.id}">${chk(t)}
+      <span class="title">${esc(t.title)}</span>
+      <span class="meta">${t.notes && !isOpen ? ic('note') : ''}${showQuest ? `<span class="row" style="gap:5px"><span class="dot" style="--c:${q.color}"></span>${ui.device === 'mobile' ? '' : esc(q.title)}</span>` : ''}${t.when && st.view !== 'upcoming' ? `<span>${t.when}</span>` : ''}${mins && !(run && run.task === t.id) ? `<span class="tnum">${fmtDur(mins)}</span>` : ''}</span>
+      ${playBtn(t)}</div>
+    ${isOpen ? `<div class="detail">
+      <div class="notes">${t.notes ? esc(t.notes) : '<span class="faint">Notes</span>'}</div>
+      <div><div class="lbl2">Quest</div>${questPicker(t)}</div>
+      <div><div class="lbl2">Tracked · ${fmtDur(mins)}</div>${entryLines(t)}</div>
+      <div class="row"><button class="chip ${t.day === 'today' ? 'on' : ''}" data-a="today" data-id="${t.id}">${ic('sun')} Today</button></div>
+    </div>` : ''}</div>`;
+}
+function aWeek() {
+  const total = weekMins(), qm = questWeekMins();
+  return `<div class="week"><div><b>This week</b><div class="tnum"><b>${fmtH(qm)}</b> <span class="muted">of ${WEEK_GOAL_H}h moved your quests · ${fmtH(total)} tracked in total</span></div></div>
+    ${bar(qm / 60 / WEEK_GOAL_H, 'var(--acc)')}
+    ${Q.map(q => `<div class="row" style="font-size:13px">${ring(questMins(q.id) / 60 / q.goal, q.color, 16)}<span class="grow">${esc(q.title)}</span><span class="tnum muted">${fmtH(questMins(q.id))} / ${q.goal}h</span></div>`).join('')}</div>`;
+}
+function aList() {
+  const v = st.view, items = listOf(v);
+  if (v === 'upcoming') {
+    const groups = [...new Set(items.map(t => t.when))];
+    return groups.map(g => `<div class="grp">${g}</div>${items.filter(t => t.when === g).map(aRow).join('')}`).join('');
+  }
+  if (v === 'logbook') return aWeek() + `<div class="grp">Completed</div>` + items.map(aRow).join('');
+  const openItems = items.filter(t => !t.done), done = items.filter(t => t.done);
+  if (!items.length) return `<div class="empty">${v === 'inbox' ? 'Inbox zero. Throw anything in here.' : 'Nothing here.'}</div>`;
+  return openItems.map(aRow).join('') + (done.length ? `<div class="grp faint" style="font-weight:500">${done.length} done</div>${done.map(aRow).join('')}` : '');
+}
+function aHead() {
+  const v = st.view;
+  if (v.startsWith('q:')) {
+    const q = quest(v.slice(2)), m = questMins(q.id);
+    return `<h1>${ring(m / 60 / q.goal, q.color, 28, 3.5)}${esc(q.title)}</h1><div class="sub">${fmtH(m)} of ${q.goal}h this week · ${open(listOf(v)).length} open</div>`;
+  }
+  const [, label, i] = A_NAV.find(([k]) => k === v);
+  const sub = { inbox: 'Everything you throw in lands here. Give it a quest or a day later.', today: `${dateLabel} · ${fmtH(todayMins())} tracked today`, upcoming: 'By day. A date, not a time slot.', anytime: 'Quest work without a day.', logbook: 'What you did, and the time behind it.' }[v];
+  return `<h1 class="${v}">${ic(i)}${label}</h1><div class="sub">${sub}</div>`;
+}
+function aTimer() {
+  if (!run) return `<div class="timer"><div class="muted" style="font-size:12.5px">No timer running</div><button class="row" style="margin-top:6px;color:var(--acc-text);font-weight:600" data-a="play" data-id="${lastRun}">${ic('play')} Resume “${esc(task(lastRun).title)}”</button></div>`;
+  const t = task(run.task), q = primary(t);
+  return `<div class="timer"><div class="row" style="font-size:12px;color:var(--muted)">${q ? `<span class="dot pulse" style="--c:${q.color}"></span>${esc(q.title)}` : 'Tracking'}</div>
+    <div class="ell" style="font-weight:600;margin:2px 0 4px">${esc(t.title)}</div>
+    <div class="row"><span class="t tnum" data-elapsed></span><span class="grow"></span><button class="play on" data-a="play" data-id="${t.id}">${ic('stop')}Stop</button></div></div>`;
+}
+function A_desk() {
+  return `<aside class="side">
+    <div style="position:relative;margin-bottom:12px">${wsBtn()}${wsMenu('top:40px;left:0')}</div>
+    ${aNav()}<div class="sec">Quests</div>${aQuestNav()}
+    <div style="height:14px"></div>${aTimer()}
+  </aside>
+  <main class="main" data-scroll="a-main"><div class="col">${aHead()}
+    ${['logbook', 'upcoming'].includes(st.view) ? '' : quickAdd(st.view, st.view === 'inbox' ? 'Throw a to-do in…' : 'New to-do…', '<kbd>↵</kbd>')}
+    ${aList()}</div></main>`;
+}
+function A_mobile() {
+  const fab = `<button class="fab" data-a="compose">${ic('plus')}</button>`;
+  const mt = run ? (() => { const t = task(run.task), q = primary(t); return `<div class="mtimer"><span class="dot pulse" style="--c:${q ? q.color : 'var(--acc)'}"></span><span class="grow ell" style="font-weight:600;font-size:13.5px">${esc(t.title)}</span><button class="play on" data-a="play" data-id="${t.id}">${ic('stop')}<span class="tnum" data-elapsed></span></button></div>`; })() : '';
+  const compose = st.compose ? `<div class="compose"><div class="lbl2" style="font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--faint);text-transform:uppercase;margin-bottom:6px">New to-do → ${st.screen === 'list' && st.view !== 'logbook' ? esc(viewTitle(st.view)) : 'Inbox'}</div>${quickAdd(st.screen === 'list' ? st.view : 'inbox', 'What’s on your mind?')}</div>` : '';
+  if (st.screen === 'home') return `<div class="scroll mhome" data-scroll="a-home"><div class="col">
+      <div class="row" style="justify-content:space-between;margin:4px -8px 14px;position:relative">${wsBtn()}${wsMenu('top:40px;left:0')}<span class="muted">${ic('search')}</span></div>
+      ${aNav()}<div class="sec" style="margin-left:6px">Quests</div>${aQuestNav()}
+      <div style="height:18px"></div>${aWeek()}</div></div>${mt}${fab}${compose}<div class="homebar"></div>`;
+  return `<div class="scroll" data-scroll="a-list"><div class="col">
+      <button class="row" style="color:var(--acc-text);margin:4px 0 14px -4px;font-size:15px" data-a="back">${ic('back')} Lists</button>
+      ${aHead()}${aList()}</div></div>${mt}${fab}${compose}<div class="homebar"></div>`;
+}
+const viewTitle = v => v.startsWith('q:') ? quest(v.slice(2)).title : ({ inbox: 'Inbox', today: 'Today', myday: 'My Day', upcoming: 'Upcoming', anytime: 'Anytime', logbook: 'Logbook', later: 'Later', week: 'Week' }[v] || v);
+
+/* ---------- Variant B: Mein Tag ---------- */
+const bColor = v => v.startsWith('q:') ? quest(v.slice(2)).color : v === 'inbox' ? '#7d8796' : v === 'week' ? '#5c8fd9' : '#e5b45a';
+function bSide() {
+  const item = (v, label, icon, n, c) => `<button class="nav ${st.view === v ? 'on' : ''}" style="--c:${c}" data-a="nav" data-v="${v}">${icon}<span class="grow ell">${label}</span><span class="n">${n || ''}</span></button>`;
+  return `${item('today', 'My Day', `<span style="color:var(--acc-text)">${ic('sun')}</span>`, open(lists.today()).length, '#e5b45a')}
+    ${item('inbox', 'Inbox', `<span style="color:#7d8796">${ic('inbox')}</span>`, lists.inbox().length, '#7d8796')}
+    ${item('week', 'Week in review', `<span style="color:#5c8fd9">${ic('chart')}</span>`, fmtH(questWeekMins()), '#5c8fd9')}
+    <hr>${Q.map(q => item('q:' + q.id, esc(q.title), `<span class="qicon" style="--c:${q.color}"><svg viewBox="0 0 24 24">${P.list}</svg></span>`, open(listOf('q:' + q.id)).length, q.color)).join('')}
+    <button class="nav faint" data-a="noop">${ic('plus')}<span>New quest</span></button>`;
+}
+function bCard(t) {
+  const q = primary(t), mins = taskMins(t), running = run && run.task === t.id;
+  const meta = [t.day === 'today' && st.view !== 'today' ? `<span class="row" style="gap:3px">${ic('sun')}My Day</span>` : '',
+    q && !st.view.startsWith('q:') ? `<span class="row" style="gap:5px"><span class="dot" style="--c:${q.color}"></span>${esc(q.title)}</span>` : '',
+    t.when ? t.when : '', mins && !running ? `<span class="row tnum" style="gap:3px">${ic('clock')}${fmtDur(mins)}</span>` : '', t.notes ? ic('note') : ''].filter(Boolean);
+  return `<div class="card ${st.sel === t.id ? 'sel' : ''} ${t.done ? 'done' : ''}" data-a="sel" data-id="${t.id}">${chk(t)}
+    <div class="grow"><span class="t">${esc(t.title)}</span>${meta.length ? `<div class="m">${meta.join('<span class="faint">·</span>')}</div>` : ''}</div>${playBtn(t)}</div>`;
+}
+function bBanner() {
+  const v = st.view, c = bColor(v);
+  if (v === 'week') return `<div class="banner" style="--c:${c}"><h1>Week in review</h1><div class="s">Time that moved your quests</div></div>`;
+  const items = listOf(v), title = v === 'today' ? 'My Day' : viewTitle(v);
+  const sub = v === 'today' ? dateLabel : v === 'inbox' ? 'Unsorted. Pick a quest when you have a minute.' : `${open(items).length} open · ${items.filter(t => t.done).length} done`;
+  const wk = v === 'today' ? `<b class="tnum" data-today></b>tracked today` : v.startsWith('q:') ? `<b class="tnum">${fmtH(questMins(v.slice(2)))}</b>of ${quest(v.slice(2)).goal}h this week` : '';
+  return `<div class="banner" style="--c:${c}"><h1>${esc(title)}</h1><div class="s">${sub}</div>${wk ? `<div class="wk">${wk}</div>` : ''}</div>`;
+}
+function bWeek() {
+  const qm = questWeekMins();
+  return `<div class="box" style="padding:0">
+    <div class="wrow" style="border-bottom:1px solid var(--line)"><div><div style="font-size:26px;font-weight:700" class="tnum">${fmtH(qm)}</div><div class="muted">for your quests · ${fmtH(weekMins() - qm)} other · goal ${WEEK_GOAL_H}h</div></div>${ring(qm / 60 / WEEK_GOAL_H, 'var(--acc)', 54, 6)}</div>
+    ${Q.map(q => `<div class="wrow"><div><div class="row"><span class="dot" style="--c:${q.color}"></span>${esc(q.title)}</div><div style="margin-top:8px">${bar(questMins(q.id) / 60 / q.goal, q.color)}</div></div><div class="tnum" style="text-align:right"><b>${fmtH(questMins(q.id))}</b> <span class="muted">/ ${q.goal}h</span></div></div>`).join('')}</div>`;
+}
+function bList() {
+  const v = st.view;
+  if (v === 'week') return bWeek();
+  const items = listOf(v), openItems = items.filter(t => !t.done), done = items.filter(t => t.done);
+  const add = ui.device === 'mobile' ? '' : quickAdd(v, v === 'today' ? 'Add a task to My Day' : 'Add a task');
+  const suggest = v === 'today' && ui.device === 'desktop' ? `<div class="grp" style="margin-top:22px">${ic('sun')} Suggestions from your quests</div>${T.filter(t => !t.done && t.day !== 'today' && t.quests.length).slice(0, 3).map(t => `<div class="card" style="opacity:.85">${ic('plus', 'faint')}<div class="grow"><span class="t">${esc(t.title)}</span><div class="m"><span class="dot" style="--c:${primary(t).color}"></span>${esc(primary(t).title)}</div></div><button class="chip" data-a="today" data-id="${t.id}">Add to My Day</button></div>`).join('')}` : '';
+  return add + (openItems.length ? openItems.map(bCard).join('') : `<div class="empty">${v === 'inbox' ? 'Inbox is empty.' : 'Nothing open.'}</div>`) +
+    (done.length ? `<button class="grp" data-a="showDone">${ic(st.showDone ? 'chev' : 'back')} Completed ${done.length}</button>${st.showDone ? done.map(bCard).join('') : ''}` : '') + suggest;
+}
+function bDetail(t) {
+  const running = run && run.task === t.id;
+  return `<div class="body">
+    <div class="box"><div class="row" style="align-items:flex-start;gap:12px">${chk(t)}<div style="font-size:17px;font-weight:600;line-height:1.3">${esc(t.title)}</div></div></div>
+    <button class="box btn ${t.day === 'today' ? 'on' : ''}" data-a="today" data-id="${t.id}">${ic('sun')}${t.day === 'today' ? 'Added to My Day' : 'Add to My Day'}</button>
+    <div class="box"><div class="muted" style="font-size:12px;margin-bottom:8px">Quest (list)</div>${questPicker(t)}</div>
+    <div class="box"><div class="row"><div class="grow"><div class="muted" style="font-size:12px">${running ? 'Tracking now' : 'Tracked'}</div><div class="clock tnum" ${running ? 'data-elapsed' : ''}>${running ? '' : fmtDur(taskMins(t))}</div></div>
+      ${t.done ? '' : running ? `<button class="big stop" data-a="play" data-id="${t.id}">${ic('stop')}Stop</button>` : `<button class="big" data-a="play" data-id="${t.id}">${ic('play')}Start</button>`}</div>
+      <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px;display:grid;gap:4px;font-size:12.5px">${entryLines(t, 'row muted')}</div></div>
+    <div class="box" style="min-height:90px">${t.notes ? esc(t.notes) : '<span class="faint">Add note</span>'}</div></div>`;
+}
+function B_desk() {
+  const t = st.sel && task(st.sel);
+  return `<aside class="side"><div class="prof" style="position:relative"><div class="av">D</div><button class="grow" style="text-align:left" data-a="menu" data-m="ws"><div style="font-weight:600">${workspace} ${ic('chev', 'faint')}</div><div class="faint" style="font-size:12px">Workspace</div></button>${wsMenu('top:52px;left:8px')}</div>
+    <div class="search">${ic('search')}Search</div>${bSide()}
+    <div style="margin-top:auto" class="row faint">${logo()}<span style="font-size:12px">${run ? `<span data-elapsed class="tnum" style="color:var(--acc-text);font-weight:600"></span> on ${esc(task(run.task).title)}` : 'No timer running'}</span></div></aside>
+  <main class="main">${bBanner()}<div class="list" data-scroll="b-list" style="--c:${bColor(st.view)}">${bList()}</div></main>
+  ${t ? `<aside class="detail">${bDetail(t)}<div class="foot"><span class="grow">Created this week</span><button data-a="sel" data-id="${t.id}">${ic('x')}</button></div></aside>` : ''}`;
+}
+function B_mobile() {
+  const t = st.sel && task(st.sel);
+  const sheet = t ? `<div class="sheet-bg" data-a="sel" data-id="${t.id}"></div><div class="sheet"><div class="grab"></div>${bDetail(t)}<div style="height:24px"></div></div>` : '';
+  if (st.screen === 'home') return `<div class="scroll mhome" data-scroll="b-home">
+      <div class="prof" style="position:relative;padding:4px 4px 16px"><div class="av">D</div><button class="grow" style="text-align:left" data-a="menu" data-m="ws"><div style="font-weight:600;font-size:17px">${workspace} ${ic('chev', 'faint')}</div></button>${ic('search', 'muted')}${wsMenu('top:46px;left:40px')}</div>
+      ${bSide()}${run ? `<div class="box" style="margin-top:20px;display:flex;align-items:center;gap:10px"><span class="dot pulse" style="--c:${(primary(task(run.task)) || { color: 'var(--acc)' }).color}"></span><span class="grow ell">${esc(task(run.task).title)}</span><button class="play on" data-a="play" data-id="${run.task}">${ic('stop')}<span class="tnum" data-elapsed></span></button></div>` : ''}
+    </div><div class="homebar"></div>`;
+  return `<div class="banner" style="--c:${bColor(st.view)};height:190px"><button class="row" style="position:absolute;top:12px;left:12px;color:#fff" data-a="back">${ic('back')} Lists</button>${bBanner().replace(/^<div class="banner"[^>]*>|<\/div>$/g, '')}</div>
+    <div class="list" data-scroll="b-mlist">${bList()}</div>
+    ${st.view === 'week' ? '' : `<div class="maddbar">${quickAdd(st.view, st.view === 'today' ? 'Add to My Day' : 'Add a task')}</div>`}${sheet}<div class="homebar"></div>`;
+}
+
+/* ---------- Variant C: Zeit zuerst ---------- */
+function cSide() {
+  const item = (v, label, i, n) => `<button class="nav ${st.view === v ? 'on' : ''}" data-a="nav" data-v="${v}">${ic(i)}<span>${label}</span><span class="n">${n || ''}</span></button>`;
+  return `${item('today', 'Today', 'sun', open(lists.today()).length)}${item('inbox', 'Inbox', 'inbox', lists.inbox().length)}${item('later', 'Later', 'cal', lists.later().length)}
+    <div class="sec">Quests · this week</div>
+    ${Q.map(q => `<button class="qnav ${st.view === 'q:' + q.id ? 'on' : ''}" data-a="nav" data-v="q:${q.id}"><span class="row ell" style="gap:7px"><span class="dot" style="--c:${q.color}"></span>${esc(q.title)}</span><span class="tnum muted" style="font-size:12px">${fmtH(questMins(q.id))}</span>${bar(questMins(q.id) / 60 / q.goal, q.color)}</button>`).join('')}`;
+}
+function cLine(t) {
+  const mins = taskMins(t), running = run && run.task === t.id, q = primary(t);
+  return `<div class="line ${running ? 'run' : ''} ${t.done ? 'done' : ''}">${chk(t)}<span class="t grow ell">${esc(t.title)}</span>
+    ${st.view === 'inbox' ? `<span class="qsel row" style="gap:4px">${Q.map(q2 => `<button class="dot" title="Move to ${esc(q2.title)}" style="--c:${q2.color};width:14px;height:14px" data-a="assign" data-id="${t.id}" data-q="${q2.id}"></button>`).join('')}</span>` : ''}
+    ${t.when ? `<span class="muted" style="font-size:12px">${t.when}</span>` : ''}
+    <span class="mins tnum" ${running ? 'data-taskmins' : ''}>${mins ? fmtDur(mins) : ''}</span>${t.done ? '<span style="width:26px"></span>' : running ? `<button class="play" data-a="play" data-id="${t.id}" style="color:var(--acc-text)">${ic('stop')}</button>` : playBtn(t)}</div>`;
+}
+function cList() {
+  const v = st.view, items = listOf(v);
+  if (v === 'inbox') return `<div class="muted" style="font-size:12.5px;margin:6px 0">Click a colour to give the task a quest.</div>` + (items.map(cLine).join('') || '<div class="empty">Inbox zero.</div>');
+  if (v.startsWith('q:')) return items.map(cLine).join('');
+  const groups = [...Q.map(q => [q, items.filter(t => t.quests[0] === q.id)]), [null, items.filter(t => !t.quests.length)]].filter(([, l]) => l.length);
+  return groups.map(([q, l]) => `<div class="grp">${q ? `<span class="dot" style="--c:${q.color}"></span>${esc(q.title)}<span class="h tnum">${fmtH(questMins(q.id))} / ${q.goal}h</span>` : 'No quest'}</div>${l.sort((a, b) => !!a.done - !!b.done).map(cLine).join('')}`).join('');
+}
+function cTimeline(hFrom = 8, hTo = 18, px = 40) {
+  const y = ms => ((ms - at(0, hFrom)) / 3600e3) * px;
+  const blocks = E.filter(e => isToday(e.start)).map(e => ({ ...e, end: e.start + e.mins * 60e3 }));
+  if (run) blocks.push({ task: run.task, start: run.start, end: now(), run: true });
+  let h = '';
+  for (let k = hFrom; k <= hTo; k++) h += `<span class="hr" style="top:${(k - hFrom) * px}px">${pad(k)}:00</span><span class="hl" style="top:${(k - hFrom) * px}px"></span>`;
+  h += blocks.map(b => { const t = task(b.task), q = primary(t); const height = Math.max(18, y(b.end) - y(b.start)); return `<div class="blk ${b.run ? 'run' : ''}" style="--c:${q ? q.color : '#888'};top:${y(b.start)}px;height:${height}px" ${b.run ? 'data-runblk' : ''}><b>${esc(t.title)}</b>${height > 34 ? `<div class="muted">${hm(b.start)}–${b.run ? 'now' : hm(b.end)}</div>` : ''}</div>`; }).join('');
+  h += `<div class="now" style="top:${y(now())}px"></div>`;
+  return `<div class="tl" style="height:${(hTo - hFrom) * px}px">${h}</div>`;
+}
+function cWeek() {
+  return `<div class="row" style="align-items:baseline"><h2 class="grow">This week</h2><span class="tnum muted">${fmtH(questWeekMins())} / ${WEEK_GOAL_H}h</span></div>
+    <div style="margin:8px 0 16px">${bar(questWeekMins() / 60 / WEEK_GOAL_H, 'var(--acc)')}</div>
+    ${Q.map(q => `<div class="wq"><span class="row" style="gap:7px"><span class="dot" style="--c:${q.color}"></span>${esc(q.title)}</span><span class="tnum muted">${fmtH(questMins(q.id))} / ${q.goal}h</span>${bar(questMins(q.id) / 60 / q.goal, q.color)}</div>`).join('')}
+    <div class="muted" style="font-size:12px">${fmtH(weekMins() - questWeekMins())} tracked on tasks without a quest.</div>`;
+}
+function cPlayer(mobile) {
+  if (!run) { const t = task(lastRun), q = primary(t) || { color: 'var(--faint)', title: 'No quest' };
+    return `<button class="pbtn" data-a="play" data-id="${t.id}" title="Resume">${ic('play')}</button><div class="grow ell"><div class="muted" style="font-size:12px">Nothing tracking · resume</div><div class="ell" style="font-weight:600">${esc(t.title)}</div></div>${mobile ? '' : `<span class="muted row" style="gap:6px"><span class="dot" style="--c:${q.color}"></span>${esc(q.title)}</span><span class="pclock tnum faint">0:00</span>`}`; }
+  const t = task(run.task), q = primary(t);
+  return `<button class="pbtn" data-a="play" data-id="${t.id}" title="Stop">${ic('stop')}</button><div class="grow ell"><div class="row" style="font-size:12px;color:var(--muted);gap:6px"><span class="dot pulse" style="--c:${q ? q.color : 'var(--acc)'}"></span>${q ? esc(q.title) : 'No quest'}</div><div class="ell" style="font-weight:600">${esc(t.title)}</div></div>
+    ${mobile ? '' : `<span class="muted" style="font-size:12.5px">today on this task <b class="tnum" style="color:var(--text)" data-taskmins>${fmtDur(taskMins(t))}</b></span>`}<span class="pclock tnum" data-elapsed></span>`;
+}
+function C_desk() {
+  const head = st.view === 'today' ? `<h1>Today</h1><div class="muted">${dateLabel}</div>` : `<h1>${esc(viewTitle(st.view))}</h1><div class="muted">${st.view.startsWith('q:') ? fmtH(questMins(st.view.slice(2))) + ' this week' : st.view === 'inbox' ? 'Captured, not yet sorted' : 'Not today'}</div>`;
+  return `<aside class="side"><div style="position:relative;margin-bottom:12px">${wsBtn()}${wsMenu('top:40px;left:0')}</div>${cSide()}</aside>
+    <main class="main" data-scroll="c-main">${head}${quickAdd(st.view, 'Capture a task…', '<kbd>⌘N</kbd>')}${cList()}</main>
+    <aside class="right" data-scroll="c-right"><h2>Tracked today</h2><div class="total tnum" data-today></div><div class="muted" style="font-size:12.5px">Logged, not planned. Only what really happened.</div>${cTimeline()}${cWeek()}</aside>
+    <div class="player" style="--p:${Math.min(100, (todayMins() / 60 / 4) * 100)}%">${cPlayer(false)}</div>`;
+}
+function C_mobile() {
+  const tabs = [['today', 'Today', 'sun'], ['inbox', 'Inbox', 'inbox'], ['quests', 'Quests', 'flag'], ['tracked', 'Tracked', 'clock']];
+  let body;
+  if (st.tab === 'tracked') body = `<h1>Tracked</h1><div class="total tnum" data-today style="font-size:30px;font-weight:700"></div><div class="muted" style="font-size:12.5px">today · logged, not planned</div>${cTimeline(8, 16, 36)}${cWeek()}`;
+  else if (st.tab === 'quests' && !st.view.startsWith('q:')) body = `<h1>Quests</h1><div style="height:10px"></div>${Q.map(q => `<button class="qnav" style="padding:12px 4px" data-a="nav" data-v="q:${q.id}"><span class="row" style="gap:8px;font-size:15px"><span class="dot" style="--c:${q.color}"></span>${esc(q.title)}</span><span class="tnum muted">${fmtH(questMins(q.id))} / ${q.goal}h</span>${bar(questMins(q.id) / 60 / q.goal, q.color)}</button>`).join('')}`;
+  else body = `${st.view.startsWith('q:') ? `<button class="row" style="color:var(--acc-text);margin-bottom:8px" data-a="mtab" data-t="quests">${ic('back')} Quests</button>` : ''}<h1>${esc(viewTitle(st.view))}</h1>${quickAdd(st.view, 'Capture a task…')}${cList()}`;
+  return `<div class="row" style="padding:0 14px 4px;position:relative">${wsBtn()}${wsMenu('top:40px;left:14px')}</div>
+    <div class="main scroll" data-scroll="c-m-${st.tab}">${body}</div>
+    <div class="mplayer">${cPlayer(true)}</div>
+    <nav class="tabs">${tabs.map(([k, l, i]) => `<button class="${st.tab === k ? 'on' : ''}" data-a="mtab" data-t="${k}">${ic(i)}${l}</button>`).join('')}</nav><div class="homebar"></div>`;
+}
+
+/* ---------- Variant D: Quests als Tags ---------- */
+const D_NAV = [['inbox', 'Inbox', 'inbox'], ['today', 'Today', 'sun'], ['later', 'Later', 'cal'], ['logbook', 'Done', 'book']];
+const tagOf = t => q => `<span class="tg" style="--c:${q.color}">#${q.tag}</span>`;
+function dItems() {
+  const items = listOf(st.view);
+  return st.tag ? items.filter(t => t.quests.includes(st.tag)) : items;
+}
+function dLine(t) {
+  const sel = st.sel === t.id, mins = taskMins(t), running = run && run.task === t.id;
+  const tags = t.quests.map(id => tagOf(t)(quest(id))).join('');
+  const body = ui.device === 'mobile'
+    ? `<div class="grow"><span class="t">${esc(t.title)}</span>${tags ? `<div class="row" style="gap:5px;margin-top:3px">${tags}</div>` : ''}</div>`
+    : `<span class="t grow">${esc(t.title)}</span>${tags}<button class="addtag" data-a="sel" data-id="${t.id}">#</button>`;
+  return `<div class="line ${t.done ? 'done' : ''} ${sel ? 'sel' : ''}" data-a="sel" data-id="${t.id}">${chk(t)}${body}
+      ${t.when ? `<span class="mins">${t.when}</span>` : ''}${mins && !running ? `<span class="mins tnum">${fmtDur(mins)}</span>` : ''}${playBtn(t)}</div>
+    ${sel ? `<div class="tagpick">${questPicker(t, true)}${t.day === 'today' ? '' : `<button class="chip" data-a="today" data-id="${t.id}">${ic('sun')} Today</button>`}</div>` : ''}`;
+}
+function dStrip() {
+  const per = Q.map(q => [q, questMins(q.id)]), tagSum = per.reduce((s, [, m]) => s + m, 0), real = questWeekMins();
+  return `<div class="strip"><div class="stack">${per.map(([q, m]) => `<i style="--c:${q.color};flex:${m}"></i>`).join('')}<i style="--c:transparent;flex:${Math.max(0, WEEK_GOAL_H * 60 - real)}"></i></div>
+    <div class="legend"><b style="color:var(--text)" class="tnum">${fmtH(real)} / ${WEEK_GOAL_H}h this week</b>${per.map(([q, m]) => `<span><span class="tagtxt" style="--c:${q.color}">#${q.tag}</span> <span class="tnum">${fmtH(m)}</span></span>`).join('')}</div>
+    ${tagSum - real > 1 ? `<div class="note">Tags add up to ${fmtH(tagSum)}: a task with two tags counts for both.</div>` : ''}</div>`;
+}
+function dRunChip() {
+  if (!run) return '';
+  const t = task(run.task);
+  return `<div class="runchip">${ui.device === 'mobile' ? '' : `<span class="ell" style="max-width:220px">${esc(t.title)}</span>`}<button class="play on" data-a="play" data-id="${t.id}">${ic('stop')}<span class="tnum" data-elapsed></span></button></div>`;
+}
+function dList() {
+  const items = dItems(), o = items.filter(t => !t.done), d = items.filter(t => t.done);
+  return (o.map(dLine).join('') || (st.view !== 'logbook' ? `<div class="empty">Nothing here${st.tag ? ' with #' + quest(st.tag).tag : ''}.</div>` : '')) + (st.view !== 'logbook' && d.length ? `<div class="mins" style="margin:14px 0 4px">Done</div>${d.map(dLine).join('')}` : st.view === 'logbook' ? d.map(dLine).join('') : '');
+}
+const dHint = '<span class="faint" style="font-size:12px">#tag adds a quest</span>';
+function D_desk() {
+  return `<aside class="side">${D_NAV.map(([v, l, i]) => `<button class="nav ${st.view === v ? 'on' : ''}" data-a="nav" data-v="${v}">${ic(i)}<span>${l}</span><span class="n">${v === 'logbook' ? '' : listOf(v).filter(t => !t.done).length}</span></button>`).join('')}
+    <div class="sec"><span class="grow">Tags</span><span>this week</span></div>
+    ${Q.map(q => `<button class="tagnav ${st.tag === q.id ? 'on' : ''}" style="--c:${q.color}" data-a="tag" data-q="${q.id}"><span class="hash">#</span>${q.tag}<span class="h tnum">${fmtH(questMins(q.id))}</span></button>`).join('')}
+    <div class="faint" style="font-size:12px;padding:6px 10px">Click to filter. A tag carries a colour and a weekly goal.</div>
+    <div style="margin-top:auto;position:relative">${wsMenu('bottom:44px;left:0')}${wsBtn()}</div></aside>
+  <main class="main" data-scroll="d-main"><div class="col">
+    <div class="top"><h1>${viewTitle(st.view)}</h1>${st.tag ? `<button class="chip on" style="--c:${quest(st.tag).color}" data-a="tag" data-q="${st.tag}">#${quest(st.tag).tag} ${ic('x')}</button>` : ''}${dRunChip()}</div>
+    ${dStrip()}${st.view === 'logbook' ? '' : quickAdd(st.view, st.view === 'inbox' ? 'New task… (no tag stays in Inbox)' : 'New task… e.g. “Shoe shopping #running”', dHint)}${dList()}</div></main>`;
+}
+function D_mobile() {
+  return `<div class="row" style="padding:0 14px;position:relative">${wsBtn()}${wsMenu('top:40px;left:14px')}<span class="grow"></span>${dRunChip()}</div>
+    <div class="scroll main" data-scroll="d-m"><div class="col">
+      <div class="seg">${D_NAV.map(([v, l]) => `<button class="${st.view === v ? 'on' : ''}" data-a="nav" data-v="${v}">${l}</button>`).join('')}</div>
+      <div class="chips">${Q.map(q => `<button class="chip ${st.tag === q.id ? 'on' : ''}" style="--c:${q.color}" data-a="tag" data-q="${q.id}"><b style="color:${q.color}">#</b>${q.tag}<span class="tnum faint">${fmtH(questMins(q.id))}</span></button>`).join('')}</div>
+      ${dStrip()}${dList()}</div></div>
+    ${st.view === 'logbook' ? '' : `<div class="maddbar">${quickAdd(st.view, st.view === 'today' ? 'Add to Today… #tag' : 'New task… #tag')}</div>`}<div class="homebar"></div>`;
+}
+
+/* ---------- Actions ---------- */
+let toastMsg = '', toastTimer;
+function toast(msg) { toastMsg = msg; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg = ''; render(); }, 2200); }
+function stopTimer() {
+  if (!run) return;
+  const mins = Math.max(1, Math.round(runMins()));
+  E.push({ task: run.task, start: run.start, mins, ...run.meta });
+  toast(`Logged ${fmtDur(mins)} on “${task(run.task).title}”`);
+  lastRun = (run.meta && run.meta.from) || run.task; run = null;
+}
+function addTask(ctx, raw) {
+  let title = raw.trim(), quests = [], day = null, when;
+  if (VARIANTS[ui.v][0] === 'D') {
+    title = title.replace(/#(\w+)/g, (_, tag) => { const q = Q.find(x => x.tag.startsWith(tag.toLowerCase())); if (q && !quests.includes(q.id)) quests.push(q.id); return ''; }).replace(/\s+/g, ' ').trim();
+  }
+  if (!title) return;
+  if (ctx.startsWith('q:')) quests = [ctx.slice(2)];
+  if (ctx === 'today') day = 'today';
+  if (ctx === 'upcoming') { day = 'upcoming'; when = 'Tomorrow'; }
+  if (st.tag && !quests.includes(st.tag)) quests.push(st.tag);
+  T.unshift({ id: 't' + (++seq), title, quests, day, when });
+  if (!quests.length && !day) toast('Added to Inbox');
+}
+const actions = {
+  nav: d => { st.view = d.v; st.sel = null; st.screen = 'list'; st.menu = null; st.compose = false; if (ui.device === 'mobile' && VARIANTS[ui.v][0] === 'C') st.tab = d.v.startsWith('q:') ? 'quests' : d.v; },
+  back: () => { st.screen = 'home'; st.sel = null; st.compose = false; },
+  sel: d => { st.sel = st.sel === d.id ? null : d.id; },
+  toggle: d => { const t = task(d.id); t.done = !t.done; if (t.done && run && run.task === t.id) stopTimer(); },
+  play: d => { const same = run && run.task === d.id; stopTimer(); if (!same) { run = { task: d.id, start: now() }; lastRun = d.id; toastMsg = ''; } },
+  assign: d => { const t = task(d.id); if (VARIANTS[ui.v][0] === 'D') { t.quests = t.quests.includes(d.q) ? t.quests.filter(x => x !== d.q) : [...t.quests, d.q]; } else { t.quests = d.q ? [d.q] : []; if (d.q) toast(`Moved to ${quest(d.q).title}`); } },
+  today: d => { const t = task(d.id); if (t.day === 'today') { t.day = null; t.when = undefined; } else { t.day = 'today'; t.when = undefined; } },
+  menu: d => { st.menu = st.menu === d.m ? null : d.m; },
+  ws: d => { workspace = d.w; st.menu = null; toast(`Switched to ${d.w} (prototype: same data)`); },
+  compose: () => { st.compose = !st.compose; },
+  showDone: () => { st.showDone = !st.showDone; },
+  tag: d => { st.tag = st.tag === d.q ? null : d.q; },
+  mtab: d => { st.tab = d.t; st.sel = null; if (['today', 'inbox'].includes(d.t)) st.view = d.t; if (d.t === 'quests') st.view = 'quests'; },
+  noop: () => toast('Not part of the prototype'),
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-a]');
+  if (!el) { if (st.menu && !e.target.closest('.menu')) { st.menu = null; render(); } return; }
+  e.stopPropagation();
+  if (el.dataset.a !== 'menu' && !el.closest('.menu')) st.menu = null;
+  actions[el.dataset.a](el.dataset);
+  render();
+});
+document.addEventListener('keydown', e => {
+  const input = e.target.closest && e.target.closest('input, textarea, [contenteditable]');
+  if (input && e.key === 'Enter' && input.dataset.add) { addTask(input.dataset.add, input.value); input.value = ''; render(); return; }
+  if (input) { if (e.key === 'Escape') input.blur(); return; }
+  if (e.key === 'ArrowLeft') cycle(-1);
+  if (e.key === 'ArrowRight') cycle(1);
+  if (e.key === 'Escape') { st.sel = null; st.menu = null; st.compose = false; render(); }
+});
+
+/* ---------- Rendering ---------- */
+const VIEWS = { A: [A_desk, A_mobile], B: [B_desk, B_mobile], C: [C_desk, C_mobile], D: [D_desk, D_mobile] };
+function render() {
+  document.documentElement.dataset.theme = ui.theme;
+  const scrolls = {}; document.querySelectorAll('[data-scroll]').forEach(el => { scrolls[el.dataset.scroll] = el.scrollTop; });
+  const focused = document.activeElement && document.activeElement.id;
+  const key = VARIANTS[ui.v][0], [desk, mobile, cls = 'v' + key] = VIEWS[key];
+  const app = document.getElementById('app');
+  app.innerHTML = (ui.device === 'mobile'
+    ? `<div class="stage"><div class="phone ${cls}"><div class="status"><span>9:41</span><span class="isl"></span><span style="font-size:12px">●●● ▮</span></div><div class="screen">${mobile()}</div></div></div>`
+    : `<div class="desk ${cls}">${desk()}</div>`) + (toastMsg ? `<div class="toast">${esc(toastMsg)}</div>` : '');
+  document.querySelectorAll('[data-scroll]').forEach(el => { el.scrollTop = scrolls[el.dataset.scroll] || 0; });
+  if (focused) { const el = document.getElementById(focused); if (el) el.focus(); }
+  fitPhone(); renderPill(); tick();
+}
+function fitPhone() {
+  const phone = document.querySelector('.phone'); if (!phone) return;
+  const s = Math.min(1, (innerHeight - 110) / 844);
+  phone.style.transform = `scale(${s})`; phone.style.marginBottom = `${(s - 1) * 844}px`;
+}
+function tick() {
+  const el = run ? fmtClock(now() - run.start) : '';
+  document.querySelectorAll('[data-elapsed]').forEach(n => { n.textContent = el; });
+  document.querySelectorAll('[data-today]').forEach(n => { n.textContent = fmtH(todayMins()); });
+  document.querySelectorAll('[data-taskmins]').forEach(n => { n.textContent = run ? fmtDur(taskMins(task(run.task))) : ''; });
+}
+setInterval(tick, 1000);
+addEventListener('resize', fitPhone);
+
+/* ---------- Switcher pill ---------- */
+function syncUrl() {
+  const p = new URLSearchParams({ variant: VARIANTS[ui.v][0], device: ui.device, theme: ui.theme });
+  history.replaceState(null, '', '?' + p);
+}
+function cycle(dir) { ui.v = (ui.v + dir + VARIANTS.length) % VARIANTS.length; resetNav(); syncUrl(); render(); }
+function renderPill() {
+  const [k, name] = VARIANTS[ui.v];
+  document.getElementById('pill').innerHTML = `<div class="pill ${k === 'C' && ui.device === 'desktop' ? 'raise' : ''}"><span class="tag">Prototype</span>
+    <button data-p="prev" aria-label="Previous variant">←</button><span class="lbl">${k} (${name})</span><button data-p="next" aria-label="Next variant">→</button>
+    <span class="sep"></span><button data-p="device">${ui.device === 'mobile' ? 'Mobile' : 'Desktop'}</button>
+    <button data-p="theme">${ui.theme === 'dark' ? 'Dark' : 'Light'}</button>${k === 'F' ? '<span class="sep"></span><button data-p="skip" title="Debug: pretend 2 more minutes passed outside focus">+2 min</button>' : ''}</div>`;
+}
+document.getElementById('pill').addEventListener('click', e => {
+  const b = e.target.closest('[data-p]'); if (!b) return;
+  e.stopPropagation();
+  if (b.dataset.p === 'prev') return cycle(-1);
+  if (b.dataset.p === 'next') return cycle(1);
+  if (b.dataset.p === 'device') { ui.device = ui.device === 'mobile' ? 'desktop' : 'mobile'; resetNav(); }
+  if (b.dataset.p === 'theme') ui.theme = ui.theme === 'dark' ? 'light' : 'dark';
+  syncUrl(); render();
+});
+</script>
+<script src="ef.js"></script>
+<script src="ef-lists.js"></script>
+<script src="ef-fields.js"></script>
+<script src="ef-keys.js"></script>
+<script src="ef-global.js"></script>
+<script>syncUrl(); render();</script>
+</body>
+</html>
