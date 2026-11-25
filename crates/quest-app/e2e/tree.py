@@ -64,6 +64,14 @@ def main():
         sys.exit(0 if any(title in (e.get("text") or "") for e in tree["elements"]) else 1)
     if question == "key":
         sys.exit(0 if any(e.get("key") == title for e in tree["elements"]) else 1)
+    if question == "below":
+        rects = {e.get("key"): e.get("rect") for e in tree["elements"]}
+        item, viewport = rects.get(title), rects.get(sys.argv[4])
+        sys.exit(0 if item and viewport and item[1] >= viewport[1] + viewport[3] else 1)
+    if question == "below":
+        rects = {e.get("key"): e.get("rect") for e in tree["elements"]}
+        item, viewport = rects.get(title), rects.get(sys.argv[4])
+        sys.exit(0 if item and viewport and item[1] >= viewport[1] + viewport[3] else 1)
     if question == "checked":
         node = find_key(tree["accessibility"], title)
         sys.exit(0 if node and "checked" in node.get("states", []) else 1)

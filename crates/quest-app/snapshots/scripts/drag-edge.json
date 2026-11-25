@@ -1,0 +1,5 @@
+[
+  {"t":0.2,"type":"down","key":"row-title-__TASK_ID__"},
+  {"t":0.4,"type":"move","x":545,"y":885},
+  {"t":0.62,"type":"mark","name":"end"}
+]

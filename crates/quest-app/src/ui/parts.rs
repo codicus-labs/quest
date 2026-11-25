@@ -106,7 +106,7 @@ pub fn field(
         .on_submit(submit)
 }
 
-pub(super) fn timer_button(key: String, id: EntityId, running: bool, p: &Pal) -> El {
+pub(super) fn timer_button(key: String, id: EntityId, running: bool, tray_alias: bool, p: &Pal) -> El {
     let (glyph, size, label, ink) = if running {
         (&icons::STOP, 18.0, "Stop timer", theme::on_accent_fill())
     } else {
@@ -124,7 +124,10 @@ pub(super) fn timer_button(key: String, id: EntityId, running: bool, p: &Pal) ->
         .center()
         .cursor(Cursor::Pointer)
         .child(icon(glyph, size).color(ink))
-        .on_press(move |s: &mut State| s.toggle_focus(id))
+        .on_press_tx(move |s: &mut State, tx| {
+            super::task_modal::close_other(s, id, tray_alias, tx);
+            s.toggle_focus(id);
+        })
 }
 
 /// A thin horizontal progress bar; `fraction` is clamped to 0..=1.

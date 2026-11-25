@@ -94,13 +94,14 @@ pub fn view(s: &State, p: &Pal) -> El {
         _ => (header(&icons::LOGBOOK, p.icon_logbook, "Logbook", None, p), None, "Nothing done yet"),
     };
     let shows = Shows { quest: true, plan_ahead: s.view != View::Today };
-    page("list-page", header, add, rows(s, shows, empty, p))
+    page(s, "list-page", header, add, rows(s, shows, empty, p))
 }
 
 /// The centred column: header, quick-add, then `body`, scrolling together.
-pub fn page(key: &str, header: El, add: Option<El>, body: El) -> El {
+pub fn page(s: &State, key: &str, header: El, add: Option<El>, body: El) -> El {
     let column = col().w_full().max_w(720.0).px(40.0).pt(4.0).pb(80.0).child(header).children(add).child(body);
-    col().key(key.to_owned()).w_full().h_full().child(drag::zone(
+    col().key(key.to_owned()).w_full().h_full().child(drag::viewport(
+        s,
         col()
             .key(format!("{key}-scroll"))
             .w_full()
@@ -110,7 +111,6 @@ pub fn page(key: &str, header: El, add: Option<El>, body: El) -> El {
             .grow(1.0)
             .min_h(0.0)
             .scroll_edge_fade(12.0),
-        Zone::Viewport,
     ))
 }
 

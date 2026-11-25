@@ -113,7 +113,7 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
         workspaces::menu_layer(s, p, &mut layer);
     }
     drag::layer(s, p, &mut layer);
-    rune_kit::root(base, layer)
+    rune_kit::root(base, layer).on_background_press_tx(task_modal::close)
 }
 
 /// Sidebar, the main column (its top band, the view, a notice), and the tracked column when on.

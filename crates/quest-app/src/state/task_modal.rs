@@ -7,13 +7,19 @@ use crate::undo::Deletable;
 
 pub struct TaskModal {
     pub task: EntityId,
+    pub tray_alias: bool,
     pub title: TextEdit,
     pub description: TextEdit,
 }
 
 impl TaskModal {
     pub fn scratch() -> TaskModal {
-        TaskModal { task: EntityId::new(), title: TextEdit::default(), description: TextEdit::default() }
+        TaskModal {
+            task: EntityId::new(),
+            tray_alias: false,
+            title: TextEdit::default(),
+            description: TextEdit::default(),
+        }
     }
 }
 
@@ -23,9 +29,11 @@ impl State {
         let Some(t) = self.plan_task(task) else { return };
         self.task_modal = Some(TaskModal {
             task,
+            tray_alias: false,
             title: TextEdit::new(t.title.clone()),
             description: TextEdit::new(t.description.clone()),
         });
+        self.show_task_time = false;
         self.menu = None;
         self.selected_task = Some(task);
         if self.snap.task(task).is_some() {

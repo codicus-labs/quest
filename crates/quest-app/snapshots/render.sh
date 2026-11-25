@@ -62,6 +62,9 @@ for theme in dark light; do
   "$app" $common --data-dir "$data/plan" --scene "$plan" --script "$here/scripts/plan-not-planned.json" \
     --snap "$here/plan-not-planned$suffix.png" --at mark:end >/dev/null
   drag_snapshot "$plan" "plan-head-2026-10-18" "plan-drag$suffix"
+  sed "s/__TASK_ID__/$task_id/" "$here/scripts/drag-edge.json" >"$data/edge.json"
+  "$app" $common --data-dir "$data/plan" --scene "$plan" --script "$data/edge.json" \
+    --snap "$here/plan-drag-edge$suffix.png" --at mark:end >/dev/null
   drag_snapshot "$today" "row-play-$anchor_id" "today-sort-drag$suffix"
   drag_snapshot "$today" "nav-quest-$quest_id" "sidebar-drop$suffix"
 done

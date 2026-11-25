@@ -1,7 +1,7 @@
 use quest_domain::EntityId;
 use rune::{Key, Mods, Runtime};
 
-use super::dnd_tests::{scroll_into_view, settle, task};
+use super::dnd_tests::{rect, scroll_into_view, settle, task};
 use super::shortcut_tests::hover;
 use super::tests::{TempDir, click, command, demo_app, press, type_text};
 use crate::state::{Overlay, State};
@@ -41,14 +41,23 @@ fn edit_at_end(rt: &mut Runtime<State>, field: fn(&mut State) -> &mut rune::Text
     rt.frame(0.0);
 }
 
-/// Opens `title`'s dialog by clicking its card, edits title and description, closes it (× or
-/// Esc), and checks the card, the store, a second opening and the planner's place.
 fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bool) {
     let (mut rt, _dir) = app(view);
     let id = task(&rt, title).id;
     let done = task(&rt, title).is_done();
+    rt.update(move |s, _| s.selected_task = Some(id));
+    settle(&mut rt);
 
+    let title_key = format!("row-title-{id}");
+    let check_key = format!("row-check-{id}");
+    scroll_into_view(&mut rt, &title_key);
+    let before = rect(&rt, &title_key);
+    let check = rect(&rt, &check_key);
     click_card(&mut rt, prefix, id);
+    settle(&mut rt);
+    let after = rect(&rt, "task-modal-title");
+    assert_eq!(&before[..2], &after[..2], "the title becomes the input in place");
+    assert_eq!(rect(&rt, &check_key), check);
     assert_eq!(modal_task(&rt), Some(id), "a click on the card opens its dialog");
     assert_eq!(rt.state.overlay, Overlay::None);
     assert!(rt.find("task-modal-scrim").is_none());
@@ -60,18 +69,20 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
     type_text(&mut rt, " Notes.");
     let renamed = format!("{title} v2");
     assert_eq!(rt.state.snap.task(id).unwrap().title, renamed, "the title saves as it changes");
-    assert_eq!(text_of(&rt, &format!("row-title-{id}")), Some(renamed.clone()), "the card shows it at once");
+    assert!(rt.find(&title_key).is_none(), "the expanded row has only one title");
 
     if close_with_esc {
         press(&mut rt, Key::Escape, Mods::default());
     } else {
-        click(&mut rt, "task-modal-close");
+        click(&mut rt, "task-modal-title");
+        press(&mut rt, Key::Enter, Mods::default());
     }
     settle(&mut rt);
     assert_eq!(rt.state.overlay, Overlay::None);
     assert!(rt.find("task-modal").is_none(), "the dialog closed");
     let saved = rt.state.snap.task(id).unwrap().clone();
     assert_eq!(saved.title, renamed);
+    assert_eq!(text_of(&rt, &title_key), Some(renamed.clone()));
     assert!(saved.description.ends_with(" Notes."), "{:?}", saved.description);
     assert!(!saved.title.contains('\n') && saved.is_done() == done, "done stays done, open stays open");
 
@@ -111,7 +122,10 @@ fn a_click_opens_and_closes_a_row_but_the_check_doesnt() {
     let id = task(&rt, OPEN).id;
     click(&mut rt, &format!("row-title-{id}"));
     assert_eq!((rt.state.selected_task, modal_task(&rt)), (Some(id), Some(id)));
-    click(&mut rt, &format!("row-title-{id}"));
+    let [x, y, _, h] = rect(&rt, &format!("row-{id}"));
+    rt.pointer_down(x + 4.0, y + h / 2.0);
+    rt.pointer_up(x + 4.0, y + h / 2.0);
+    rt.frame(0.0);
     assert!(modal_task(&rt).is_none());
     settle(&mut rt);
     click(&mut rt, &format!("row-check-{id}"));
@@ -126,6 +140,24 @@ fn a_click_opens_and_closes_a_row_but_the_check_doesnt() {
     assert_eq!(modal_task(&rt), Some(id), "↵ over the row");
     press(&mut rt, Key::Escape, Mods::default());
     settle(&mut rt);
+    assert!(modal_task(&rt).is_none());
+}
+
+#[test]
+fn blank_space_dismisses_the_detail_but_its_timer_and_check_still_work() {
+    let (mut rt, _dir) = app('2');
+    let id = task(&rt, OPEN).id;
+    click_card(&mut rt, "row", id);
+    click(&mut rt, &format!("row-play-{id}"));
+    assert_eq!(rt.state.snap.running_entry().unwrap().task_id, Some(id));
+    click(&mut rt, &format!("row-play-{id}"));
+    assert!(rt.state.snap.running_entry().is_none());
+    click(&mut rt, &format!("row-check-{id}"));
+    assert!(rt.state.snap.task(id).unwrap().is_done());
+    assert_eq!(modal_task(&rt), Some(id));
+    rt.pointer_down(600.0, 820.0);
+    rt.pointer_up(600.0, 820.0);
+    rt.frame(0.0);
     assert!(modal_task(&rt).is_none());
 }
 

@@ -403,7 +403,7 @@ fn main() {
     let spec = AppSpec {
         scenes: SCENES,
         min_size: Some((1000.0, 640.0)),
-        poll: Some(|s: &mut State, _, tx| s.refresh(tx)),
+        poll: Some(State::refresh),
         on_key: Some(keys::on_key),
         ..AppSpec::new("Quest", (1440.0, 900.0), || unreachable!("state comes from App::init"), ui::view)
     };

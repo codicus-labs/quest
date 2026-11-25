@@ -54,7 +54,7 @@ await_url() {
 # A script template with this run's server (and task id) filled in.
 script() {
   sed -e "s|__SERVER__|$server|" -e "s/__TASK_ID__/${task_id:-}/" -e "s/__WORKSPACE__/${workspace_id:-}/" \
-    -e "s/__DAY__/${day:-}/" -e "s/__QUEST_ID__/${quest_id:-}/" \
+    -e "s/__DAY__/${day:-}/" -e "s/__QUEST_ID__/${quest_id:-}/" -e "s/__RENAMED__/${renamed:-}/" \
     "$here/$1.json" >"$work/$1.json"
   echo "$work/$1.json"
 }
@@ -133,6 +133,17 @@ if [ -n "$task_id" ] && [ -n "$quest_id" ]; then
   check r2c-replanned "r2c Plan drag changes the plan date" under "$moving" "$day"
   run anna "$root/r2c" r2c-file r2c-filed --now "$r2c_time" --scene plan
   check r2c-filed "r2c sidebar drag assigns the quest" rowtext "$moving" "$quest"
+
+  task_id=$(tree "$out/r2c-seed.json" id "$anchor" 2>/dev/null)
+  renamed="R2d title edited in place"
+  run anna "$root/r2c" r2d-title r2d-title --now "$r2c_time" --scene today
+  check r2d-title "r2d title saves in the collapsed row after Esc" keytext "row-title-$task_id" "$renamed"
+
+  day=2026-12-04
+  run anna "$root/r2c" r2c-inspect r2d-plan-before --now "$r2c_time" --scene plan
+  check r2d-plan-before "r2d target day starts below the viewport" below "plan-head-$day" plan-page-scroll
+  run anna "$root/r2c" r2d-scroll r2d-plan-after --now "$r2c_time" --scene plan
+  check r2d-plan-after "r2d drag auto-scrolls to a previously offscreen day" under "$renamed" "$day"
 else
   fail "r2c skipped: demo task or quest not found"
 fi

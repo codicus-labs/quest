@@ -115,6 +115,11 @@ impl State {
         let picker = self.task_calendar.is_some_and(|c| c.task.is_none())
             || self.quest_picker.as_ref().is_some_and(|q| q.target == PickFor::QuickAdd);
         let has_focus = tx.focused().is_some_and(|key| key.starts_with("quick-add"));
+        if has_focus && self.task_modal.is_some() {
+            self.close_task_modal();
+            tx.animated();
+            changed = true;
+        }
         if !has_focus && !picker && self.quick_add.text.trim().is_empty() {
             let was_open = self.plan_quick_day.take().is_some();
             if was_open || self.quick_fields.is_some() {

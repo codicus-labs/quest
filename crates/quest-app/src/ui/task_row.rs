@@ -1,6 +1,6 @@
 use quest_domain::{EntityId, Task, TaskList};
 use quest_view::row_meta::{self, Tone};
-use rune::{Color, Cursor, El, Tx, col, el, icon, row, text};
+use rune::{Color, Cursor, El, Transition, Tx, col, el, icon, row, text};
 
 use crate::icons;
 use crate::state::State;
@@ -16,32 +16,39 @@ pub struct Shows {
     pub plan_ahead: bool,
 }
 
-pub fn open(s: &mut State, id: EntityId, tx: &mut Tx) {
+pub fn open(s: &mut State, id: EntityId, tray_alias: bool, tx: &mut Tx) {
     tx.blur();
-    s.selected_task = Some(id);
-    s.toggle_task_detail(id);
-    if s.task_modal.is_some() {
-        tx.scroll_into_view(format!("row-{id}"));
+    let already_open = s.task_modal.as_ref().is_some_and(|form| form.task == id && form.tray_alias == tray_alias);
+    s.close_task_modal();
+    if !already_open {
+        s.open_task_modal(id);
+        if let Some(form) = &mut s.task_modal {
+            form.tray_alias = tray_alias;
+        }
     }
+    s.selected_task = Some(id);
+    tx.animated();
 }
 
 pub fn task_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
-    build(s, task, shows, p, None)
+    build(s, task, shows, p, None, false)
 }
 
 pub fn in_list(s: &State, task: &Task, shows: Shows, p: &Pal, list: TaskList) -> El {
-    build(s, task, shows, p, Some(list))
+    build(s, task, shows, p, Some(list), false)
 }
 
-fn build(s: &State, task: &Task, shows: Shows, p: &Pal, list: Option<TaskList>) -> El {
+fn build(s: &State, task: &Task, shows: Shows, p: &Pal, list: Option<TaskList>, tray_alias: bool) -> El {
     let id = task.id;
+    let prefix = if tray_alias { "not-planned" } else { "row" };
+    let expanded = s.task_modal.as_ref().filter(|form| form.task == id && form.tray_alias == tray_alias);
     let line = row()
-        .key(format!("row-{id}"))
+        .key(format!("{prefix}-{id}"))
         .role("listitem")
         .label(task.title.clone())
         .w_full()
-        .child(drag::face(s, id, face(s, task, shows, p, "row")))
-        .children(super::menu::anchor(s, id))
+        .child(drag::face(s, id, tray_alias, head(s, task, shows, p, prefix, expanded, tray_alias)))
+        .children((!tray_alias).then(|| super::menu::anchor(s, id)).into_iter().flatten())
         .on_secondary_press(move |s: &mut State, _, _: &mut Tx| super::menu::toggle(s, id))
         .on_hover_change(move |s: &mut State, inside: bool, tx: &mut Tx| {
             if inside {
@@ -52,47 +59,59 @@ fn build(s: &State, task: &Task, shows: Shows, p: &Pal, list: Option<TaskList>) 
             tx.live_only();
         });
     let line = match list {
-        Some(list) if !task.is_done() => drag::source(line.cursor(Cursor::Grab), list, id),
-        _ => line.on_press_tx(move |s: &mut State, tx: &mut Tx| open(s, id, tx)),
+        Some(list) if !task.is_done() && expanded.is_none() => {
+            drag::source(line.cursor(Cursor::Grab), list, id, tray_alias)
+        }
+        _ => line.on_press_tx(move |s: &mut State, tx: &mut Tx| open(s, id, tray_alias, tx)),
     };
-    let detail = (!s.drag.dragging().is_some_and(|payload| payload.task == id))
-        .then(|| super::task_modal::inline(s, task, p, false))
-        .flatten();
-    col().key(format!("task-item-{id}")).w_full().child(line).children(detail)
+    let mut card = col().key(format!("task-item-{id}")).w_full().radius(8.0);
+    if expanded.is_some() {
+        card = card.fill(p.card).child(
+            el().key("task-outline").absolute(0.0, 0.0).w_full().h_full().radius(8.0).border(1.0, p.border).inert(),
+        );
+    }
+    card.child(line).children(expanded.map(|_| super::task_modal::inline(s, task, p)))
 }
 
 pub fn tray_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
     let id = task.id;
     let Some(quest) = task.quest_id else { return task_row(s, task, shows, p) };
     let list = TaskList::Quest(quest);
-    let row = if quest_domain::is_today(task, s.today()) {
-        let alias = row()
-            .key(format!("not-planned-{id}"))
-            .role("listitem")
-            .label(task.title.clone())
-            .w_full()
-            .child(face(s, task, shows, p, "not-planned"));
-        drag::source(alias.cursor(Cursor::Grab), list, id)
+    let is_alias = quest_domain::is_today(task, s.today());
+    let row = build(s, task, shows, p, Some(list), is_alias);
+    if s.drag.dragging().is_some_and(|payload| payload.task == id) && is_alias == s.drag_tray_alias {
+        row.absolute(0.0, 0.0).opacity(0.0)
     } else {
-        in_list(s, task, shows, p, list)
-    };
-    if s.drag.dragging().is_some_and(|payload| payload.task == id) { row.absolute(0.0, 0.0).opacity(0.0) } else { row }
+        row
+    }
 }
 
 pub fn face(s: &State, task: &Task, shows: Shows, p: &Pal, prefix: &str) -> El {
+    head(s, task, shows, p, prefix, None, false)
+}
+
+fn head(
+    s: &State,
+    task: &Task,
+    shows: Shows,
+    p: &Pal,
+    prefix: &str,
+    form: Option<&crate::state::TaskModal>,
+    tray_alias: bool,
+) -> El {
     let id = task.id;
-    let selected = s.selected_task == Some(id);
-    let mut title = text(task.title.clone())
+    let selected = s.selected_task == Some(id) && form.is_none();
+    let mut label = text(task.title.clone())
         .key(format!("{prefix}-title-{id}"))
         .font(ty::BODY)
         .color(if task.is_done() { p.muted } else { p.text })
         .single_line()
         .truncate()
-        .grow(1.0)
-        .min_w(0.0);
+        .transition(Transition::none());
     if task.is_done() {
-        title = title.strike(0, task.title.len(), Some(p.muted));
+        label = label.strike(0, task.title.len(), Some(p.muted));
     }
+    let title = form.map_or(label, |form| super::task_modal::title(form, p));
     let mut line = row()
         .w_full()
         .min_h(38.0)
@@ -102,21 +121,29 @@ pub fn face(s: &State, task: &Task, shows: Shows, p: &Pal, prefix: &str) -> El {
         .radius(7.0)
         .hover(p.hover)
         .cursor(Cursor::Default)
-        .child(check(format!("{prefix}-check-{id}"), id, task.is_done(), p))
-        .child(title)
-        .child(marks(s, task, shows, p))
+        .child(check(format!("{prefix}-check-{id}"), id, task.is_done(), tray_alias, p))
+        .child(title.grow(1.0).w(0.0).min_w(0.0))
+        .children(form.is_none().then(|| marks(s, task, shows, p)))
         .children((!task.is_done()).then(|| {
             let running = s.snap.running_entry().is_some_and(|e| e.task_id == Some(id));
-            parts::timer_button(format!("{prefix}-play-{id}"), id, running, p)
+            parts::timer_button(format!("{prefix}-play-{id}"), id, running, tray_alias, p)
         }));
     if selected {
-        line = line.fill(p.selected).border_sides([0.0, 0.0, 0.0, 3.0], p.accent_line);
+        line = line.fill(p.selected).child(
+            el().key("selection-rail")
+                .absolute(0.0, 0.0)
+                .w_full()
+                .h_full()
+                .radius(7.0)
+                .border_sides([0.0, 0.0, 0.0, 3.0], p.accent_line)
+                .inert(),
+        );
     }
     line
 }
 
 /// The round check: an empty ring, or the accent fill with a dark tick.
-fn check(key: String, id: EntityId, done: bool, p: &Pal) -> El {
+fn check(key: String, id: EntityId, done: bool, tray_alias: bool, p: &Pal) -> El {
     let (fill, border, ink) = if done {
         (p.accent_fill, p.accent_fill, theme::on_accent_fill())
     } else {
@@ -134,7 +161,10 @@ fn check(key: String, id: EntityId, done: bool, p: &Pal) -> El {
         .center()
         .cursor(Cursor::Pointer)
         .child(icon(&icons::CHECK, 14.0).color(ink))
-        .on_press(move |s: &mut State| s.toggle_done(id))
+        .on_press_tx(move |s: &mut State, tx| {
+            super::task_modal::close_other(s, id, tray_alias, tx);
+            s.toggle_done(id);
+        })
 }
 
 /// Dates and the quest.

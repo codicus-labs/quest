@@ -55,6 +55,7 @@ pub fn view(s: &State, p: &Pal) -> El {
                 month.start.format("%B %Y").to_string()
             };
             col()
+                .key(format!("plan-month-{}", month.start))
                 .w_full()
                 .mt(14.0)
                 .child(
@@ -66,7 +67,7 @@ pub fn view(s: &State, p: &Pal) -> El {
                 .children(month.days.iter().map(|day| section(s, day, p)))
         }))
         .child(not_planned(s, &plan, p));
-    lists::page("plan-page", header, None, body)
+    lists::page(s, "plan-page", header, None, body)
 }
 
 fn section(s: &State, day: &Day<'_>, p: &Pal) -> El {

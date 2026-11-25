@@ -58,6 +58,17 @@ impl From<[f32; 4]> for Rect {
     }
 }
 
+pub fn edge_speed(viewport: Rect, pointer: Point) -> f32 {
+    if !viewport.contains(pointer) {
+        return 0.0;
+    }
+    let band = 84.0_f32.min(viewport.h / 2.0);
+    let top = pointer.y - viewport.y;
+    let bottom = viewport.h - top;
+    let weight = |distance: f32| (1.0 - distance / band).max(0.0).powi(2);
+    960.0 * (weight(bottom) - weight(top))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ListId {
     Rows(TaskList),

@@ -1,0 +1,7 @@
+[
+  {"t":0.2,"type":"down","key":"row-title-__TASK_ID__"},
+  {"t":0.4,"type":"move","x":545,"y":892},
+  {"t":2.0,"type":"move","key":"plan-head-__DAY__"},
+  {"t":2.2,"type":"up","key":"plan-head-__DAY__"},
+  {"t":2.6,"type":"mark","name":"end"}
+]

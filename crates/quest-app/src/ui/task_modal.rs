@@ -1,16 +1,14 @@
 //! Task details and their editing controls.
 
-use quest_domain::{Task, TimeEntry};
+use quest_domain::{EntityId, Task, TimeEntry};
 use rune::{Cursor, El, Key, KeyEvent, Tx, col, icon, row, spacer, text, text_input};
 
 use crate::state::State;
 use crate::theme::{Pal, ty};
-use crate::ui::parts;
 use crate::{clock, format, icons};
 
-pub fn inline(s: &State, task: &Task, p: &Pal, compact: bool) -> Option<El> {
-    let form = s.task_modal.as_ref().filter(|form| form.task == task.id)?;
-    let title = text_input(&form.title, ty::BODY_MEDIUM)
+pub fn title(form: &crate::state::TaskModal, p: &Pal) -> El {
+    text_input(&form.title, ty::BODY)
         .key("task-modal-title")
         .label("Task title")
         .w_full()
@@ -19,7 +17,12 @@ pub fn inline(s: &State, task: &Task, p: &Pal, compact: bool) -> Option<El> {
         .on_edit(|s: &mut State| &mut s.task_modal_fields().title)
         .on_input_change(|s: &mut State, _: &mut Tx| s.save_task_title())
         .on_input_key(inline_keys)
-        .on_submit(|_: &mut State, tx: &mut Tx| tx.blur());
+        .on_submit(close)
+        .transition(rune::Transition::none())
+}
+
+pub fn inline(s: &State, task: &Task, p: &Pal) -> El {
+    let form = s.task_modal.as_ref().expect("an expanded row owns the detail");
     let note = text_input(&form.description, ty::BODY)
         .key("task-modal-description")
         .label("Note")
@@ -38,23 +41,12 @@ pub fn inline(s: &State, task: &Task, p: &Pal, compact: bool) -> Option<El> {
         .key("task-modal")
         .w_full()
         .gap(8.0)
-        .padding(10.0)
-        .radius(8.0)
-        .fill(p.card)
-        .border(1.0, p.border)
-        .child(row().w_full().center_y().gap(4.0).child(title.grow(1.0).w(0.0)).child(parts::icon_button(
-            "task-modal-close",
-            "Collapse task",
-            &icons::CLOSE,
-            p.muted,
-            p,
-            |s: &mut State, tx| {
-                tx.blur();
-                s.close_task_modal();
-            },
-        )))
+        .pl(42.0)
+        .pr(10.0)
+        .pb(10.0)
+        .on_background_press(|_: &mut State| {})
         .child(note)
-        .child(super::task_fields::fields(s, Some(task), p, compact));
+        .child(super::task_fields::fields(s, Some(task), p, false));
     let total = s.snap.task_tracked_ms(task.id, s.now);
     if total > 0 {
         let chevron = if s.show_task_time { "⌄" } else { "›" };
@@ -102,16 +94,29 @@ pub fn inline(s: &State, task: &Task, p: &Pal, compact: bool) -> Option<El> {
             }
         }
     }
-    Some(detail.child(super::recurrence::task_row(s, task, p)).child(delete(p)))
+    detail.child(super::recurrence::task_row(s, task, p)).child(delete(p))
 }
 
 fn inline_keys(s: &mut State, event: &KeyEvent, tx: &mut Tx) -> bool {
     if event.key != Key::Escape {
         return false;
     }
-    tx.blur();
-    s.close_task_modal();
+    close(s, tx);
     true
+}
+
+pub fn close(s: &mut State, tx: &mut Tx) {
+    if s.task_modal.is_some() {
+        tx.blur();
+        s.close_task_modal();
+        tx.animated();
+    }
+}
+
+pub fn close_other(s: &mut State, id: EntityId, tray_alias: bool, tx: &mut Tx) {
+    if s.task_modal.as_ref().is_some_and(|form| form.task != id || form.tray_alias != tray_alias) {
+        close(s, tx);
+    }
 }
 
 fn entry_row(s: &State, entry: &TimeEntry, p: &Pal) -> El {

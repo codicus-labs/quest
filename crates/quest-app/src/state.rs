@@ -11,7 +11,7 @@ use rune::{TextEdit, Tx};
 use crate::clock::{self, Clock};
 use crate::dnd::{DragState, Rect};
 use crate::palette::Mode;
-use crate::ui::drag::Zone;
+use crate::ui::drag::{self, AutoScroll, Landing, Zone};
 use crate::undo::{Deletable, UndoEffect, UndoEvent, UndoState};
 
 pub mod ai_connections;
@@ -128,10 +128,11 @@ pub struct State {
     pub menu: Option<TaskMenu>,
     pub undo: UndoState,
     pub drag: DragState,
+    pub drag_scroll: AutoScroll,
     /// Where drop zones were last laid out, as their elements reported it.
     pub zones: HashMap<Zone, Rect>,
-    /// The card that last landed from a drag, with a count that changes on every landing.
-    pub landing: Option<(EntityId, u32, Option<quest_domain::TaskList>)>,
+    pub drag_tray_alias: bool,
+    pub landing: Option<Landing>,
     pub review_week: NaiveDate,
     /// The task Focus is about when nothing runs: the one started or selected last.
     pub focus_task: Option<EntityId>,
@@ -204,7 +205,9 @@ impl State {
             menu: None,
             undo: UndoState::default(),
             drag: DragState::Idle,
+            drag_scroll: AutoScroll::default(),
             zones: HashMap::new(),
+            drag_tray_alias: false,
             landing: None,
             review_week: monday,
             focus_task: None,
@@ -402,8 +405,8 @@ impl State {
     }
 
     /// Takes in what the store reported since the last frame; true when anything visible changed.
-    pub fn refresh(&mut self, tx: &mut Tx) -> bool {
-        let mut changed = false;
+    pub fn refresh(&mut self, frame_time: f64, tx: &mut Tx) -> bool {
+        let mut changed = drag::auto_scroll(self, frame_time, tx);
         let snapshot_changed = !Arc::ptr_eq(&self.store.snapshot(), &self.snap);
         if snapshot_changed {
             self.adopt_snapshot();

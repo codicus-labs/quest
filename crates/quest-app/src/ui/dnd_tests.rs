@@ -49,6 +49,51 @@ pub(super) fn scroll_into_view(rt: &mut Runtime<State>, key: &str) {
 }
 
 #[test]
+fn lifting_outside_a_drop_zone_animates_the_source_neighbour() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '2');
+    settle(&mut rt);
+    let rows = quest_view::lists::today(&rt.state.snap, rt.state.today());
+    let neighbour = format!("task-item-{}", rows[1].id);
+    let from = center(&rt, &format!("row-title-{}", rows[0].id));
+    let start = rect(&rt, &neighbour)[1];
+    rt.pointer_down(from.0, from.1);
+    rt.frame(0.0);
+    rt.pointer_move(from.0, 10.0);
+    rt.frame(0.0);
+    assert!(rt.state.drag.dragging().is_some() && rt.state.drag.target().is_none());
+    let first_frame = rect(&rt, &neighbour)[1];
+    settle(&mut rt);
+    let end = rect(&rt, &neighbour)[1];
+    assert!(end < start - 20.0, "the source gap closes");
+    assert!(first_frame > end + 10.0, "the neighbour must not jump to {end}");
+}
+
+#[test]
+fn the_lift_and_cancel_share_the_existing_faces_geometry() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '2');
+    settle(&mut rt);
+    let id = task(&rt, "Design the next chapter").id;
+    let face = format!("face-{id}");
+    let from = center(&rt, &format!("row-title-{id}"));
+    let start = rect(&rt, &face)[1];
+    rt.pointer_down(from.0, from.1);
+    rt.frame(0.0);
+    rt.pointer_move(from.0, from.1 + 65.0);
+    rt.frame(0.0);
+    let lift_start = rect(&rt, "drag-lift-face")[1];
+    assert!((lift_start - start).abs() < 2.0, "the lift begins at the source face, got {lift_start} vs {start}");
+    settle(&mut rt);
+    let lifted = rect(&rt, "drag-lift-face")[1];
+    assert!((lifted - start - 65.0).abs() < 2.0);
+    press(&mut rt, Key::Escape, Mods::default());
+    assert!((rect(&rt, &face)[1] - lifted).abs() < 2.0, "the return begins at the lifted face");
+    settle(&mut rt);
+    assert!((rect(&rt, &face)[1] - start).abs() < 2.0);
+}
+
+#[test]
 fn today_reorders_without_opening_a_detail_and_can_undo() {
     let (mut rt, _dir) = demo_app();
     command(&mut rt, '2');
@@ -93,6 +138,36 @@ fn plan_drop_opens_a_ghost_in_an_empty_day_and_escape_restores_it() {
     drag(&mut rt, from, to);
     assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(day));
     assert_eq!(rt.state.undo.shown.as_ref().unwrap().toast, quest_view::undo::Toast::DateChanged);
+}
+
+#[test]
+fn holding_at_the_plan_edge_scrolls_and_retargets_without_mouse_moves() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '3');
+    settle(&mut rt);
+    let id = task(&rt, "Design the next chapter").id;
+    let from = center(&rt, &format!("row-title-{id}"));
+    let [_, top, _, height] = rect(&rt, "plan-page-scroll");
+    let bottom = top + height;
+    let today = format!("plan-head-{}", rt.state.today());
+    let start = rect(&rt, &today)[1];
+    let to = (from.0, bottom - 6.0);
+    rt.pointer_down(from.0, from.1);
+    rt.frame(0.0);
+    rt.pointer_move(to.0, to.1);
+    rt.frame(0.0);
+    let initial_target = rt.state.drag.target();
+    let day = (0..120)
+        .find_map(|_| {
+            rt.frame(1.0 / 60.0);
+            let target = rt.state.drag.target()?;
+            let ListId::Rows(TaskList::Day(day)) = target.list else { return None };
+            (Some(target) != initial_target && rect(&rt, &today)[1] < start - 80.0).then_some(day)
+        })
+        .expect("scrolling brings a new day under the resting pointer");
+    rt.pointer_up(to.0, to.1);
+    settle(&mut rt);
+    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(day));
 }
 
 #[test]
@@ -148,6 +223,39 @@ fn unplanned_quest_tasks_can_be_dragged_from_the_tray_into_a_day() {
     drag(&mut rt, from, to);
     let moved = rt.state.snap.task(task.id).unwrap();
     assert_eq!((moved.planned_on, moved.due_on), (Some(day), Some(day)));
+}
+
+#[test]
+fn a_task_also_in_today_expands_and_lifts_at_its_tray_row() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '3');
+    let id = task(&rt, "Sketch a pricing page").id;
+    rt.update(move |s, _| {
+        let today = s.today();
+        s.dispatch(quest_domain::Command::SetTaskDue { id, due_on: Some(today), today, at: s.now });
+    });
+    scroll_into_view(&mut rt, "plan-not-planned");
+    click(&mut rt, "plan-not-planned");
+    let title = format!("not-planned-title-{id}");
+    scroll_into_view(&mut rt, &title);
+    let before = rect(&rt, &title);
+    click(&mut rt, &title);
+    settle(&mut rt);
+    assert_eq!(&rect(&rt, "task-modal-title")[..2], &before[..2]);
+    assert!(rt.find(&title).is_none());
+    press(&mut rt, Key::Escape, Mods::default());
+    settle(&mut rt);
+
+    let from = center(&rt, &title);
+    let start = rect(&rt, &format!("tray-face-{id}"))[1];
+    rt.pointer_down(from.0, from.1);
+    rt.frame(0.0);
+    rt.pointer_move(from.0, from.1 - 60.0);
+    rt.frame(0.0);
+    assert!((rect(&rt, "drag-lift-face")[1] - start).abs() < 2.0);
+    press(&mut rt, Key::Escape, Mods::default());
+    settle(&mut rt);
+    assert!(rt.find(&title).is_some());
 }
 
 #[test]

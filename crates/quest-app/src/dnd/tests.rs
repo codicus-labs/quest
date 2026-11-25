@@ -3,6 +3,18 @@ use quest_domain::{Command, EntityId, Position};
 
 use super::*;
 
+#[test]
+fn drag_scroll_accelerates_toward_either_edge_only_inside_the_viewport() {
+    let viewport = Rect::new(40.0, 30.0, 400.0, 300.0);
+    let speed = |x, y| edge_speed(viewport, Point::new(x, y));
+    assert_eq!(speed(200.0, 180.0), 0.0);
+    assert_eq!(speed(30.0, 320.0), 0.0);
+    assert_eq!(speed(200.0, 331.0), 0.0);
+    assert!(speed(200.0, 320.0) > speed(200.0, 280.0));
+    assert!(speed(200.0, 280.0) > 0.0);
+    assert_eq!(speed(200.0, 40.0), -speed(200.0, 320.0));
+}
+
 fn day(d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, 10, d).unwrap()
 }

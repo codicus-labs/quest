@@ -37,7 +37,7 @@ pub(super) fn test_app(demo: bool) -> (Runtime<State>, TempDir) {
     let state = State::new(Arc::new(store), profiles, clock);
     let mut rt = Runtime::new(state, super::view, (1440.0, 900.0), Env::new(true, 1.0));
     rt.on_key = Some(keys::on_key);
-    rt.poll = Some(|s: &mut State, _, tx| s.refresh(tx));
+    rt.poll = Some(State::refresh);
     rt.frame(0.0);
     (rt, dir)
 }
