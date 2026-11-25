@@ -36,6 +36,8 @@ expected="$(tr -d ':' <<< "$QUEST_RELEASE_CERT_SHA256" | tr '[:upper:]' '[:lower
 if [ "$(grep -c '^Signer #[0-9]* certificate DN:' <<< "$certificates")" -ne 1 ] || [ "$actual" != "$expected" ]; then
     echo "error: the APK is signed with certificate $actual, expected $expected (QUEST_RELEASE_CERT_SHA256)." >&2
     echo "Check the keystore secret; Obtainium refuses updates signed with another key." >&2
+    echo "apksigner ($build_tools) reported:" >&2
+    echo "$certificates" >&2
     rm -f "$signed"
     exit 1
 fi
