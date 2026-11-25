@@ -1,4 +1,4 @@
-/* PROTOTYPE – throwaway. Variants E and F: the task's field row [Quest ▾] [Plan] [Deadline] and its pickers
+/* PROTOTYPE – throwaway. the task's field row [Quest ▾] [Plan] [Deadline] and its pickers
    (quest combobox, month calendars). Desktop: popover under the field; mobile: bottom sheet.
    A picker targets a task or the Quick-Add ('qa'); dates go through setPlanned / setDue (ef-lists.js). */
 
@@ -79,7 +79,7 @@ function openPop(target, kind, ret) {
   const src = target === 'qa' ? qa : task(target);
   const cursor = Math.max(0, has(src[kind]) ? src[kind] : kind === 'due' && has(src.plan) ? src.plan : 0);
   ef.pop = { target, kind, ret, q: '', idx: 0, cursor, month: monthOf(cursor), justOpened: true };
-  if (target !== 'qa' && st.view !== 'plan') st.sel = target;
+  if (target !== 'qa') st.sel = target;
 }
 function closePop() {
   const ret = ef.pop.ret;
@@ -93,7 +93,11 @@ function applyPick(value) {
   else {
     const src = p.target === 'qa' ? qa : task(p.target);
     const next = p.kind === 'plan' ? setPlanned(src, value) : setDue(src, value);
-    if (p.target === 'qa') Object.assign(qa, next); else changeDates(src, next);
+    if (p.target === 'qa') Object.assign(qa, next);
+    else {
+      changeDates(src, next);
+      if (st.view === 'plan') ef.revealSelection = true;
+    }
   }
   closePop();
 }
@@ -151,7 +155,8 @@ document.addEventListener('input', e => {
 const renderBeforeFields = render;
 render = function () {
   renderBeforeFields();
-  if (ef.pop && ef.pop.justOpened) {
+  const opened = ef.pop?.justOpened;
+  if (opened) {
     ef.pop.justOpened = false;
     const el = document.getElementById('efpop-q') || document.getElementById('efpop');
     if (el) el.focus();
@@ -162,8 +167,15 @@ render = function () {
   }
   const q = document.getElementById('efpop-q');
   if (q && document.activeElement === q) q.setSelectionRange(q.value.length, q.value.length);
-  const kb = document.querySelector('.vEF .kb');
-  if (kb) kb.scrollIntoView({ block: 'nearest' });
+  if (st.view !== 'plan' || ef.revealSelection) {
+    document.querySelector('.kb')?.scrollIntoView({ block: 'nearest' });
+    ef.revealSelection = false;
+  }
+  if (opened && st.view === 'plan') document.querySelector('.efpop')?.scrollIntoView({ block: 'nearest' });
+  if (pendingPlanJump !== null) {
+    document.getElementById(`plan-day-${pendingPlanJump}`)?.scrollIntoView({ block: 'start' });
+    pendingPlanJump = null;
+  }
 };
 
 /* Screenshot scenes: ?pop=t1:quest | t1:plan | qa:due opens a picker on load. */

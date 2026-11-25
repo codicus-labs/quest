@@ -1,4 +1,4 @@
-/* PROTOTYPE – throwaway. Variants E and F: date model (planned / due), lists, Plan week, Quick-Add with #quest @plan !due.
+/* PROTOTYPE – throwaway. date model (planned / due), lists, Quick-Add with #quest @plan !due.
    Dates are day offsets from today (0 = today, -2 = two days ago); the app would store planned_on / due_on as dates. */
 
 /* ---------- Demo dates: [planned, due] ---------- */
@@ -6,7 +6,10 @@ const DEMO_DATES = {
   t1: [0, 2], t2: [0, null], t3: [-1, 0], t4: [0, null], t5: [0, null], t6: [0, null],
   t7: [1, 4], t8: [1, 1], t9: [3, null], t10: [3, null], t11: [null, -1], t12: [-2, 5], t18: [null, -2],
 };
-for (const t of T) { const [plan, due] = DEMO_DATES[t.id] || [null, null]; t.plan = plan; t.due = due; }
+for (const [index, t] of T.entries()) {
+  const [plan, due] = DEMO_DATES[t.id] || [null, null];
+  Object.assign(t, { plan, due, dayOrder: index, sortKey: index });
+}
 
 /* ---------- Rule: the plan date never lies after the deadline ----------
    Pure: takes { plan, due }, returns both. The date the user sets wins and pulls the other one along.
@@ -26,6 +29,10 @@ function postponedFields(before, after) {
 }
 function changeDates(t, next) {
   for (const field of postponedFields(t, next)) POSTPONES.push({ task: t.id, field, at: now() });
+  const dates = { ...t, ...next };
+  if (!has(next.dayOrder) && (t.plan !== dates.plan || !isEfToday(t) && isEfToday(dates))) {
+    t.dayOrder = endDayOrder(dates, t.id);
+  }
   Object.assign(t, next);
 }
 const postponeCount = (id, field) => POSTPONES.filter(p => p.task === id && (!field || p.field === field)).length;
@@ -43,7 +50,6 @@ function postMark(id, field) {
 }
 
 /* ---------- Day labels ---------- */
-const WEEK = [0, 1, 2, 3, 4, 5, 6];
 const noon = off => at(off, 12);
 const wd = off => new Date(noon(off)).toLocaleDateString('en-GB', { weekday: 'short' });
 const dnum = off => new Date(noon(off)).getDate();
@@ -57,10 +63,9 @@ const isLingering = t => !!t.lingerUntil && Date.now() < t.lingerUntil;
 const looksOpen = t => !t.done || isLingering(t);
 const isEfInbox = t => looksOpen(t) && !t.quests.length && !has(t.plan);
 const isEfToday = t => (has(t.plan) && t.plan <= 0) || (has(t.due) && t.due <= 0);
-const todayRank = t => has(t.due) && t.due < 0 ? 0 : has(t.plan) && t.plan < 0 ? 1 : has(t.due) && t.due === 0 ? 2 : 3;
 const EF_LISTS = {
   inbox: () => liveT().filter(isEfInbox),
-  today: () => liveT().filter(t => t.done ? t.doneToday || t.plan === 0 : isEfToday(t)).sort((a, b) => todayRank(a) - todayRank(b)),
+  today: () => liveT().filter(t => t.done ? t.doneToday || t.plan === 0 : isEfToday(t)),
   plan: () => liveT().filter(t => looksOpen(t) && has(t.plan) && t.plan > 0),
   logbook: () => liveT().filter(t => t.done),
 };
@@ -70,7 +75,7 @@ const EF_NAV = [['inbox', 'Inbox', 'inbox'], ['today', 'Today', 'sun'], ['plan',
 function efNav() {
   return EF_NAV.map(([v, label, i]) => {
     const n = v === 'logbook' ? '' : efListOf(v).filter(t => !t.done).length || '';
-    return `<button class="nav ${v} ${st.view === v ? 'on' : ''}" data-a="nav" data-v="${v}">${ic(i)}<span>${label}</span><span class="n">${n}</span></button>`;
+    return `<button class="nav ${v} ${st.view === v ? 'on' : ''}" data-a="nav" data-v="${v}" ${v === 'today' || v === 'inbox' ? `data-file="${v}"` : ''}>${ic(i)}<span>${label}</span><span class="n">${n}</span></button>`;
   }).join('');
 }
 function efHead() {
@@ -88,10 +93,10 @@ function efHead() {
    The row keeps what decides the next step: dates, checklist progress, quest. Notes and postponements live in the detail.
    ?dueflag=0 drops the flag before "due …"; ?rowtime=0 drops the tracked duration (a running timer still shows). */
 const DUE_FLAG = params.get('dueflag') !== '0', ROW_TIME = params.get('rowtime') !== '0';
-function dateMarks(t, inPlanCol) {
+function dateMarks(t, inPlan) {
   const marks = [];
   if (!t.done && has(t.plan) && t.plan < 0) marks.push(`<span class="dmark">since ${pastDay(t.plan)}</span>`);
-  if (!t.done && has(t.plan) && t.plan > 0 && !inPlanCol) marks.push(`<span class="dmark">${ic('cal')}${dayName(t.plan)}</span>`);
+  if (!t.done && has(t.plan) && t.plan > 0 && !inPlan) marks.push(`<span class="dmark">${ic('cal')}${dayName(t.plan)}</span>`);
   if (!t.done && has(t.due)) {
     const cls = t.due < 0 ? 'over' : t.due === 0 ? 'today' : '';
     const label = t.due < 0 ? `overdue · ${pastDay(t.due)}` : t.due === 0 ? 'due today' : `due ${dayName(t.due)}`;
@@ -99,11 +104,11 @@ function dateMarks(t, inPlanCol) {
   }
   return marks.join('');
 }
-function efRow(t) {
+function efRow(t, sortable = false) {
   const q = primary(t), isOpen = st.sel === t.id, mins = taskMins(t), mobile = ui.device === 'mobile';
   const showQuest = q && !st.view.startsWith('q:'), marks = dateMarks(t, st.view === 'plan') + itemProgress(t);
   return `<div class="item ${isOpen ? 'open' : ''} ${t.done ? 'done' : ''} ${ef.cur === t.id ? 'kb' : ''}" data-tid="${t.id}">
-    <div class="line" data-a="sel" data-id="${t.id}">${chk(t)}
+    <div class="line"${sortable && !t.done ? ` data-drag="${t.id}"${mobile ? '' : ' draggable="true"'}` : ''} data-a="sel" data-id="${t.id}">${chk(t)}
       <span class="title">${esc(t.title)}${mobile && marks ? `<span class="msub">${marks}</span>` : ''}</span>
       <span class="meta">${mobile ? '' : marks}${showQuest ? `<span class="row" style="gap:5px"><span class="dot" style="--c:${q.color}"></span>${mobile ? '' : esc(q.title)}</span>` : ''}${ROW_TIME && mins && !(run && run.task === t.id) && !mobile ? `<span class="tnum">${fmtDur(mins)}</span>` : ''}</span>
       ${playBtn(t)}</div>
@@ -115,50 +120,21 @@ function efRow(t) {
 }
 function efList() {
   const v = st.view;
-  if (v === 'plan') return ui.device === 'mobile' ? planMobile() : planDesk();
+  if (v === 'plan') return planList();
   const items = efListOf(v);
-  if (v === 'logbook') return items.map(efRow).join('');
+  if (v === 'logbook') return items.map(t => efRow(t)).join('');
   if (!items.length) return `<div class="empty">${v === 'inbox' ? 'Inbox zero' : 'Nothing here.'}</div>`;
+  return taskListRows(v, items);
+}
+function taskListRows(group, items) {
   const openItems = items.filter(looksOpen), done = items.filter(t => !looksOpen(t));
-  return openItems.map(efRow).join('') + (done.length ? `<div class="grp faint" style="font-weight:500">${done.length} done</div>${done.map(efRow).join('')}` : '');
-}
-
-/* ---------- Plan (next seven days) ---------- */
-const openTasks = () => liveT().filter(looksOpen);
-const plannedOn = off => openTasks().filter(t => has(t.plan) && (off === 0 ? t.plan <= 0 : t.plan === off));
-const dueOn = off => openTasks().filter(t => has(t.due) && (off === 0 ? t.due <= 0 : t.due === off));
-const unplanned = () => openTasks().filter(t => !has(t.plan));
-function planCard(t) {
-  const q = primary(t), marks = dateMarks(t, true);
-  const pop = ef.pop && ef.pop.target === t.id && ui.device !== 'mobile' ? efPopover(has(t.plan) && t.plan >= 4 ? 'right:0' : 'left:0') : '';
-  return `<div class="pcard ${ef.cur === t.id ? 'kb' : ''} ${t.done ? 'done' : ''}" draggable="true" data-drag="${t.id}" data-tid="${t.id}">${esc(t.title)}<div class="m">${q ? `<span class="dot" style="--c:${q.color}"></span>` : '<span class="faint">Inbox</span>'}${marks}</div>${pop}</div>`;
-}
-const dueMark = (t, mobile) => {
-  const q = primary(t), over = t.due < 0;
-  return `<div class="pdue ${over ? 'over' : ''}" style="--c:${q ? q.color : 'var(--faint)'}" title="Deadline${has(t.plan) ? ', planned ' + dayName(t.plan) : ''}"><b>◆</b><span>${mobile ? 'Due: ' : ''}${esc(t.title)}</span></div>`;
-};
-function planDesk() {
-  // A span runs from the planned day to the due day, so start and deadline read together.
-  const spans = openTasks().filter(t => has(t.plan) && has(t.due) && t.due > Math.max(t.plan, 0))
-    .map(t => ({ t, a: Math.max(0, t.plan), b: Math.min(6, t.due) }));
-  return `<div class="plan">
-    <div class="pgrid">${WEEK.map(d => `<div class="pday ${d === 0 ? 'today' : ''}"><b>${d === 0 ? 'Today' : wd(d)}</b> ${dnum(d)}</div>`).join('')}</div>
-    ${spans.length ? `<div class="pgrid pspans">${spans.map(({ t, a, b }) => `<div class="pspan" style="grid-column:${a + 1} / ${b + 2};--c:${(primary(t) || { color: 'var(--faint)' }).color}" title="${esc(t.title)}: planned ${dayName(t.plan)}, due ${dayName(t.due)}"><i></i><span class="ell">${esc(t.title)}</span></div>`).join('')}</div>` : ''}
-    <div class="pgrid pcols">${WEEK.map(d => `<div class="pcol ${d === 0 ? 'today' : ''}" data-drop="${d}">${plannedOn(d).map(planCard).join('')}${dueOn(d).filter(t => !plannedOn(d).includes(t)).map(t => dueMark(t)).join('')}</div>`).join('')}</div>
-    <div class="ptray" data-drop="none"><div class="lbl2">Not planned</div><div class="items">${unplanned().map(planCard).join('')}</div></div>
-  </div>`;
-}
-function planMobile() {
-  return WEEK.map(d => {
-    const rows = plannedOn(d).map(efRow).join(''), dues = dueOn(d).filter(t => !plannedOn(d).includes(t)).map(t => dueMark(t, true)).join('');
-    return `<div class="grp">${dayName(d)} <span class="faint" style="font-weight:500">${wd(d)} ${dnum(d)}</span></div>${rows}${dues ? `<div style="display:grid;gap:6px;margin:6px 0">${dues}</div>` : ''}${rows || dues ? '' : '<div class="faint small" style="padding:8px 0">–</div>'}`;
-  }).join('') + `<div class="grp">Not planned</div>${unplanned().map(efRow).join('')}`;
+  return sortGroup(group, openItems) + (done.length ? `<div class="grp faint" style="font-weight:500">${done.length} done</div>${done.map(t => efRow(t)).join('')}` : '');
 }
 
 /* ---------- Quick-Add: "#quest" files it, "@fri" plans it, "!fri" sets the deadline ----------
    Focus unfolds the same field row as the task detail; the tokens fill it. Its defaults show what ↵ will do. */
 const qa = { text: params.get('qa') || '', caret: null, idx: 0, quest: null, plan: null, due: null, view: undefined, focused: params.get('qaopen') === '1' };
-const qaDefaults = view => ({ quest: view.startsWith('q:') ? view.slice(2) : null, plan: view === 'today' ? 0 : null, due: null });
+const qaDefaults = view => ({ quest: view.startsWith('q:') ? view.slice(2) : null, plan: view.startsWith('plan:') ? +view.slice(5) : view === 'today' ? 0 : null, due: null });
 function resetQa(view) { Object.assign(qa, { text: '', caret: 0, idx: 0, view }, qaDefaults(view)); }
 const qaOpen = () => qa.view === 'global' || qa.focused || !!qa.text || !!(ef.pop && ef.pop.target === 'qa');
 const WD2 = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'];
@@ -210,7 +186,9 @@ function efAddTask(view) {
   }).replace(/\s+/g, ' ').trim();
   if (!title) return null;
   const quests = qa.quest ? [qa.quest] : [], { plan, due } = qa;
-  const t = { id: 't' + (++seq), title, quests, plan, due, day: plan === 0 ? 'today' : plan > 0 ? 'upcoming' : null, when: plan > 0 ? dayName(plan) : undefined };
+  const t = { id: 't' + (++seq), title, quests, plan, due };
+  t.dayOrder = endDayOrder(t);
+  t.sortKey = endSortKey(quests[0]);
   T.unshift(t);
   if (view !== 'global') {
     const where = [quests.length && quest(quests[0]).title, has(plan) && `planned ${dayName(plan)}`, has(due) && `due ${dayName(due)}`].filter(Boolean);
@@ -284,28 +262,3 @@ document.addEventListener('keydown', e => {
   }
 }, true);
 
-/* ---------- Drag a task onto a day (desktop Plan) ---------- */
-document.addEventListener('dragstart', e => {
-  const card = e.target.closest && e.target.closest('[data-drag]');
-  if (!card) return;
-  e.dataTransfer.setData('text/plain', card.dataset.drag);
-  e.dataTransfer.effectAllowed = 'move';
-});
-document.addEventListener('dragover', e => {
-  const zone = e.target.closest && e.target.closest('[data-drop]');
-  if (!zone) return;
-  e.preventDefault();
-  document.querySelectorAll('[data-drop].over').forEach(z => z !== zone && z.classList.remove('over'));
-  zone.classList.add('over');
-});
-document.addEventListener('drop', e => {
-  const zone = e.target.closest && e.target.closest('[data-drop]');
-  if (!zone) return;
-  e.preventDefault();
-  const t = task(e.dataTransfer.getData('text/plain'));
-  if (!t || t.builtin) return;
-  changeDates(t, setPlanned(t, zone.dataset.drop === 'none' ? null : +zone.dataset.drop));
-  toast(has(t.plan) ? `Planned for ${dayName(t.plan)}` : 'Unplanned');
-  render();
-});
-document.addEventListener('dragend', () => document.querySelectorAll('[data-drop].over').forEach(z => z.classList.remove('over')));

@@ -1,4 +1,4 @@
-/* PROTOTYPE – throwaway. Variant F, desktop: a fake macOS desktop (?scene=global) with Quest's global Quick-Add panel
+/* PROTOTYPE – throwaway. Desktop: a fake macOS desktop (?scene=global) with Quest's global Quick-Add panel
    (⌃⌥Space, simulated in the page) and the floating timer widget. Everything inside reuses the app's Quick-Add,
    field row, pickers and timer state; only the frame is new. */
 
@@ -14,7 +14,7 @@ const glob = {
   paused: null, // { task, mins } after Pause; Stop hides the widget
   pos: {}, // dragged widget positions: { card: { x, y }, pill: { x, y } }
 };
-const inScene = () => glob.on && ui.device === 'desktop' && variantKey() === 'F';
+const inScene = () => glob.on && ui.device === 'desktop';
 
 /* ---------- Where a new task shows up ---------- */
 function landing(t) {
@@ -70,20 +70,20 @@ function globalDesk() {
   const clock = new Date(now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   return `<div class="fdesk">
     <div class="fwall" data-a="gBlur"></div>
-    <div class="fmenu"><b>Draft</b><span>File</span><span>Edit</span><span>View</span><span>Window</span><span class="grow"></span><span>${wd(0)} ${dnum(0)} ${clock}</span></div>
+    <div class="fmenu"><b>Draft</b><span>File</span><span>Edit</span><span>View</span><span>Window</span><span class="grow"></span><button data-a="gHot" title="Simulated global hotkey">⌃⌥Space</button><button data-a="gSize">Widget: ${glob.widget}</button><span>${wd(0)} ${dnum(0)} ${clock}</span></div>
     ${fakeWindow()}
     ${sizes.map(([s, top]) => widget(s, top)).join('')}
     ${glob.panel ? `<div class="gpanel" role="dialog" aria-label="Quest · New to-do">${efQuickAddFor('global')}</div>` : ''}
     ${glob.landed ? `<div class="glanded" role="status">${ic('check')}${glob.landed[0]}<span>${glob.landed[1]}</span></div>` : ''}
   </div>`;
 }
-const deskBeforeGlobal = VIEWS.F[0];
-VIEWS.F[0] = () => inScene() ? globalDesk() : deskBeforeGlobal();
 
 /* ---------- Actions ---------- */
 function leaveScene() { closePanel(); glob.on = false; syncUrl(); }
 Object.assign(actions, {
   gBlur: () => { if (glob.panel) closePanel(); },
+  gHot: () => { if (glob.panel) closePanel(); else openPanel(); },
+  gSize: () => { glob.widget = { card: 'pill', pill: 'both', both: 'card' }[glob.widget]; },
   gwOpen: () => { leaveScene(); if (runningTask()) openFocus(); },
   gwPause: () => { const id = run.task, mins = runMins(); stopTimer(); toastMsg = ''; glob.paused = { task: id, mins }; },
   gwResume: () => { const id = glob.paused.task; glob.paused = null; basePlay({ id }); },
@@ -122,7 +122,7 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-gw]')) { e.stopPropagation(); e.preventDefault(); }
 }, true);
 
-/* ---------- Prototype pill: scene toggle, simulated hotkey, widget size; keep ?scene=global in the URL ---------- */
+/* Keep ?scene=global in the URL when using the prototype controls. */
 const syncUrlBeforeGlobal = syncUrl;
 syncUrl = function () {
   syncUrlBeforeGlobal();
@@ -131,18 +131,13 @@ syncUrl = function () {
 const renderPillBeforeGlobal = renderPill;
 renderPill = function () {
   renderPillBeforeGlobal();
-  if (variantKey() !== 'F' || ui.device !== 'desktop') return;
-  const extra = glob.on
-    ? `<button data-p="gscene">App</button><button data-p="ghot" title="Simulated global hotkey">⌃⌥Space</button><button data-p="gsize" title="Widget size">Widget: ${glob.widget}</button>`
-    : '<button data-p="gscene" title="Fake macOS desktop: global Quick-Add and timer widget">Mac</button>';
-  document.querySelector('#pill .pill').insertAdjacentHTML('beforeend', `<span class="sep"></span>${extra}`);
+  if (ui.device !== 'desktop') return;
+  document.querySelector('#pill .pill').insertAdjacentHTML('beforeend', `<span class="sep"></span><button data-p="gscene" title="Toggle the global Quick-Add and timer scene" aria-pressed="${glob.on}">Mac</button>`);
 };
 document.getElementById('pill').addEventListener('click', e => {
   const b = e.target.closest('[data-p]');
-  if (!b || !b.dataset.p.startsWith('g')) return;
-  if (b.dataset.p === 'gscene') { if (glob.on) leaveScene(); else { glob.on = true; syncUrl(); } }
-  if (b.dataset.p === 'ghot') { if (glob.panel) closePanel(); else openPanel(); }
-  if (b.dataset.p === 'gsize') glob.widget = { card: 'pill', pill: 'both', both: 'card' }[glob.widget];
+  if (b?.dataset.p !== 'gscene') return;
+  if (glob.on) leaveScene(); else { glob.on = true; syncUrl(); }
   render();
 });
 if (glob.panel) focusQa();

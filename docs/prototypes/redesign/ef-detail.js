@@ -1,4 +1,4 @@
-/* PROTOTYPE – throwaway. Variants E and F: task detail parts and undo.
+/* PROTOTYPE – throwaway. task detail parts and undo.
    - Notes are Markdown: rendered by a small local renderer, E / ↵ / click shows the source, Esc or blur renders again.
    - Checklist per task: text + done, ordered; no dates, quest or time of its own.
    - Tracked time folds to one line; the state holds for the session.
@@ -157,9 +157,9 @@ let undoSlot = null; // { label, undo }: the most recent undoable change, until 
 let undoToast = null, undoTimer;
 function remember(label, undo, withToast) {
   undoSlot = { label, undo };
-  if (!withToast) return;
-  undoToast = label;
   clearTimeout(undoTimer);
+  undoToast = withToast ? label : null;
+  if (!withToast) return;
   undoTimer = setTimeout(() => { undoToast = null; render(); }, UNDO_TOAST_MS);
 }
 function forget() { undoSlot = null; undoToast = null; }
@@ -168,7 +168,7 @@ function undoLast() {
   const { label, undo } = undoSlot;
   forget();
   undo();
-  toast(`Undone · ${label}`);
+  if (label) toast(`Undone · ${label}`);
 }
 /* A task ticked off stays visible in place for a moment, then lists that hide done tasks drop it. */
 function linger(t) {
@@ -180,10 +180,15 @@ function rememberDone(t, before) {
   linger(t);
   remember('Done', () => Object.assign(t, before), true);
 }
-const snapshotTask = t => ({ plan: t.plan, due: t.due, quests: [...t.quests], postponed: POSTPONES.length });
-function restoreTask(t, s) {
-  Object.assign(t, { plan: s.plan, due: s.due, quests: s.quests });
-  POSTPONES.length = s.postponed; // the undone change's postponements; nothing else can have been added since
+const snapshotTask = t => ({ plan: t.plan, due: t.due, quests: [...t.quests], dayOrder: t.dayOrder, sortKey: t.sortKey });
+function undoableTaskChange(t, label, apply) {
+  const before = snapshotTask(t), postponed = POSTPONES.length;
+  apply();
+  if (JSON.stringify(before) === JSON.stringify(snapshotTask(t))) return;
+  remember(label, () => {
+    Object.assign(t, before);
+    POSTPONES.length = postponed;
+  });
 }
 function deleteTask(id) {
   const t = task(id);
@@ -198,15 +203,13 @@ function deleteTask(id) {
 
 const changeDatesBeforeUndo = changeDates;
 changeDates = function (t, next) {
-  const before = snapshotTask(t);
-  changeDatesBeforeUndo(t, next);
-  if (before.plan !== t.plan || before.due !== t.due) remember('Date change', () => restoreTask(t, before));
+  undoableTaskChange(t, 'Date change', () => changeDatesBeforeUndo(t, next));
 };
 const applyPickBeforeUndo = applyPick;
 applyPick = function (value) {
-  const p = ef.pop, t = p.kind === 'quest' && p.target !== 'qa' && task(p.target), before = t && snapshotTask(t);
-  applyPickBeforeUndo(value);
-  if (t && before.quests.join() !== t.quests.join()) remember('Quest change', () => restoreTask(t, before));
+  const p = ef.pop;
+  if (p.kind !== 'quest' || p.target === 'qa') return applyPickBeforeUndo(value);
+  undoableTaskChange(task(p.target), 'Quest change', () => applyPickBeforeUndo(value));
 };
 
 /* ---------- Actions ---------- */
@@ -242,7 +245,7 @@ function detailKey(e) {
   if (e.target.matches && e.target.matches('.mdnote') && (k === 'Enter' || lower === 'e')) { editNote(e.target.dataset.id, e.target.dataset.ctx); return true; }
   if (lower !== 'e') return false;
   if (focusOpen()) { editNote(runningTask().id, 'focus'); return true; }
-  if (!ef.cur || st.view === 'plan') return false;
+  if (!ef.cur) return false;
   st.sel = ef.cur;
   editNote(ef.cur, 'detail');
   return true;
@@ -284,7 +287,7 @@ document.addEventListener('click', e => { if (e.target.closest && e.target.close
 const renderBeforeDetail = render;
 render = function () {
   renderBeforeDetail();
-  if (undoToast && isEF()) {
+  if (undoToast) {
     const mobile = ui.device === 'mobile', host = mobile ? document.querySelector('.phone .screen') : document.getElementById('app');
     host.insertAdjacentHTML('beforeend', `<div class="undotoast ${mobile ? 'm' : ''}" role="status"><span>${esc(undoToast)}</span><button data-a="undo">Undo</button>${mobile ? '' : '<kbd>⌘Z</kbd>'}</div>`);
   }

@@ -1,4 +1,4 @@
-/* PROTOTYPE – throwaway. Variants E and F: shell, tracked column, focus, player, account drawer.
+/* PROTOTYPE – throwaway.  shell, tracked column, focus, player, account drawer.
    Lists, dates, Plan and Quick-Add live in ef-lists.js. Loaded after index.html's main script and reuses its globals. */
 
 Object.assign(P, {
@@ -17,36 +17,32 @@ Object.assign(P, {
 const SCENES = (params.get('scene') || '').split(','); // several at once, e.g. ?scene=global,org
 const ef = {
   right: params.get('right') !== '0', // desktop tracked column, kept across sidebar navigation
-  focus: SCENES.includes('focus'), // F: focus view open
-  leftAt: null, // F: when the focus view was left while the task timer kept running
-  hintOff: false, // F: "keep on task" chosen for the current stretch outside focus
+  focus: SCENES.includes('focus'),
+  leftAt: null,
+  hintOff: false,
   hintSeen: false,
   drawer: params.get('drawer') === '1',
   cur: params.get('cur'), // keyboard selection (task id)
   pop: null, // open field picker: { target: task id | 'qa', kind: 'quest' | 'plan' | 'due', ... } (ef-fields.js)
   keys: params.get('keys') === '1', // shortcut overview
 };
-const variantKey = () => VARIANTS[ui.v][0];
-const isEF = () => ['E', 'F'].includes(variantKey());
-const strict = () => variantKey() === 'E';
 const runningTask = () => (run && run.task !== ORG.id ? task(run.task) : null);
-const focusOpen = () => !!runningTask() && (strict() || ef.focus);
-const hintDue = () => !strict() && runningTask() && !ef.focus && ef.leftAt && !ef.hintOff && now() - ef.leftAt >= 120e3;
+const focusOpen = () => !!runningTask() && ef.focus;
+const hintDue = () => runningTask() && !ef.focus && ef.leftAt && !ef.hintOff && now() - ef.leftAt >= 120e3;
 const orgMins = () => E.filter(e => e.task === ORG.id).reduce((s, e) => s + e.mins, 0) + (run && run.task === ORG.id ? runMins() : 0);
 
 function openFocus() { Object.assign(ef, { focus: true, leftAt: null, hintOff: false, hintSeen: false }); }
 function leaveFocus() { Object.assign(ef, { focus: false, leftAt: now(), hintOff: false, hintSeen: false }); }
 function syncFocus() {
-  // F: a task timer running outside the focus view always has a "left at" mark, also after switching variants.
-  if (!strict() && runningTask() && !ef.focus && !ef.leftAt) ef.leftAt = now();
+  if (runningTask() && !ef.focus && !ef.leftAt) ef.leftAt = now();
 }
 
-/* Demo scenes for screenshots: ?scene=org (after "Organize" / rebooking), hint (F, 2+ min outside focus), focus (F, view open), idle (no timer). */
+/* Demo scenes for screenshots: ?scene=org (after "Organize" / rebooking), hint (2+ min outside focus), focus (view open), idle (no timer). */
 (function applyScene() {
   if (SCENES.includes('org') && run) {
     const from = run.task, cut = run.start + 14 * 60e3;
     E.push({ task: from, start: run.start, mins: 14 });
-    run = { task: ORG.id, start: cut, meta: { from, how: variantKey() === 'F' ? 'rebooked' : 'escape' } };
+    run = { task: ORG.id, start: cut, meta: { from, how: 'rebooked' } };
   }
   if (SCENES.includes('hint')) ef.leftAt = now() - 130e3;
   if (SCENES.includes('idle') && run) { E.push({ task: run.task, start: run.start, mins: 36 }); lastRun = run.task; run = null; }
@@ -56,7 +52,7 @@ function syncFocus() {
 function efBlocks() {
   const blocks = E.filter(e => isToday(e.start)).map(e => ({ ...e, end: e.start + e.mins * 60e3 }));
   if (!run) return blocks;
-  if (runningTask() && !strict() && !ef.focus && ef.leftAt) {
+  if (runningTask() && !ef.focus && ef.leftAt) {
     blocks.push({ task: run.task, start: run.start, end: ef.leftAt, run: true });
     blocks.push({ task: run.task, start: ef.leftAt, end: now(), run: true, outside: true });
   } else blocks.push({ task: run.task, start: run.start, end: now(), run: true, ...run.meta });
@@ -103,7 +99,7 @@ function efHint(mobile) {
 }
 const backTo = from => from ? `<button class="backto" data-a="play" data-id="${from.id}">${ic('undo')}<span class="ell">Back to “${esc(from.title)}”</span></button>` : '';
 function efTimerCard() {
-  if (!run) return aTimer();
+  if (!run) return `<div class="timer"><div class="muted" style="font-size:12.5px">No timer running</div><button class="row" style="margin-top:6px;color:var(--acc-text);font-weight:600" data-a="play" data-id="${lastRun}">${ic('play')} Resume “${esc(task(lastRun).title)}”</button></div>`;
   if (run.task === ORG.id) {
     return `<div class="timer"><div class="row lbl3"><span class="dot pulse" style="--c:var(--faint)"></span>Organizing · no quest</div>
       <div class="row" style="margin-top:4px"><span class="t tnum" data-elapsed></span><span class="grow"></span><button class="play on gray" data-a="play" data-id="${ORG.id}">${ic('stop')}Stop</button></div>
@@ -130,12 +126,12 @@ function efPlayer() {
 
 /* ---------- Focus ---------- */
 function efFocus(mobile) {
-  const t = runningTask(), q = primary(t), soft = !strict();
+  const t = runningTask(), q = primary(t);
   const today = E.filter(e => e.task === t.id && isToday(e.start)).reduce((s, e) => s + e.mins, 0) + runMins();
   const organize = `<button class="flink" data-a="organize" title="Track the next minutes as Organizing">${ic('list')} Organize</button>`;
-  const leave = `<div class="row fesc">${soft ? `<button class="flink" data-a="focusLeave" title="The timer keeps running">${ic('back')} Back to lists</button>` : ''}${organize}</div>`;
+  const leave = `<div class="row fesc"><button class="flink" data-a="focusLeave" title="The timer keeps running">${ic('back')} Back to lists</button>${organize}</div>`;
   return `<div class="effocus ${mobile ? 'm' : ''}">
-    <div class="fhead">${logo()}<span>Focus</span><span class="grow"></span>${soft ? `<button class="iconbtn" style="margin:0" data-a="focusLeave" title="Leave focus (Esc)">${ic('x')}</button>` : ''}</div>
+    <div class="fhead">${logo()}<span>Focus</span><span class="grow"></span><button class="iconbtn" style="margin:0" data-a="focusLeave" title="Leave focus (Esc)">${ic('x')}</button></div>
     <div class="fbody">
       <div class="fq">${q ? `<span class="dot" style="--c:${q.color}"></span>${esc(q.title)}` : 'No quest'}</div>
       <div class="ftitle">${esc(t.title)}</div>
@@ -166,21 +162,20 @@ function efDrawer() {
 /* ---------- Shells ---------- */
 function efDesk() {
   syncFocus();
-  const wide = st.view === 'plan';
   return `<aside class="side">
     <div style="position:relative;margin-bottom:12px">${wsBtn()}${wsMenu('top:40px;left:0')}</div>
-    ${efNav()}<div class="sec">Quests</div>${aQuestNav()}
+    ${efNav()}<div class="sec">Quests</div>${questNav()}
     <div style="height:14px;margin-top:auto"></div>${efHint(false)}${efTimerCard()}
   </aside>
-  <main class="main" data-scroll="ef-main"><div class="eftop"><button class="iconbtn ${ef.right ? 'on' : ''}" data-a="efRight" title="${ef.right ? 'Hide' : 'Show'} tracked time">${ic('panel')}</button></div>
-    <div class="col ${wide ? 'wide' : ''}">${efHead()}${efQuickAddFor(st.view)}${efList()}</div></main>
+  <main class="main" data-scroll="ef-main-${st.view === 'plan' ? 'plan' : 'list'}"><div class="eftop"><button class="iconbtn ${ef.right ? 'on' : ''}" data-a="efRight" title="${ef.right ? 'Hide' : 'Show'} tracked time">${ic('panel')}</button></div>
+    <div class="col">${efHead()}${efQuickAddFor(st.view)}${efList()}</div></main>
   ${ef.right ? `<aside class="efright" data-scroll="ef-right">${efTracked(false)}</aside>` : ''}
   ${focusOpen() ? efFocus(false) : ''}${ef.keys ? efKeys() : ''}`;
 }
 const EF_TABS = [['today', 'Today', 'sun'], ['inbox', 'Inbox', 'inbox'], ['quests', 'Quests', 'flag'], ['tracked', 'Tracked', 'clock']];
 function efMobileBody() {
   if (st.tab === 'tracked') return `<h1 style="margin-bottom:10px">Tracked</h1>${efTracked(true)}`;
-  if (st.tab === 'quests' && !st.view.startsWith('q:')) return `<h1 style="margin-bottom:14px">Quests</h1><div class="mhome">${aQuestNav()}</div>`;
+  if (st.tab === 'quests' && !st.view.startsWith('q:')) return `<h1 style="margin-bottom:14px">Quests</h1><div class="mhome">${questNav()}</div>`;
   const back = st.view.startsWith('q:') ? `<button class="row" style="color:var(--acc-text);margin:4px 0 12px -4px;font-size:15px" data-a="eftab" data-t="quests">${ic('back')} Quests</button>` : '';
   const seg = st.tab === 'today' ? `<div class="efseg">${[['today', 'Today'], ['plan', 'Plan']].map(([v, l]) => `<button class="${st.view === v ? 'on' : ''}" data-a="nav" data-v="${v}">${l}</button>`).join('')}</div>` : '';
   return `${seg}${back}${efHead()}${efQuickAddFor(st.view)}${efList()}`;
@@ -193,13 +188,11 @@ function efMobile() {
       <button class="${ef.drawer ? 'on' : ''}" data-a="drawer" title="Account and workspaces"><span class="av">D</span><span class="ell">${workspace}</span></button></nav>
     ${ef.drawer ? efDrawer() : ''}${ef.pop ? efPopSheet() : ''}${focusOpen() ? efFocus(true) : ''}<div class="homebar"></div>`;
 }
-VIEWS.E = [efDesk, efMobile, 'vA vEF vE'];
-VIEWS.F = [efDesk, efMobile, 'vA vEF vF'];
 
 /* ---------- Actions ---------- */
 const basePlay = actions.play, baseWs = actions.ws, baseToggle = actions.toggle;
 Object.assign(actions, {
-  play: d => { basePlay(d); if (isEF() && runningTask() && run.task === d.id) openFocus(); },
+  play: d => { basePlay(d); if (runningTask() && run.task === d.id) openFocus(); },
   toggle: d => { baseToggle(d); const t = task(d.id); t.doneToday = t.done; },
   ws: d => { baseWs(d); ef.drawer = false; },
   focusOpen: () => openFocus(),
@@ -228,8 +221,8 @@ Object.assign(actions, {
 });
 
 document.addEventListener('keydown', e => {
-  if (!isEF() || e.key !== 'Escape') return;
-  if (!strict() && focusOpen()) { leaveFocus(); render(); }
+  if (e.key !== 'Escape') return;
+  if (focusOpen()) { leaveFocus(); render(); }
   else if (ef.drawer) { ef.drawer = false; render(); }
 });
 document.addEventListener('input', e => { if (e.target.dataset.notes) task(e.target.dataset.notes).notes = e.target.value; });
@@ -238,4 +231,4 @@ document.getElementById('pill').addEventListener('click', e => {
   if (!ef.leftAt) return toast('Leave the focus view first (the timer must run outside focus)');
   ef.leftAt -= 120e3; run.start = Math.min(run.start, ef.leftAt); ef.hintSeen = false; render();
 });
-setInterval(() => { if (isEF() && hintDue() && !ef.hintSeen) { ef.hintSeen = true; render(); } }, 1000);
+setInterval(() => { if (hintDue() && !ef.hintSeen) { ef.hintSeen = true; render(); } }, 1000);
