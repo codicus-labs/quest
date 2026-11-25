@@ -109,8 +109,10 @@ fn command_digits_switch_views_and_escape_returns_to_the_previous_list() {
     command(&mut rt, '3');
     assert_eq!(rt.state.view, View::Plan);
     assert!(rt.find("plan-page").is_some(), "the planner is drawn");
-    command(&mut rt, '5');
+    command(&mut rt, '4');
     assert_eq!(rt.state.view, View::Logbook);
+    command(&mut rt, '5');
+    assert_eq!(rt.state.view, View::Review);
     let first_quest = rt.state.snap.active_quests().next().map(|q| q.id).expect("a demo quest");
     command(&mut rt, '6');
     assert_eq!(rt.state.view, View::Quest(first_quest), "⌘6 opens the first quest");

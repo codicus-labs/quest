@@ -1,218 +1,327 @@
-//! Review: the weekly review – quest hours vs target, daily average, quest work vs other, hours
-//! per day, hours by quest – with week navigation.
+use chrono::{Days, Local, NaiveDate};
+use quest_domain::{Command, DateField, Placement, Task, TaskList};
+use quest_view::review::{Bucket, Review, Since, offset_week};
+use rune::{Color, Cursor, El, ScrollSpec, Tx, col, el, icon, row, spacer, text};
 
-use chrono::{Days, Local};
-use quest_domain::WeeklyReview;
-use rune::{El, Tx, col, el, row, spacer, text};
-
+use super::{parts, task_modal};
 use crate::format;
 use crate::icons;
-use crate::state::State;
+use crate::state::task_edits::field_key;
+use crate::state::{State, View};
 use crate::theme::{Pal, quest_color, ty};
-use crate::ui::parts;
+use crate::undo::Deletable;
 
-const CHART_H: f32 = 240.0;
+const RANK: &str = "rank";
+
+pub fn browse(s: &mut State, offset: i32, tx: &mut Tx) {
+    if s.view == View::Review
+        && let Some(week) = offset_week(s.review_week, offset)
+    {
+        s.close_task_modal();
+        s.selected_task = None;
+        s.review_week = week;
+        tx.scroll_to_y("review-scroll", 0.0);
+    }
+}
 
 pub fn view(s: &State, p: &Pal) -> El {
-    let review = WeeklyReview::build(&s.snap, s.review_week, &Local, s.now);
+    let review = Review::build(&s.snap, s.review_week, &Local, s.now);
+    let week = &review.tasks;
+    let prev = &review.previous_tasks;
+    let time = &review.time;
     let nav = row()
-        .gap(10.0)
         .center_y()
-        .child(parts::icon_button(
-            "review-prev",
-            "Previous week",
-            &icons::CHEVRON_LEFT,
-            p.muted,
-            p,
-            |s: &mut State, _: &mut Tx| s.review_week = s.review_week - Days::new(7),
-        ))
-        .child(parts::period_label(
-            "review-range",
-            format::week_range(review.week_start),
-            ty::BODY_MEDIUM.lh(22.0),
-            p.text,
-        ))
-        .child(parts::icon_button(
-            "review-next",
-            "Next week",
-            &icons::CHEVRON_RIGHT,
-            p.muted,
-            p,
-            |s: &mut State, _: &mut Tx| s.review_week = s.review_week + Days::new(7),
-        ))
-        .child(
-            parts::button("review-this-week", "This week", Some(&icons::DATE), p, |s: &mut State, _: &mut Tx| {
-                s.review_week = s.this_week()
-            })
-            .radius(18.0)
-            .ml(16.0),
-        );
+        .child(parts::icon_button("review-prev", "Previous week", &icons::CHEVRON_LEFT, p.muted, p, |s, tx| {
+            browse(s, -1, tx)
+        }))
+        .child(parts::period_label("review-range", format::week_range(week.week_start), ty::BODY_MEDIUM, p.text))
+        .child(parts::icon_button("review-next", "Next week", &icons::CHEVRON_RIGHT, p.muted, p, |s, tx| {
+            browse(s, 1, tx)
+        }));
     let header = row()
         .w_full()
-        .items_end()
-        .pb(28.0)
-        .child(
-            col()
-                .gap(10.0)
-                .child(text("Weekly review").font(ty::HEADING).color(p.text))
-                .child(text("How much of the week moved your quests forward.").font(ty::BODY).color(p.muted)),
-        )
+        .center_y()
+        .gap(10.0)
+        .child(icon(&icons::REVIEW, 24.0).color(p.accent))
+        .child(text("Review").font(ty::HEADING).color(p.text))
         .child(spacer())
         .child(nav);
-    let share = review.quest_share_percent();
-    let target_pct = if review.target_ms > 0 { review.quest_ms * 100 / review.target_ms } else { 0 };
-    let cards = row()
+    let metrics = row()
         .w_full()
-        .gap(16.0)
-        .pb(16.0)
-        .child(stat_card(
+        .border_sides([1.0, 0.0, 1.0, 0.0], p.border)
+        .child(metric(
+            "review-done-added",
+            "Done / added",
+            format!("{} / {}", week.completed, week.created),
+            format!("{} / {}", prev.completed, prev.created),
             p,
-            "Quest hours",
-            row()
-                .gap(6.0)
-                .items_end()
-                .child(
-                    text(format::hours(review.quest_ms))
-                        .key("review-quest-hours")
-                        .font(ty::HEADING.lh(40.0))
-                        .color(p.accent),
-                )
-                .child(text(format!("/ {}", format::hours(review.target_ms))).font(ty::BODY.lh(30.0)).color(p.muted)),
-            Some(format!("{target_pct}% of target")),
         ))
-        .child(stat_card(
+        .child(metric(
+            "review-quest-hours",
+            "Quest hours / goal",
+            format!("{} / {}", format::hours(time.quest_ms), format::hours(time.target_ms)),
+            format::hours(review.previous_quest_ms),
             p,
-            "Daily average",
-            text(format::hours(review.daily_average_ms(s.today()))).font(ty::HEADING.lh(40.0)).color(p.text),
-            None,
         ))
-        .child(stat_card(
+        .child(metric(
+            "review-postponements",
+            "Postponements",
+            week.postponements.to_string(),
+            prev.postponements.to_string(),
             p,
-            "Quest work vs other",
-            row()
-                .gap(6.0)
-                .items_end()
-                .child(text(share.to_string()).font(ty::HEADING.lh(40.0)).color(p.text))
-                .child(text("%").font(ty::BODY.lh(30.0)).color(p.muted)),
-            None,
         ));
-    let lower =
-        row().w_full().grow(1.0).min_h(0.0).gap(16.0).child(per_day(s, &review, p).grow(1.4).min_w(0.0)).child(
-            col().grow(1.0).min_w(0.0).gap(16.0).child(by_quest(s, &review, p)).child(work_vs_other(&review, p)),
-        );
-    col().key("review").w_full().h_full().px(30.0).pt(40.0).pb(16.0).child(header).child(cards).child(lower)
-}
-
-fn stat_card(p: &Pal, label: &str, value: El, note: Option<String>) -> El {
-    let mut card = parts::card(p)
-        .grow(1.0)
-        .min_w(0.0)
-        .h(130.0)
-        .px(22.0)
-        .py(22.0)
-        .gap(10.0)
-        .child(parts::caps(label, p))
-        .child(value);
-    if let Some(note) = note {
-        card = card.child(text(note).font(ty::BODY).color(p.faint));
+    let mut ranked = section("Most postponed", p);
+    if review.most_postponed.is_empty() {
+        ranked = ranked.child(empty(p));
     }
-    card
+    for item in &review.most_postponed {
+        let Some(task) = s.snap.task(item.task_id) else { continue };
+        let mut line = row().w_full().center_y().gap(4.0).child(title(s, task, RANK, p)).child(
+            text(format!("↷ {}", item.count))
+                .key(format!("review-count-{}", task.id))
+                .font(ty::SMALL_MEDIUM)
+                .color(p.accent),
+        );
+        if !task.is_done() {
+            line = line.child(actions(task, p));
+        }
+        let body = task_card(line, p)
+            .children(history("Plan", &icons::DATE, &item.plan, week.week_start, p))
+            .children(history("Deadline", &icons::DEADLINE, &item.deadline, week.week_start, p));
+        ranked = ranked.child(detail(s, task, RANK, body, p));
+    }
+    let statuses = row()
+        .w_full()
+        .gap(12.0)
+        .child(status(s, "Carried over", "plan", &review.carried_over, p.muted, p))
+        .child(status(s, "Overdue", "due", &review.overdue, p.error, p));
+    col().key("review").w_full().h_full().child(
+        col()
+            .key("review-scroll")
+            .grow(1.0)
+            .min_h(0.0)
+            .w_full()
+            .items_center()
+            .scroll(ScrollSpec { stick_bottom: false })
+            .scroll_edge_fade(12.0)
+            .child(
+                col()
+                    .w_full()
+                    .max_w(688.0)
+                    .px(24.0)
+                    .pt(8.0)
+                    .pb(32.0)
+                    .gap(16.0)
+                    .child(header)
+                    .child(metrics)
+                    .child(ranked)
+                    .child(statuses)
+                    .child(time_breakdown(s, &review, p)),
+            ),
+    )
 }
 
-fn per_day(s: &State, review: &WeeklyReview, p: &Pal) -> El {
-    let max = review.quest_ms_per_day.iter().copied().max().unwrap_or(0).max(3_600_000) as f32;
-    let today = s.today();
-    let mut bars = row().w_full().grow(1.0).items_end().gap(14.0);
-    for (i, day) in State::week_days(review.week_start).enumerate() {
-        let ms = review.quest_ms_per_day[i];
-        let is_today = day == today;
-        let fill = if is_today { p.accent } else { p.bar_idle };
-        let label_color = if is_today {
-            p.accent
-        } else if ms > 0 {
-            p.muted
-        } else {
-            p.faint
-        };
-        let height = (ms as f32 / max * CHART_H).max(4.0);
+fn metric(key: &str, label: &str, value: String, previous: String, p: &Pal) -> El {
+    col()
+        .grow(1.0)
+        .w(0.0)
+        .min_w(0.0)
+        .padding(12.0)
+        .gap(4.0)
+        .child(text(label.to_owned()).font(ty::SMALL).color(p.muted))
+        .child(text(value).key(key.to_owned()).font(ty::HEADING).color(p.text))
+        .child(text(format!("Prev. {previous}")).font(ty::SMALL).color(p.muted))
+}
+
+fn section(label: &str, p: &Pal) -> El {
+    col().gap(6.0).child(text(label.to_owned()).font(ty::BODY_MEDIUM).color(p.text))
+}
+
+fn empty(p: &Pal) -> El {
+    text("None this week").font(ty::SMALL).color(p.muted).py(6.0)
+}
+
+fn task_card(line: El, p: &Pal) -> El {
+    col().w_full().py(5.0).gap(3.0).border_sides([0.0, 0.0, 1.0, 0.0], p.border).child(line)
+}
+
+fn title(s: &State, task: &Task, group: &'static str, p: &Pal) -> El {
+    if let Some(form) = open_detail(s, task, group) {
+        return row().grow(1.0).min_w(0.0).child(task_modal::title(form, p));
+    }
+    let id = task.id;
+    text(task.title.clone())
+        .key(format!("review-{group}-{id}"))
+        .font(ty::BODY_MEDIUM)
+        .color(p.text)
+        .single_line()
+        .truncate()
+        .min_w(0.0)
+        .role("button")
+        .expanded(false)
+        .grow(1.0)
+        .focusable(true)
+        .cursor(Cursor::Pointer)
+        .on_press_tx(move |s: &mut State, tx| {
+            s.open_task_modal(id);
+            if let Some(form) = &mut s.task_modal {
+                form.review_group = Some(group);
+            }
+            tx.scroll_into_view("task-modal");
+        })
+}
+
+fn open_detail<'a>(s: &'a State, task: &Task, group: &str) -> Option<&'a crate::state::TaskModal> {
+    s.task_modal.as_ref().filter(|form| form.task == task.id && form.review_group == Some(group))
+}
+
+fn detail(s: &State, task: &Task, group: &'static str, body: El, p: &Pal) -> El {
+    body.children(open_detail(s, task, group).map(|_| task_modal::inline(s, task, p)))
+}
+
+fn actions(task: &Task, p: &Pal) -> El {
+    let id = task.id;
+    let date = |field, label, glyph: &'static rune::Icon| {
+        parts::icon_button(format!("review-{}", field_key(Some(id), field)), label, glyph, p.muted, p, move |s, tx| {
+            s.open_calendar(Some(id), field, tx);
+            if let Some(calendar) = &mut s.task_calendar {
+                calendar.review = true;
+            }
+        })
+        .help(label)
+    };
+    row()
+        .center_y()
+        .child(date(DateField::Plan, "Schedule", &icons::DATE))
+        .child(date(DateField::Due, "Set deadline", &icons::DEADLINE))
+        .child(parts::icon_button(
+            format!("review-inbox-{id}"),
+            "Move to Inbox",
+            &icons::INBOX,
+            p.muted,
+            p,
+            move |s, _| {
+                s.dispatch(Command::PlaceTask {
+                    id,
+                    placement: Placement::FileIn(TaskList::Inbox),
+                    today: s.today(),
+                    at: s.clock.now(),
+                });
+            },
+        ))
+        .child(parts::icon_button(format!("review-delete-{id}"), "Delete", &icons::TRASH, p.muted, p, move |s, _| {
+            if s.task_modal.as_ref().is_some_and(|form| form.task == id) {
+                s.close_task_modal();
+            }
+            s.delete(Deletable::Task(id));
+        }))
+}
+
+fn history(
+    label: &str,
+    glyph: &'static rune::Icon,
+    chains: &[Vec<NaiveDate>],
+    start: NaiveDate,
+    p: &Pal,
+) -> Option<El> {
+    if chains.is_empty() {
+        return None;
+    }
+    let path = chains
+        .iter()
+        .map(|chain| {
+            chain
+                .iter()
+                .map(|day| {
+                    day.format(if (start..start + Days::new(7)).contains(day) { "%a" } else { "%b %-d" }).to_string()
+                })
+                .collect::<Vec<_>>()
+                .join(" → ")
+        })
+        .collect::<Vec<_>>()
+        .join(" · ");
+    Some(
+        row()
+            .gap(6.0)
+            .center_y()
+            .child(icon(glyph, 13.0).color(p.muted))
+            .child(text(format!("{label}  {path}")).font(ty::SMALL).color(p.muted).min_w(0.0)),
+    )
+}
+
+fn status(s: &State, label: &str, group: &'static str, entries: &[Since], ink: Color, p: &Pal) -> El {
+    let mut list = section(label, p).grow(1.0).w(0.0).min_w(0.0);
+    if entries.is_empty() {
+        return list.child(empty(p));
+    }
+    for entry in entries {
+        let Some(task) = s.snap.task(entry.task_id) else { continue };
+        let card = task_card(row().w_full().child(title(s, task, group, p)), p)
+            .child(text(format!("since {}", entry.day.format("%b %-d"))).font(ty::SMALL).color(ink));
+        list = list.child(detail(s, task, group, card, p));
+    }
+    list
+}
+
+fn time_breakdown(s: &State, review: &Review, p: &Pal) -> El {
+    let daily = review.time.total_ms_per_day;
+    let max = daily.iter().copied().max().unwrap_or_default().max(1) as f32;
+    let mut bars = row().w_full().items_end().gap(4.0);
+    for (day, ms) in State::week_days(review.time.week_start).zip(daily) {
         bars = bars.child(
             col()
-                .key(format!("review-day-{i}"))
                 .grow(1.0)
-                .min_w(0.0)
+                .w(0.0)
                 .items_center()
-                .gap(10.0)
-                .child(text(format::hours(ms)).font(ty::SMALL_MEDIUM).color(if ms > 0 { label_color } else { p.faint }))
-                .child(el().w(30.0).h(height).radius(4.0).fill(if ms > 0 { fill } else { p.bar_track }))
-                .child(text(day.format("%a").to_string()).font(ty::SMALL).color(label_color)),
-        );
-    }
-    parts::card(p).h_full().padding(22.0).gap(20.0).child(parts::caps("Quest hours · per day", p)).child(bars)
-}
-
-fn by_quest(s: &State, review: &WeeklyReview, p: &Pal) -> El {
-    let max = review.by_quest.first().map_or(1, |q| q.ms.max(1)) as f32;
-    let mut rows = col().w_full().gap(14.0);
-    for (i, hours) in review.by_quest.iter().enumerate() {
-        let Some(quest) = s.snap.quest(hours.quest_id) else { continue };
-        let color = quest_color(quest.color);
-        rows = rows.child(
-            row()
-                .key(format!("review-quest-{i}"))
-                .w_full()
-                .gap(12.0)
-                .center_y()
-                .child(parts::dot(color, 8.0))
-                .child(text(quest.title.clone()).font(ty::BODY).color(p.text).w(150.0).single_line().truncate())
+                .gap(3.0)
                 .child(
-                    row()
-                        .grow(1.0)
-                        .h(8.0)
+                    col()
+                        .w_full()
+                        .h(32.0)
+                        .justify_end()
                         .radius(4.0)
                         .fill(p.bar_track)
-                        .child(el().w_frac(hours.ms as f32 / max).h(8.0).radius(4.0).fill(color)),
+                        .child(el().w_full().h(ms as f32 / max * 32.0).radius(3.0).fill(p.accent)),
                 )
-                .child(row().w(50.0).justify_end().child(text(format::hours(hours.ms)).font(ty::BODY).color(p.muted))),
+                .child(text(day.format("%a").to_string()).font(ty::SMALL).color(p.muted))
+                .child(text(format::hours(ms)).font(ty::SMALL).color(p.text)),
         );
     }
-    if review.by_quest.is_empty() {
-        rows = rows.child(text("No quest time this week").font(ty::BODY).color(p.faint));
-    }
-    parts::card(p).w_full().padding(22.0).gap(18.0).child(parts::caps("Hours by quest", p)).child(rows)
-}
-
-fn work_vs_other(review: &WeeklyReview, p: &Pal) -> El {
-    let total = (review.quest_ms + review.other_ms).max(1) as f32;
-    let bar = row()
-        .key("review-split")
-        .w_full()
-        .h(32.0)
-        .radius(6.0)
-        .fill(p.bar_track)
-        .clip_rounded(6.0)
-        .child(el().w_frac(review.quest_ms as f32 / total).h_full().fill(p.accent));
-    let legend =
-        row()
-            .gap(26.0)
-            .center_y()
-            .child(
-                row().gap(8.0).center_y().child(parts::dot(p.accent, 9.0)).child(
-                    text(format!("Quest work · {}", format::hours(review.quest_ms))).font(ty::BODY).color(p.text),
+    let mut out = section("Where the time went", p).child(bars.mb(2.0));
+    for share in &review.shares {
+        let (name, color) = match share.bucket {
+            Bucket::Quest(id) => {
+                let Some(quest) = s.snap.quest(id) else { continue };
+                (quest.title.as_str(), quest_color(quest.color))
+            }
+            Bucket::Organizing => ("Organizing", p.muted),
+            Bucket::NoQuest => ("No quest", p.bar_idle),
+        };
+        out = out.child(
+            col()
+                .w_full()
+                .gap(2.0)
+                .child(
+                    row()
+                        .w_full()
+                        .gap(8.0)
+                        .center_y()
+                        .child(text(name.to_owned()).grow(1.0).font(ty::SMALL).color(p.text).single_line().truncate())
+                        .child(
+                            text(format!("{} · {:.0}%", format::hours(share.ms), share.fraction * 100.0))
+                                .font(ty::SMALL)
+                                .color(p.muted),
+                        ),
+                )
+                .child(
+                    row()
+                        .w_full()
+                        .h(3.0)
+                        .radius(2.0)
+                        .fill(p.bar_track)
+                        .child(el().w_frac(share.fraction as f32).h_full().radius(2.0).fill(color)),
                 ),
-            )
-            .child(
-                row()
-                    .gap(8.0)
-                    .center_y()
-                    .child(parts::dot(p.bar_idle, 9.0))
-                    .child(text(format!("Other · {}", format::hours(review.other_ms))).font(ty::BODY).color(p.muted)),
-            );
-    parts::card(p)
-        .w_full()
-        .grow(1.0)
-        .padding(22.0)
-        .gap(18.0)
-        .child(parts::caps("Quest work vs other", p))
-        .child(bar)
-        .child(legend)
+        );
+    }
+    out
 }

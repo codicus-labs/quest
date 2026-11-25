@@ -14,12 +14,13 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
 - Listen (Regeln pur in `quest-domain/src/dates.rs`, Abfragen in `quest-view/src/lists.rs`): **Today** (offen und
   Plan oder Deadline ≤ heute; manuelle Reihenfolge, Dringlichkeit als Zeilen-Meta), **Inbox** (offen, ohne Quest und
   ohne Plan-Datum), **Logbook** (erledigt, neueste zuerst). Nur der User verschiebt Daten.
-- Desktop-Shell ohne Top-Navigation: links die Sidebar (Workspace-Wechsler, **Inbox**, **Today**, **Plan**, **Review**,
-  **Logbook** mit Zählern, aktive Quests mit Stundenring, abgeschlossene Quests, neue Quest, Player-Karte mit dem
+- Desktop-Shell ohne Top-Navigation: links die Sidebar (Workspace-Wechsler, **Inbox**, **Today**, **Plan**, **Logbook**,
+  **Review** mit Zählern, aktive Quests mit Stundenring, abgeschlossene Quests, neue Quest, Player-Karte mit dem
   laufenden Timer oder Organizing), in der Mitte die Ansicht, rechts die Spalte „Tracked today“ (Timeline, ein Block
   öffnet den Entry-Editor) und „This week“ (ein-/ausblendbar mit `T` und ⌥⌘I). Dazu **Focus** (ein Task, großer
   Timer), **Quests** und die Seite einer Quest. **Plan** zeigt 14 Tagesabschnitte ab heute und spätere Monatsgruppen, **Review** die Woche
-  (Stunden pro Quest, Organizing-Anteil; Verschiebungen, liegengebliebene und überfällige Tasks aus `WeekTasks`).
+  (Vergleich zur Vorwoche, Verschiebungsverläufe, liegengebliebene und überfällige Tasks sowie alle erfassten Zeiten).
+  Desktop und Mobile nutzen das reine Modell in `quest-view::review`, aufgebaut auf `WeekTasks` und `WeeklyReview`.
   Was Sidebar, Zeilen, Timeline und Player zeigen, rechnet `quest-view` (`nav`, `lists`, `row_meta`, `tracked`,
   `player`).
 - ⌘K Command-Menü („Search or jump…“), Tastatur-first, Light/Dark.
@@ -101,7 +102,8 @@ entfernt; neue Entities oben). Deshalb:
 - **Focus-Timer global:** höchstens ein laufender Timer pro Person über alle Workspaces. `Snapshot::running` listet
   alle laufenden Sessions mit ihrem Workspace, `running_focus()` die maßgebliche, `running_entry()` nur, wenn sie im
   aktiven Workspace liegt. `StartFocus` und `StopFocus` beenden laufende Sessions in jedem Workspace;
-  `DeleteWorkspace` beendet die in diesem Workspace.
+  `DeleteWorkspace` beendet die in diesem Workspace. Beim Beenden werden Organizing-Einträge unter 60 Sekunden
+  weich gelöscht. Task-Einträge bleiben unabhängig von ihrer Dauer erhalten.
 
 ### Vertrag `quest-store` (wird von `quest-app` und `quest-mobile` genutzt)
 

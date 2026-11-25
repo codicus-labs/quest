@@ -23,6 +23,7 @@ pub mod quests;
 pub mod quick_add;
 pub mod reorder;
 pub mod repeat;
+pub mod review;
 pub mod row_meta;
 pub mod tracked;
 pub mod undo;

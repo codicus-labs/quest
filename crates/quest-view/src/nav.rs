@@ -24,7 +24,7 @@ pub enum View {
 impl View {
     pub const ALL: [View; 5] = [View::Home, View::Plan, View::Focus, View::Quests, View::Review];
     /// The desktop sidebar's views, in ⌘1… order.
-    pub const SIDEBAR: [View; 5] = [View::Inbox, View::Today, View::Plan, View::Review, View::Logbook];
+    pub const SIDEBAR: [View; 5] = [View::Inbox, View::Today, View::Plan, View::Logbook, View::Review];
 
     /// The tab after (or before) this view's, wrapping around: Tab and ⇧Tab.
     pub fn cycled(self, back: bool) -> View {

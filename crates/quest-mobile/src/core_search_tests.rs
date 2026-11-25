@@ -103,6 +103,27 @@ fn the_review_defaults_to_this_week() {
 }
 
 #[test]
+fn weekly_review_reads_the_requested_week_and_refreshes_after_task_actions() {
+    let (_dir, core) = open();
+    let task = add(&core, "Draft");
+    core.set_task_planned(task.clone(), Some("2026-11-25".into()), now()).unwrap();
+    core.set_task_planned(task.clone(), Some("2026-11-26".into()), now()).unwrap();
+    let current = core.weekly_review(0, now()).unwrap();
+    assert_eq!(current.week_start, "2026-11-23");
+    assert_eq!(current.current.postponements, 1);
+    assert_eq!(current.most_postponed[0].plan, [["2026-11-25", "2026-11-26"]]);
+    assert_eq!(current.tracked_ms_per_day, [0; 7]);
+    assert_eq!(core.weekly_review(-1, now()).unwrap().current, current.previous);
+    assert_eq!(core.weekly_review(1, now()).unwrap().week_start, "2026-11-30");
+    assert!(matches!(core.weekly_review(i32::MIN, now()), Err(MobileError::InvalidForm { .. })));
+
+    core.delete_task(task, now()).unwrap();
+    assert!(core.weekly_review(0, now()).unwrap().most_postponed.is_empty());
+    core.undo(now()).unwrap();
+    assert_eq!(core.weekly_review(0, now()).unwrap().most_postponed, current.most_postponed);
+}
+
+#[test]
 fn the_search_switches_and_manages_workspaces_like_the_palette() {
     let (_dir, core) = open();
     let work = core.create_workspace("Work".into()).unwrap();

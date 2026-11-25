@@ -1,7 +1,7 @@
 //! Small pieces the views share: chips, checks, buttons, cards, the add-task field.
 
 use quest_domain::{EntityId, Quest, Task};
-use rune::{Align, Color, Cursor, El, Icon, TextEdit, TextStyle, Tx, col, el, icon, row, text, text_input};
+use rune::{Align, Color, Cursor, El, Icon, TextEdit, TextStyle, Tx, el, icon, row, text, text_input};
 
 use crate::icons;
 use crate::state::State;
@@ -79,10 +79,6 @@ pub fn button(
         b = b.child(icon(glyph, 15.0).color(p.text));
     }
     b.child(text(label).font(ty::BODY_MEDIUM).color(p.text)).on_press_tx(on_press)
-}
-
-pub fn card(p: &Pal) -> El {
-    col().radius(12.0).fill(p.card).border(1.0, p.border)
 }
 
 /// A single-line field. `edit` picks the `TextEdit` it binds; `submit` runs on Return.

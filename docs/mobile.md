@@ -600,6 +600,22 @@ Trend- und Balkenanteile, a11y-Texte und Prüfungen kommen aus Rust.
   alle Outcomes, Suche wieder leer, Restore aus dem Archiv, Milestone hinzufügen), `SearchScreenTest`
   (Process Death), `LogWorkQuestTest`. Roborazzi hell/dunkel × Phone/Tablet für alle neuen Screens.
 
+### R5b: Weekly Review
+
+- `QuestCore.weekly_review(offset: i32, now: Moment)` (Kotlin: `weeklyReview`) liefert
+  `WeeklyReviewData`. Offset 0 ist diese lokale Woche, −1 die Vorwoche; positive Werte blättern vor.
+  `current` und `previous` enthalten Done/Added, Verschiebungen und Quest-Zeit; `goal_ms` ist
+  das Wochenziel des aktiven Workspace. Die alte `review(week, now)`-API bleibt kompatibel.
+- `most_postponed` enthält höchstens drei Tasks. `plan` und `deadline` sind Listen getrennter
+  Ketten mit ISO-Kalenderdaten (je Kette Startdatum und alle Folgedaten). `carried_over` und
+  `overdue` liefern offene Tasks mit ISO-`since` aus der gewählten Woche.
+- `tracked_ms_per_day` (Mo–So) enthält auch laufende Zeit bis `now`. `shares` enthält
+  Quest-Metadaten, Organizing und No quest, Dauer in Millisekunden und Anteil 0–1 an aller Zeit.
+- Aktionen über `set_task_planned`, `set_task_due`, `place_task(id, Inbox, null, now)`,
+  `delete_task` und `undo`. Danach den gleichen Offset erneut lesen. Unter 60 Sekunden
+  Organizing werden in der Domain beim Timerwechsel oder Stop weich gelöscht; mobile
+  Timer-Signaturen bleiben unverändert.
+
 ## Phase 6 (Android): Widget, Hintergrund-Sync, Quick-Add, Shortcuts, Kachel
 
 Ein Core pro Prozess (`QuestApplication.core`) für App, Widget, Worker, Quick-Add und Kachel; ein kalter

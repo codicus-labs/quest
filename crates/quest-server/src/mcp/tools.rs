@@ -579,7 +579,8 @@ impl QuestMcp {
     #[tool(
         name = "stop_timer",
         description = "Stops the running timer (task or organizing) now, in whichever workspace it runs (this ignores `workspace`). \
-            None running: no change (stopped is null).",
+            Organizing under 60 seconds is discarded (discarded is true, stopped is null). \
+            None running: no change (discarded is false, stopped is null).",
         annotations(
             title = "Stop timer",
             read_only_hint = false,
@@ -595,12 +596,13 @@ impl QuestMcp {
     ) -> Result<Json<StopOut>, ToolError> {
         let call = self.call(&parts, &input.context)?;
         let stop = |s: &Snapshot| Ok(write::stop_timer(s, &call.clock));
-        let (after, stopped) = account::change(&self.state, call.user, Scope::Timer, call.clock.now, stop).await?;
-        let stopped = stopped
+        let (after, stopped_id) = account::change(&self.state, call.user, Scope::Timer, call.clock.now, stop).await?;
+        let stopped = stopped_id
             .and_then(|id| after.time_entries.iter().find(|entry| entry.id == id))
             .map(|entry| entry_out(&after, entry, &call.clock));
-        let workspace = stopped.as_ref().map(|_| workspace_ref(after.active_workspace()));
-        Ok(Json(StopOut { time_zone: call.clock.zone_name(), stopped, workspace }))
+        let discarded = stopped_id.is_some() && stopped.is_none();
+        let workspace = stopped_id.map(|_| workspace_ref(after.active_workspace()));
+        Ok(Json(StopOut { time_zone: call.clock.zone_name(), stopped, workspace, discarded }))
     }
 
     #[tool(

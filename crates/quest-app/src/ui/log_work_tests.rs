@@ -74,8 +74,9 @@ fn fifteen_minutes_on_a_done_quest_task_show_on_today_in_the_week_and_in_review(
     let tracked_today = text_of(&rt, "page-sub");
     assert!(tracked_today.ends_with(&format!("{} tracked", format::hours(today + QUARTER_HOUR_MS))), "{tracked_today}");
 
-    command(&mut rt, '4');
-    assert_eq!(text_of(&rt, "review-quest-hours"), format::hours(week + QUARTER_HOUR_MS));
+    command(&mut rt, '5');
+    let reviewed = text_of(&rt, "review-quest-hours");
+    assert!(reviewed.starts_with(&format!("{} / ", format::hours(week + QUARTER_HOUR_MS))), "{reviewed}");
 }
 
 #[test]

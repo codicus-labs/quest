@@ -55,6 +55,9 @@ def main():
                 print(match.group(1))
                 return
         sys.exit(1)
+    if question == "organizing-count":
+        print(sum(label.startswith("Organizing ") for label in timeline_labels(tree["accessibility"])))
+        return
     if question in ("split", "joined"):
         labels = list(timeline_labels(tree["accessibility"]))
         if question == "split":
@@ -78,6 +81,8 @@ def main():
         sys.exit(0 if any(title in (e.get("text") or "") for e in tree["elements"]) else 1)
     if question == "key":
         sys.exit(0 if any(e.get("key") == title for e in tree["elements"]) else 1)
+    if question == "no-live-key":
+        sys.exit(1 if any(e.get("key") == title and not e.get("exiting") for e in tree["elements"]) else 0)
     if question == "below":
         rects = {e.get("key"): e.get("rect") for e in tree["elements"]}
         item, viewport = rects.get(title), rects.get(sys.argv[4])

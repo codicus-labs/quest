@@ -329,7 +329,7 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
     let placement = match (cx.window_layout(&anchor), cx.window_layout("app")) {
         (Some([x, y, w, h]), Some([_, _, window_w, window_h])) => {
             let above = window_h - (y + h) < 315.0 && y > window_h - (y + h);
-            if window_w - x >= 380.0 {
+            if !open.review && window_w - x >= 380.0 {
                 if above { Placement::TopStart } else { Placement::BottomStart }
             } else if x + w >= 380.0 {
                 if above { Placement::TopEnd } else { Placement::BottomEnd }

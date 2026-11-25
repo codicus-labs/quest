@@ -14,11 +14,13 @@ pub struct Calendar {
     pub task: Option<EntityId>,
     pub field: DateField,
     pub cursor: NaiveDate,
+    pub review: bool,
 }
 
 impl Calendar {
     pub fn anchor(self) -> String {
-        field_key(self.task, self.field)
+        let key = field_key(self.task, self.field);
+        if self.review { format!("review-{key}") } else { key }
     }
 }
 
@@ -176,7 +178,8 @@ impl State {
     pub fn open_calendar(&mut self, task: Option<EntityId>, field: DateField, tx: &mut Tx) {
         let Some(dates) = self.field_dates(task) else { return };
         self.quest_picker = None;
-        self.task_calendar = Some(Calendar { task, field, cursor: calendar::initial(dates, field, self.today()) });
+        self.task_calendar =
+            Some(Calendar { task, field, cursor: calendar::initial(dates, field, self.today()), review: false });
         if task.is_none() {
             self.quick_fields = Some(self.quick_base());
         }

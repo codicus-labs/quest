@@ -279,6 +279,38 @@ check r5-hint "r5 outside part of the task run is hatched" key timeline-outside-
 check r5-booked "r5 Booking splits task and Organizing at 14:44" split "Design the next chapter"
 check r5-undone "r5 Undo rejoins the running task entry" joined "Design the next chapter"
 
+for stage in current previous picker tomorrow detail deleted restored; do
+  run anna "$root/r5b-$stage" r5b-review "r5b-$stage" --demo --now 2026-11-27T14:40 --scene review-demo-seed --at "mark:$stage" \
+    || fail "r5b $stage script (see $out/r5b-$stage.log)"
+done
+review_count=review-count-00000000-0000-4000-8000-000000000005
+check r5b-current "r5b Cmd+5 shows Review" key review
+check r5b-current "r5b current week starts on Monday" keytext review-range "Nov 23 – 29"
+check r5b-previous "r5b [ shows the previous week" keytext review-range "Nov 16 – 22"
+check r5b-previous "r5b the right column still shows This week" key this-week
+check r5b-current "r5b the task started with four postponements" keytext "$review_count" "↷ 4"
+check r5b-picker "r5b Schedule opens the date picker" key task-calendar
+check r5b-tomorrow "r5b Tomorrow adds a postponement" keytext "$review_count" "↷ 5"
+check r5b-detail "r5b a title opens the standard task detail" key task-modal-title
+check r5b-deleted "r5b Delete removes the task from the ranking" no-live-key "$review_count"
+check r5b-deleted "r5b Delete offers Undo" key toast-action
+check r5b-restored "r5b Undo restores the task and its history" keytext "$review_count" "↷ 5"
+
+for stage in before running returned after; do
+  run anna "$root/r5b-snippet-$stage" r5b-snippet "r5b-snippet-$stage" --demo --at "mark:$stage" \
+    || fail "r5b snippet $stage script (see $out/r5b-snippet-$stage.log)"
+done
+check r5b-snippet-running "r5b Organize starts a session" key player-back-to
+check r5b-snippet-returned "r5b immediate Back to Task resumes Focus" key focus-timer
+before=$(tree "$out/r5b-snippet-before.json" organizing-count _)
+running=$(tree "$out/r5b-snippet-running.json" organizing-count _)
+after=$(tree "$out/r5b-snippet-after.json" organizing-count _)
+if [ -n "$before" ] && [ "$running" = "$((before + 1))" ] && [ "$before" = "$after" ]; then
+  pass "r5b Back to Task removes the short Organizing block"
+else
+  fail "r5b Organizing blocks before/running/after: $before/$running/$after"
+fi
+
 echo "$summary"
 echo "PNGs: $out"
 if [ "$failures" -gt 0 ]; then

@@ -27,6 +27,8 @@ pub struct WeeklyReview {
     pub week_start: NaiveDate,
     /// Quest work per day, Monday first.
     pub quest_ms_per_day: [i64; 7],
+    /// All tracked time per day, Monday first.
+    pub total_ms_per_day: [i64; 7],
     /// Quests with tracked time, most time first.
     pub by_quest: Vec<QuestHours>,
     /// Each day's quest work split by quest (Monday first), in `by_quest`'s order, without zeros.
@@ -65,6 +67,7 @@ impl WeeklyReview {
         let bounds: Vec<DateTime<Utc>> = (0..=7).map(|i| midnight(start + Days::new(i), tz)).collect();
 
         let mut quest_ms_per_day = [0; 7];
+        let mut total_ms_per_day = [0; 7];
         let mut by_quest: Vec<QuestHours> = Vec::new();
         let mut by_quest_per_day: [Vec<QuestHours>; 7] = Default::default();
         let mut other_ms = 0;
@@ -77,6 +80,7 @@ impl WeeklyReview {
                 if ms == 0 {
                     continue;
                 }
+                total_ms_per_day[day] += ms;
                 if organizing {
                     organizing_ms += ms;
                     continue;
@@ -98,6 +102,7 @@ impl WeeklyReview {
         WeeklyReview {
             week_start: start,
             quest_ms_per_day,
+            total_ms_per_day,
             quest_ms: quest_ms_per_day.iter().sum(),
             by_quest,
             by_quest_per_day,
@@ -108,11 +113,36 @@ impl WeeklyReview {
     }
 }
 
-/// The UTC instant a local day starts (the earlier one if the clock went back).
+/// The first representable instant at or after local midnight.
 fn midnight<Tz: TimeZone>(day: NaiveDate, tz: &Tz) -> DateTime<Utc> {
     let naive = day.and_hms_opt(0, 0, 0).unwrap_or_default();
-    tz.from_local_datetime(&naive).earliest().map_or_else(|| naive.and_utc(), |t| t.with_timezone(&Utc))
+    let at = |seconds| {
+        let local = naive.checked_add_signed(chrono::TimeDelta::seconds(seconds))?;
+        tz.from_local_datetime(&local).earliest().map(|t| t.to_utc())
+    };
+    if let Some(midnight) = at(0) {
+        return midnight;
+    }
+    for hour in 1..=24 {
+        let mut hi = hour * 3_600;
+        let Some(mut first) = at(hi) else { continue };
+        let mut lo = hi - 3_600;
+        while hi - lo > 1 {
+            let mid = (hi + lo) / 2;
+            if let Some(valid) = at(mid) {
+                hi = mid;
+                first = valid;
+            } else {
+                lo = mid;
+            }
+        }
+        return first;
+    }
+    naive.and_utc()
 }
+
+#[cfg(test)]
+mod tests;
 
 fn percent(part: i64, total: i64) -> u8 {
     if total == 0 {

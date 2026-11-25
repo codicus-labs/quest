@@ -134,7 +134,7 @@ postponement, as in the apps. `create_task` without `planned_on` leaves the task
 | `create_quest` / `update_quest` | Title, color, status | | – / ✓ | – / ✓ |
 | `complete_quest` | Quest done (the apps show it under archived quests) | | – | ✓ |
 | `add_checklist_item` / `check_checklist_item` / `rename_checklist_item` / `delete_checklist_item` | A task's checklist; each answers the whole checklist | | – / – / ✓ / ✓ | – / ✓ / ✓ / ✓ |
-| `start_timer` / `stop_timer` | Track a task or organizing now / stop | | – | – / ✓ |
+| `start_timer` / `stop_timer` | Track a task or organizing now / stop; Organizing under 60 seconds is soft-deleted (`discarded: true`, `stopped: null`) | | – | – / ✓ |
 | `log_work` | Finished session for an existing or new (done) task | | – | – |
 | `capture_text` | AI capture in the call's workspace (its quests and tasks as context): proposal, or with `apply: true` creates it all or nothing. Only when AI is configured (`QUEST_AI_*`) and the account turned AI features on in the app settings (otherwise hidden; a call answers `ai_disabled`); same rate limit, validation and commands as the apps | | – | – |
 

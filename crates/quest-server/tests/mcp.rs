@@ -345,8 +345,11 @@ async fn time_tools() {
     assert_eq!((&running["running"]["kind"], &running["running"]["task"]), (&json!("organizing"), &Value::Null));
 
     let stopped = s.ok("stop_timer", json!({})).await;
-    assert_eq!((&stopped["stopped"]["running"], &stopped["stopped"]["kind"]), (&json!(false), &json!("organizing")));
-    assert!(s.ok("stop_timer", json!({})).await["stopped"].is_null());
+    assert_eq!(stopped["discarded"], true);
+    assert!(stopped["stopped"].is_null());
+    let no_timer = s.ok("stop_timer", json!({})).await;
+    assert_eq!(no_timer["discarded"], false);
+    assert!(no_timer["stopped"].is_null());
     s.refuses("stop_timer", json!({ "time_zone": "Nowhere" }), "invalid_input").await;
 
     let yesterday = (Utc::now().with_timezone(&chrono_tz::Europe::Berlin).date_naive() - Days::new(1)).to_string();
@@ -363,12 +366,12 @@ async fn time_tools() {
     .await;
 
     let entries = s.ok("list_time_entries", json!({ "from": yesterday, "to": today() })).await;
-    assert_eq!(entries["entries"].as_array().unwrap().len(), 3);
+    assert_eq!(entries["entries"].as_array().unwrap().len(), 2);
     s.refuses("list_time_entries", json!({ "from": today(), "to": yesterday }), "invalid_input").await;
 
     let review = s.ok("get_week_review", json!({ "week_of": yesterday })).await;
     assert!(review["other_minutes"].as_i64().unwrap() >= 120, "{review}");
-    assert!(review["organizing_minutes"].is_i64(), "{review}");
+    assert_eq!(review["organizing_minutes"], 0, "{review}");
     s.refuses("get_week_review", json!({ "week_of": "last week" }), "invalid_input").await;
 }
 

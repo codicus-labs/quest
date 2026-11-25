@@ -41,6 +41,51 @@ fn organizing_stops_the_running_session_and_remembers_where_to_go_back() {
 }
 
 #[test]
+fn timer_stops_discard_only_organizing_under_one_minute() {
+    use chrono::TimeDelta;
+    let start = at(9, 0);
+    for (elapsed, replace, discarded) in [(0, false, true), (59_999, true, true), (60_000, false, false)] {
+        let (mut r, _, task) = setup();
+        let organizing = EntityId::new();
+        let end = start + TimeDelta::milliseconds(elapsed);
+        r.run(Command::StartOrganizing { entry_id: organizing, origin_task_id: Some(task), at: start });
+        if replace {
+            r.run(Command::StartFocus { entry_id: EntityId::new(), task_id: task, at: end });
+            assert_eq!(r.snapshot.running_entry().unwrap().task_id, Some(task));
+        } else {
+            r.run(Command::StopFocus { at: end });
+            assert!(r.snapshot.running_entry().is_none());
+        }
+        assert_eq!(r.snapshot.time_entries.iter().any(|e| e.id == organizing), !discarded);
+        assert_eq!(r.snapshot.trash.iter().any(|e| e.id == organizing), discarded);
+    }
+    let (mut r, _, task) = setup();
+    let id = EntityId::new();
+    r.run(Command::StartFocus { entry_id: id, task_id: task, at: start });
+    r.run(Command::StopFocus { at: start + TimeDelta::seconds(1) });
+    assert_eq!(r.snapshot.time_entries[0].id, id);
+}
+
+#[test]
+fn undo_rebook_also_joins_a_discarded_snippet() {
+    let (mut r, _, task) = setup();
+    let (focus, organizing) = (EntityId::new(), EntityId::new());
+    let end = at(9, 40) + chrono::TimeDelta::seconds(30);
+    r.run(Command::StartFocus { entry_id: focus, task_id: task, at: at(9, 0) });
+    r.run(Command::RebookAsOrganizing {
+        expected_task_entry: Some(focus),
+        entry_id: organizing,
+        since: at(9, 40),
+        now: end,
+    });
+    r.run(Command::StopFocus { at: end });
+    assert_eq!(r.snapshot.time_entries.len(), 1);
+    r.run(Command::UndoOrganizingRebook { entry_id: organizing, at: at(9, 41) });
+    assert_eq!(r.snapshot.time_entries[0].ended_at, Some(end));
+    assert!(r.snapshot.running_entry().is_none());
+}
+
+#[test]
 fn rebooking_splits_the_running_task_session_at_since() {
     let (mut r, quest, task) = setup();
     let focus = EntityId::new();

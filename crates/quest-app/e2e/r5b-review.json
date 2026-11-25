@@ -1,0 +1,18 @@
+[
+  {"t":0.2,"type":"key","name":"5","cmd":true},
+  {"t":0.4,"type":"mark","name":"current"},
+  {"t":0.6,"type":"type","text":"["},
+  {"t":0.8,"type":"mark","name":"previous"},
+  {"t":1.0,"type":"type","text":"]"},
+  {"t":1.2,"type":"tap","key":"review-task-00000000-0000-4000-8000-000000000005-plan"},
+  {"t":1.4,"type":"mark","name":"picker"},
+  {"t":1.6,"type":"tap","key":"calendar-Tomorrow"},
+  {"t":1.8,"type":"mark","name":"tomorrow"},
+  {"t":2.0,"type":"tap","key":"review-rank-00000000-0000-4000-8000-000000000005"},
+  {"t":2.2,"type":"mark","name":"detail"},
+  {"t":2.4,"type":"key","name":"Escape"},
+  {"t":2.6,"type":"tap","key":"review-delete-00000000-0000-4000-8000-000000000005"},
+  {"t":2.8,"type":"mark","name":"deleted"},
+  {"t":3.0,"type":"key","name":"z","cmd":true},
+  {"t":3.2,"type":"mark","name":"restored"}
+]

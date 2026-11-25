@@ -93,7 +93,8 @@ line_icon!(
     r#"<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M2.5 12h2M19.5 12h2M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>"#
 );
 line_icon!(PLAN, r#"<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>"#);
-line_icon!(REVIEW, r#"<path d="M5 20V11M12 20V4M19 20v-6"/>"#);
+line_icon!(REVIEW, r#"<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 15v-3m4 3V8m4 7v-5"/>"#);
+line_icon!(DEADLINE, r#"<path d="M5 21V4m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0"/>"#);
 line_icon!(LOGBOOK, r#"<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 11.5l2 2 4-4"/>"#);
 line_icon!(ADD, r#"<path d="M12 5v14M5 12h14"/>"#);
 line_icon!(STOP, r#"<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>"#);

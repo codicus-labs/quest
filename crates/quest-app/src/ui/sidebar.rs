@@ -28,8 +28,8 @@ pub fn view(s: &State, p: &Pal) -> El {
         .child(nav_item(s, View::Inbox, &icons::INBOX, p.icon_inbox, counts.inbox, p))
         .child(nav_item(s, View::Today, &icons::TODAY, p.accent, counts.today, p))
         .child(nav_item(s, View::Plan, &icons::PLAN, p.icon_plan, counts.plan, p))
-        .child(nav_item(s, View::Review, &icons::REVIEW, p.muted, 0, p))
-        .child(nav_item(s, View::Logbook, &icons::LOGBOOK, p.icon_logbook, 0, p));
+        .child(nav_item(s, View::Logbook, &icons::LOGBOOK, p.icon_logbook, 0, p))
+        .child(nav_item(s, View::Review, &icons::REVIEW, p.muted, 0, p));
     let mut quests = col().w_full().gap(1.0);
     for quest in &week.quests {
         quests = quests.child(quest_item(s, quest, week.target_ms, p));

@@ -633,8 +633,12 @@ fn stop_running(snapshot: &Snapshot, at: DateTime<Utc>, which: impl Fn(&RunningF
         .running
         .iter()
         .filter(|running| which(running))
-        .map(|RunningFocus { entry, .. }| {
-            write(EntityKind::TimeEntry, entry.id, fields::ENTRY_ENDED_AT, json!(at.max(entry.started_at)))
+        .flat_map(|RunningFocus { entry, .. }| {
+            let ended_at = at.max(entry.started_at);
+            let end = write(EntityKind::TimeEntry, entry.id, fields::ENTRY_ENDED_AT, json!(ended_at));
+            let discard = crate::model::is_organizing_snippet(entry, ended_at)
+                .then(|| write(EntityKind::TimeEntry, entry.id, fields::DELETED_AT, json!(ended_at)));
+            std::iter::once(end).chain(discard)
         })
         .collect()
 }

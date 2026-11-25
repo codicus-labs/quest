@@ -43,7 +43,7 @@ fn switching_views_flies_no_card() {
             settle(&mut rt);
             command(&mut rt, to);
             let page_key = |key: char| {
-                ["list-page", "list-page", "plan-page", "review", "list-page"][(key as usize) - ('1' as usize)]
+                ["list-page", "list-page", "plan-page", "list-page", "review"][(key as usize) - ('1' as usize)]
             };
             assert_eq!(rt.presented(page_key(to)).map(|(_, opacity)| opacity), Some(1.0), "⌘{from} → ⌘{to}");
             if page_key(from) != page_key(to) {

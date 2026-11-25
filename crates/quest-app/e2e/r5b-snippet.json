@@ -1,0 +1,9 @@
+[
+  {"t":0.2,"type":"mark","name":"before"},
+  {"t":0.4,"type":"type","text":"o"},
+  {"t":0.6,"type":"mark","name":"running"},
+  {"t":0.8,"type":"tap","key":"player-back-to"},
+  {"t":1.0,"type":"mark","name":"returned"},
+  {"t":1.2,"type":"key","name":"Escape"},
+  {"t":1.4,"type":"mark","name":"after"}
+]

@@ -542,8 +542,9 @@ pub struct TimerOut {
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct StopOut {
     pub time_zone: String,
-    /// The session that was stopped; null if no timer was running.
+    /// The session that was stopped; null if discarded or no timer was running.
     pub stopped: Option<EntryOut>,
+    pub discarded: bool,
     /// The workspace the stopped session is in; null if no timer was running.
     pub workspace: Option<RefOut>,
 }

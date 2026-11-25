@@ -27,6 +27,7 @@ pub enum Shortcut {
     ToggleTracked,
     /// J / ↓ and K / ↑: the next or previous row.
     JumpToday,
+    ReviewWeek(i32),
     Nudge {
         up: bool,
     },
@@ -101,6 +102,8 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
             "b" => Some(Shortcut::BookOrganizing),
             "e" if !ev.mods.shift => Some(Shortcut::EditNotes),
             "g" => Some(Shortcut::JumpToday),
+            "[" => Some(Shortcut::ReviewWeek(-1)),
+            "]" => Some(Shortcut::ReviewWeek(1)),
             "j" => Some(Shortcut::Select { next: true }),
             "k" => Some(Shortcut::Select { next: false }),
             "t" => Some(Shortcut::ToggleTracked),
@@ -158,6 +161,8 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Shortcut::ToggleTracked => toggle_tracked(s),
         Shortcut::JumpToday if s.view == View::Plan => crate::ui::plan::jump_today(s, tx),
         Shortcut::JumpToday => return false,
+        Shortcut::ReviewWeek(offset) if s.view == View::Review => crate::ui::review::browse(s, offset, tx),
+        Shortcut::ReviewWeek(_) => return false,
         Shortcut::Nudge { up } => return crate::ui::drag::nudge(s, up, tx),
         Shortcut::Select { next } => {
             if !s.select_next_row(next) {
@@ -237,7 +242,9 @@ pub fn quick_picker(s: &mut State, picker: Picker, tx: &mut Tx) {
 }
 
 pub fn toggle_tracked(s: &mut State) {
-    s.right_column = !s.right_column;
+    if s.view != View::Review {
+        s.right_column = !s.right_column;
+    }
 }
 
 fn on_task_key(s: &mut State, task: EntityId, key: TaskKey, tx: &mut Tx) {
@@ -281,7 +288,8 @@ mod tests {
     fn command_digits_pick_the_sidebars_views_then_its_quests() {
         assert_eq!(shortcut(&key(Key::Command('1'))), Some(Shortcut::Go(View::Inbox)));
         assert_eq!(shortcut(&key(Key::Command('2'))), Some(Shortcut::Go(View::Today)));
-        assert_eq!(shortcut(&key(Key::Command('5'))), Some(Shortcut::Go(View::Logbook)));
+        assert_eq!(shortcut(&key(Key::Command('4'))), Some(Shortcut::Go(View::Logbook)));
+        assert_eq!(shortcut(&key(Key::Command('5'))), Some(Shortcut::Go(View::Review)));
         assert_eq!(shortcut(&key(Key::Command('6'))), Some(Shortcut::GoQuest(0)));
         assert_eq!(shortcut(&key(Key::Command('9'))), Some(Shortcut::GoQuest(3)));
     }

@@ -26,7 +26,7 @@ mod quest_editor;
 mod quest_picker;
 mod quests;
 pub(crate) mod recurrence;
-mod review;
+pub(crate) mod review;
 mod shortcuts;
 pub mod sidebar;
 pub(crate) mod task_fields;
@@ -139,7 +139,7 @@ fn shell(s: &State, p: &Pal, cx: &mut Cx<State>) -> El {
         .window_drag()
         .child(spacer())
         .child(chrome::search_button(p))
-        .child(right_column_toggle(s, p));
+        .children((s.view != View::Review).then(|| right_column_toggle(s, p)));
     let mut main =
         col().key("main").grow(1.0).min_w(0.0).h_full().fill(p.bg).child(band).child(page.grow(1.0).min_h(0.0));
     if let Some(notice) = &s.notice {
@@ -152,7 +152,7 @@ fn shell(s: &State, p: &Pal, cx: &mut Cx<State>) -> El {
         .fill(p.bg)
         .child(sidebar::view(s, p))
         .child(main)
-        .children(s.right_column.then(|| tracked::column(s, p, cx)))
+        .children((s.right_column || s.view == View::Review).then(|| tracked::column(s, p, cx)))
 }
 
 fn right_column_toggle(s: &State, p: &Pal) -> El {

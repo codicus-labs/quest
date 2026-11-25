@@ -23,6 +23,9 @@ pub struct Snapshot {
     /// Postponements of live tasks.
     pub postponements: Vec<Postponement>,
     pub time_entries: Vec<TimeEntry>,
+    /// Discarded rebooked sessions retain their end so rebook Undo can rejoin the original.
+    #[doc(hidden)]
+    pub discarded_rebooks: Vec<TimeEntry>,
     pub settings: Settings,
     /// Soft-deleted records that can be restored, most recently deleted first.
     pub trash: Vec<Trashed>,
@@ -116,6 +119,20 @@ impl Snapshot {
         let mut time_entries: Vec<TimeEntry> =
             live(store, placements, EntityKind::TimeEntry, workspace, TimeEntry::from_fields).collect();
         time_entries.sort_by_key(|e| (e.started_at, e.id));
+        let discarded_rebooks = store
+            .entities(EntityKind::TimeEntry)
+            .filter_map(|(id, values)| {
+                let discarded_at = deleted_at(values)?;
+                if placements.of(EntityKind::TimeEntry, id) != workspace {
+                    return None;
+                }
+                let entry = TimeEntry::from_fields(id, values)?;
+                (entry.rebooked_from.is_some()
+                    && entry.ended_at == Some(discarded_at)
+                    && crate::model::is_organizing_snippet(&entry, discarded_at))
+                .then_some(entry)
+            })
+            .collect();
         let settings = Settings::from_fields(store.get(EntityKind::Settings, workspace));
         let trash = trash(store, placements, workspace);
         let running = running(store, placements, &workspaces);
@@ -131,6 +148,7 @@ impl Snapshot {
             checklist,
             postponements,
             time_entries,
+            discarded_rebooks,
             settings,
             trash,
             default_revived,

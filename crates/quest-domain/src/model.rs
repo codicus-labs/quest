@@ -183,6 +183,10 @@ pub struct TimeEntry {
     pub ended_at: Option<DateTime<Utc>>,
 }
 
+pub(crate) fn is_organizing_snippet(entry: &TimeEntry, end: DateTime<Utc>) -> bool {
+    entry.kind == EntryKind::Organizing && end - entry.started_at < chrono::TimeDelta::seconds(60)
+}
+
 impl TimeEntry {
     pub fn is_running(&self) -> bool {
         self.ended_at.is_none()

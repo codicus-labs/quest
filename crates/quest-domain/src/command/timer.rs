@@ -48,7 +48,12 @@ pub(super) fn undo_rebook(
     entry_id: EntityId,
     at: DateTime<Utc>,
 ) -> Result<Vec<FieldWrite>, CommandError> {
-    let booked = snapshot.time_entries.iter().find(|e| e.id == entry_id).ok_or(CommandError::UnknownEntry(entry_id))?;
+    let booked = snapshot
+        .time_entries
+        .iter()
+        .chain(&snapshot.discarded_rebooks)
+        .find(|e| e.id == entry_id)
+        .ok_or(CommandError::UnknownEntry(entry_id))?;
     let original = booked
         .rebooked_from
         .and_then(|id| snapshot.time_entries.iter().find(|e| e.id == id))

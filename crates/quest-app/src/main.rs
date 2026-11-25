@@ -12,6 +12,7 @@ mod icons;
 mod keys;
 mod loopback;
 mod menu_bar;
+mod review_demo;
 mod settings;
 mod state;
 mod theme;
@@ -79,6 +80,8 @@ const SCENES: &[Scene] = &[
         s.open_new_quest();
     }),
     ("review", |s| s.go(View::Review)),
+    ("review-demo-seed", review_demo::seed),
+    ("review-demo-seed-light", |s| light(s, review_demo::seed)),
     ("palette", |s| s.overlay = Overlay::Palette),
     ("account", |s| s.overlay = Overlay::Account),
     ("log-work", |s| {

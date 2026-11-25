@@ -8,6 +8,7 @@ use crate::undo::Deletable;
 pub struct TaskModal {
     pub task: EntityId,
     pub tray_alias: bool,
+    pub review_group: Option<&'static str>,
     pub title: TextEdit,
     pub checklist: super::checklist::ChecklistEdits,
 }
@@ -17,6 +18,7 @@ impl TaskModal {
         TaskModal {
             task: EntityId::new(),
             tray_alias: false,
+            review_group: None,
             title: TextEdit::default(),
             checklist: Default::default(),
         }
@@ -33,6 +35,7 @@ impl State {
         self.task_modal = Some(TaskModal {
             task,
             tray_alias: false,
+            review_group: None,
             title: TextEdit::new(t.title.clone()),
             checklist: Default::default(),
         });
