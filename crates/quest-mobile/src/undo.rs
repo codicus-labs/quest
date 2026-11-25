@@ -4,7 +4,7 @@
 //! back. The core performs the returned `UndoAction`.
 
 use chrono::{DateTime, Duration, Utc};
-use quest_domain::{EntityId, QuestStatus};
+use quest_domain::{EntityId, QuestStatus, Task};
 use quest_view::undo::{Deletable, Shown, TOAST_SECONDS, TaskEdit, Toast, UndoEffect, UndoEvent, UndoState};
 
 use crate::types::UndoToast;
@@ -21,10 +21,11 @@ pub(crate) enum UndoAction {
     },
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct MobileUndo {
     deletes: UndoState,
     completion_label: Option<(String, DateTime<Utc>)>,
+    lingering: Vec<(Task, DateTime<Utc>)>,
 }
 
 impl MobileUndo {
@@ -57,6 +58,27 @@ impl MobileUndo {
         self.completion_label = Some((format!("{verb} “{title}”"), now + Duration::seconds(TOAST_SECONDS)));
     }
 
+    pub fn list_toggled(&mut self, edit: TaskEdit, before: Task, now: DateTime<Utc>) {
+        self.lingering.retain(|(task, _)| task.id != before.id);
+        if before.is_done() {
+            self.toggled(edit, &before.title, now);
+            return;
+        }
+        self.task_edited(edit, now);
+        self.completion_label = Some(("Done".into(), now + Duration::seconds(5)));
+        self.lingering.push((before, now));
+    }
+
+    pub fn lingering(&self, task: &Task, now: DateTime<Utc>) -> Option<&Task> {
+        self.lingering.iter().find_map(|(before, at)| {
+            (before.id == task.id && quest_view::undo::lingering(*at, task, now)).then_some(before)
+        })
+    }
+
+    pub fn next_wake(&self) -> Option<DateTime<Utc>> {
+        self.expires().into_iter().chain(self.lingering.iter().map(|(_, at)| quest_view::undo::linger_until(*at))).min()
+    }
+
     pub fn undo(&mut self, now: DateTime<Utc>) -> Option<UndoAction> {
         self.completion_label = None;
         match self.step(UndoEvent::Undo, now) {
@@ -79,6 +101,7 @@ impl MobileUndo {
 
     /// Time passed: a toast whose time is up goes.
     pub fn tick(&mut self, now: DateTime<Utc>) {
+        self.lingering.retain(|(_, at)| now < quest_view::undo::linger_until(*at));
         self.completion_label = self.completion_label.take().filter(|(_, until)| now < *until);
         self.step(UndoEvent::Tick, now);
     }

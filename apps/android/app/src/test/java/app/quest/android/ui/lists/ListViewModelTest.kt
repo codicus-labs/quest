@@ -28,7 +28,7 @@ class ListViewModelTest {
         assertEquals(ListUiState.Loading, vm.state.value)
 
         vm.show(ListKind.Inbox)
-        assertEquals(ListUiState.Ready(ListSamples.inbox, ""), vm.state.value)
+        assertEquals(ListSamples.inbox, (vm.state.value as ListUiState.Ready).list)
 
         vm.show(null)
         assertEquals(ListUiState.Loading, vm.state.value)
@@ -43,7 +43,7 @@ class ListViewModelTest {
 
         vm.add()
 
-        assertEquals(listOf("add-to-list ${ListKind.Quest("q3")} Sketch the pricing"), core.calls)
+        assertEquals(listOf("quick-add Sketch the pricing||q3|null"), core.calls)
         assertEquals("", (vm.state.value as ListUiState.Ready).draft)
     }
 

@@ -18,8 +18,20 @@ impl QuestCore {
     pub fn task_list(&self, kind: ListKind, now: Moment) -> Result<TaskList, MobileError> {
         guard(|| {
             let now = Now::parse(&now)?;
-            let toast = self.undo_state().toast();
-            lists::task_list(&self.store().snapshot(), &kind, now, toast)
+            let snapshot = self.store().snapshot();
+            let undo = self.undo_state();
+            lists::task_list(&snapshot, &kind, now, undo.toast(), |task| undo.lingering(task, now.at))
+        })
+    }
+
+    /// Like toggle_task, but keeps a newly completed row in place and shows “Done”.
+    pub fn toggle_list_task(&self, task_id: String, now: Moment) -> Result<(), MobileError> {
+        guard(|| {
+            let now = Now::parse(&now)?;
+            let before = self.task(&task_id)?;
+            self.dispatch(crate::commands::toggle_task(&before, now))?;
+            self.remember_list_completion(before, now);
+            Ok(())
         })
     }
 

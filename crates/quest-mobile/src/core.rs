@@ -143,7 +143,7 @@ impl QuestCore {
     pub fn next_wake_ms(&self, now: Moment) -> Result<i64, MobileError> {
         guard(|| {
             let now = Now::parse(&now)?;
-            let toast_until = self.undo_state().expires();
+            let toast_until = self.undo_state().next_wake();
             Ok(self.next_wake(&self.store(), now, toast_until))
         })
     }
@@ -158,7 +158,7 @@ impl QuestCore {
             let toast_until = {
                 let mut undo = self.undo_state();
                 undo.tick(now.at);
-                undo.expires()
+                undo.next_wake()
             };
             let store = self.store();
             generate_due_tasks(&store, &mut ticks, now);
@@ -186,6 +186,14 @@ impl QuestCore {
         if let Some(edit) = after.task(before.id).and_then(|task| quest_view::undo::TaskEdit::completion(before, task))
         {
             self.undo_state().toggled(edit, &before.title, now.at);
+        }
+    }
+
+    pub(crate) fn remember_list_completion(&self, before: quest_domain::Task, now: Now) {
+        let after = self.store().snapshot();
+        if let Some(edit) = after.task(before.id).and_then(|task| quest_view::undo::TaskEdit::completion(&before, task))
+        {
+            self.undo_state().list_toggled(edit, before, now.at);
         }
     }
 

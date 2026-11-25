@@ -362,6 +362,7 @@
     <string name="nav_today">Today</string>
     <string name="nav_inbox">Inbox</string>
     <string name="nav_tracked">Tracked</string>
+    <string name="timer_stop">Stop timer</string>
     <string name="timer_stop_label">Stop timer, %1$s</string>
     <string name="list_add">New task</string>
     <string name="list_inbox_zero">Inbox zero</string>

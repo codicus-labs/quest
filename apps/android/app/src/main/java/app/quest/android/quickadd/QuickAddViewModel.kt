@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uniffi.quest_mobile.DayValue
 import uniffi.quest_mobile.QuickAddForm
+import uniffi.quest_mobile.QuickFields
 
 /**
  * What is typed and chosen, in the [SavedStateHandle] so it survives process death. [filled] says the
@@ -51,7 +52,7 @@ sealed interface QuickAddUiState {
 
 private const val INPUTS_KEY = "quickadd.inputs"
 
-/** The quick-add sheet (share target, shortcut, tile): title, description, quest and day → `quick_add`. */
+/** The quick-add sheet (share target, shortcut, tile): uses the same draft parser as the lists. */
 class QuickAddViewModel(
     private val core: CoreHolder,
     private val savedState: SavedStateHandle,
@@ -119,7 +120,8 @@ class QuickAddViewModel(
     /** Adds the task; the core checks the title, quest and day. */
     fun add() {
         val current = inputs.value
-        val outcome = core.perform { c, now -> c.quickAdd(current.title, current.description, current.questId, current.day, now) }
+        val defaults = QuickFields(current.questId, current.day, null)
+        val outcome = core.perform { c, now -> c.addQuickDraft(current.title, current.description, defaults, now) }
         error.value = outcome.failureMessage()
         if (outcome is Outcome.Done) added.value = true
     }

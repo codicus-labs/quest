@@ -685,6 +685,25 @@ class FakeCore(
         return if (beforeStatusChange == null) list else list.copy(toast = quests.toast)
     }
 
+    override fun quickDayLabel(iso: String) = iso
+
+    override fun listQuickDefaults(kind: ListKind, now: Moment) = uniffi.quest_mobile.QuickFields(
+        (kind as? ListKind.Quest)?.questId,
+        quickAddForm.today.iso.takeIf { kind == ListKind.Today },
+        null,
+    )
+
+    override fun toggleListTask(id: String, now: Moment) = toggleTask(id, now)
+    override fun setTaskDue(id: String, day: String?, now: Moment) = record("due $id $day")
+    override fun previewQuickAdd(text: String, defaults: uniffi.quest_mobile.QuickFields, now: Moment) =
+        uniffi.quest_mobile.QuickPreview(text.trim(), defaults)
+    override fun addQuickDraft(text: String, description: String, defaults: uniffi.quest_mobile.QuickFields, now: Moment) =
+        quickAdd(text, description, defaults.questId, defaults.plannedOn, now)
+    override fun quickAddQuestSuggestions(query: String, now: Moment) = emptyList<QuestChip>()
+    override fun taskQuestOptions(query: String, now: Moment) =
+        quickAddForm.questOptions.filter { it.name.contains(query, ignoreCase = true) }
+    override fun taskLoggedEntries(id: String, now: Moment) = taskDetail(id, now).logged
+
     override fun addToList(kind: ListKind, title: String, now: Moment): String {
         if (title.isBlank()) throw MobileException.EmptyTitle("Enter a title.")
         record("add-to-list $kind $title")

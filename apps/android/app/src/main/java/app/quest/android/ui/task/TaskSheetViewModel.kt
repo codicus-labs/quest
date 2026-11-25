@@ -9,6 +9,8 @@ import app.quest.android.core.CoreState
 import app.quest.android.core.Outcome
 import app.quest.android.core.RepeatRules
 import app.quest.android.core.failureMessage
+import app.quest.android.core.readCalendar
+import app.quest.android.core.shiftTaskMonth
 import java.io.Serializable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -173,7 +175,21 @@ class TaskSheetViewModel(
         update { it.copy(descriptionDraft = null) }
     }
 
-    fun toggleDone() = act { taskId -> core.perform { c, now -> c.toggleTask(taskId, now) } }
+    fun toggleDone() = act { taskId -> core.perform { c, now -> c.toggleListTask(taskId, now) } }
+
+    fun questOptions(query: String) = (core.read { c, now -> c.taskQuestOptions(query, now) } as? Outcome.Done)?.value.orEmpty()
+
+    fun loggedEntries(): List<uniffi.quest_mobile.LoggedEntry> {
+        val id = openTask() ?: return emptyList()
+        return (core.read { c, now -> c.taskLoggedEntries(id, now) } as? Outcome.Done)?.value.orEmpty()
+    }
+
+    fun calendar(cursor: String?, fields: uniffi.quest_mobile.QuickFields, target: uniffi.quest_mobile.DateTarget) =
+        core.readCalendar(cursor, fields, target)
+
+    fun shiftMonth(cursor: String, forward: Boolean) = core.shiftTaskMonth(cursor, forward)
+
+    fun setDeadline(day: String?) = act { taskId -> core.perform { c, now -> c.setTaskDue(taskId, day, now) } }
 
     /** null: "No quest". */
     fun setQuest(questId: String?) = act { taskId -> core.perform { c, _ -> c.setTaskQuest(taskId, questId) } }

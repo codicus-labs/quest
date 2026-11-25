@@ -20,11 +20,12 @@ use crate::quick_add;
 use crate::time::Now;
 use crate::types::UndoToast;
 
-pub(crate) fn task_list(
-    snapshot: &Snapshot,
+pub(crate) fn task_list<'a>(
+    snapshot: &'a Snapshot,
     kind: &ListKind,
     now: Now,
     toast: Option<UndoToast>,
+    lingering: impl Fn(&Task) -> Option<&'a Task>,
 ) -> Result<TaskList, MobileError> {
     let today = now.today();
     let rows = RowContext { snapshot, today, at: now.at, running: running_task(snapshot) };
@@ -32,13 +33,22 @@ pub(crate) fn task_list(
         ListKind::Today => {
             let tracked = tracked::day_timeline(snapshot, today, &now.tz, now.at).tracked_ms;
             let subtitle = format!("{} · {} tracked", format::long_day(today), format::hours(tracked));
-            let open = lists::today(snapshot, today);
-            let done = lists::done_today(snapshot, today, &now.tz);
-            open_and_done(kind, "Today".to_owned(), subtitle, rows.all(&open, false), rows.all(&done, false))
+            let open = lists::today_with_linger(snapshot, today, &lingering);
+            let done: Vec<_> = lists::done_today(snapshot, today, &now.tz)
+                .into_iter()
+                .filter(|task| lingering(task).is_none() || !open.iter().any(|row| row.id == task.id))
+                .collect();
+            open_and_done(
+                kind,
+                "Today".to_owned(),
+                subtitle,
+                rows.open(&open, false, &lingering),
+                rows.all(&done, false),
+            )
         }
         ListKind::Inbox => {
-            let open = lists::inbox(snapshot);
-            open_and_done(kind, "Inbox".to_owned(), String::new(), rows.all(&open, false), Vec::new())
+            let open = lists::inbox_with_linger(snapshot, &lingering);
+            open_and_done(kind, "Inbox".to_owned(), String::new(), rows.open(&open, false, &lingering), Vec::new())
         }
         ListKind::Logbook => {
             let sections = lists::logbook_days(snapshot, &now.tz)
@@ -59,12 +69,20 @@ pub(crate) fn task_list(
         ListKind::Quest { quest_id } => {
             let quest = known_quest(snapshot, quest_id)?;
             let week = tracked::week_balance(snapshot, today, &now.tz, now.at);
-            let open = lists::quest_open(snapshot, quest.id);
-            let done = lists::quest_done(snapshot, quest.id);
+            let open = lists::quest_open_with_linger(snapshot, quest.id, &lingering);
+            let done: Vec<_> = lists::quest_done(snapshot, quest.id)
+                .into_iter()
+                .filter(|task| lingering(task).is_none() || !open.iter().any(|row| row.id == task.id))
+                .collect();
             let week_ms = week.quest_ms_of(quest.id);
             let subtitle = format!("{} this week · {} open", format::hours(week_ms), open.len());
-            let mut list =
-                open_and_done(kind, quest.title.clone(), subtitle, rows.all(&open, true), rows.all(&done, true));
+            let mut list = open_and_done(
+                kind,
+                quest.title.clone(),
+                subtitle,
+                rows.open(&open, true, &lingering),
+                rows.all(&done, true),
+            );
             list.quest = Some(chip(quest));
             list.ring = tracked::fraction(week_ms, week.target_ms);
             list
@@ -96,6 +114,24 @@ impl RowContext<'_> {
     /// On a quest's own list the dot would repeat the header, and a later plan date is worth showing.
     fn all(&self, tasks: &[&Task], on_quest_list: bool) -> Vec<ListRow> {
         tasks.iter().map(|task| self.row(task, on_quest_list)).collect()
+    }
+
+    fn open<'a>(
+        &self,
+        tasks: &[&Task],
+        on_quest_list: bool,
+        lingering: impl Fn(&Task) -> Option<&'a Task>,
+    ) -> Vec<ListRow> {
+        tasks
+            .iter()
+            .map(|task| {
+                let mut row = self.row(task, on_quest_list);
+                if let Some(before) = lingering(task) {
+                    row.marks = row_meta::date_marks(before, self.today, on_quest_list).into_iter().map(mark).collect();
+                }
+                row
+            })
+            .collect()
     }
 
     fn row(&self, task: &Task, on_quest_list: bool) -> ListRow {

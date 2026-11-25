@@ -122,7 +122,6 @@ private val logWorkForm = LogWorkForm.of(LogWorkSamples.draft)
 val scenes = listOf(
     Scene("task-card", SceneKind.Component) {
         (Samples.home.questWork + Samples.home.other).forEach { TaskCard(it, noCardActions) }
-        // As in a plan board column: the time and timer wrap before the quest's name shortens.
         TaskCard(Samples.home.questWork.first(), noCardActions, Modifier.width(260.dp))
     },
     Scene("quest-chip", SceneKind.Component) {
@@ -207,4 +206,4 @@ val scenes = listOf(
     Scene("settings", SceneKind.Screen) {
         DetailScaffold("Settings", onBack = {}) { SettingsScreen(SettingsUiState(Samples.settings, Appearance.Dark), noSettingsActions) }
     },
-) + shellScenes + questPickerScenes + questScenes + workspaceScenes + platformScenes + captureScenes + settingsScenes + accountScenes
+) + shellScenes + questPickerScenes + questScenes + workspaceScenes + platformScenes + captureScenes + settingsScenes + accountScenes + taskFieldScenes

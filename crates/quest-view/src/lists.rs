@@ -58,6 +58,21 @@ pub fn quest_open(snapshot: &Snapshot, quest: EntityId) -> Vec<&Task> {
     snapshot.tasks.iter().filter(|t| t.quest_id == Some(quest) && !t.is_done()).collect()
 }
 
+pub fn quest_open_with_linger<'a>(
+    snapshot: &'a Snapshot,
+    quest: EntityId,
+    lingering: impl Fn(&Task) -> Option<&'a Task>,
+) -> Vec<&'a Task> {
+    snapshot
+        .tasks
+        .iter()
+        .filter(|task| {
+            let before = lingering(task).unwrap_or(task);
+            before.quest_id == Some(quest) && !before.is_done()
+        })
+        .collect()
+}
+
 /// A quest's done tasks, the most recently completed first.
 pub fn quest_done(snapshot: &Snapshot, quest: EntityId) -> Vec<&Task> {
     logbook(snapshot).into_iter().filter(|t| t.quest_id == Some(quest)).collect()

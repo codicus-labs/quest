@@ -67,6 +67,24 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
     override fun taskList(kind: ListKind, now: Moment): TaskList = core.taskList(kind, now)
 
     override fun addToList(kind: ListKind, title: String, now: Moment): String = core.addToList(kind, title, now)
+    override fun quickDayLabel(iso: String) = pickedDay(iso).label.substringBefore(',')
+
+    override fun listQuickDefaults(kind: ListKind, now: Moment) = uniffi.quest_mobile.quickAddDefaults(
+        when (kind) {
+            ListKind.Today -> uniffi.quest_mobile.QuickAddContext.Today
+            is ListKind.Quest -> uniffi.quest_mobile.QuickAddContext.Quest(kind.questId)
+            ListKind.Inbox, ListKind.Logbook -> uniffi.quest_mobile.QuickAddContext.Inbox
+        },
+        now,
+    )
+
+    override fun toggleListTask(id: String, now: Moment) = core.toggleListTask(id, now)
+    override fun setTaskDue(id: String, day: String?, now: Moment) = core.setTaskDue(id, day, now)
+    override fun previewQuickAdd(text: String, defaults: uniffi.quest_mobile.QuickFields, now: Moment) = core.previewQuickAdd(text, defaults, now)
+    override fun addQuickDraft(text: String, description: String, defaults: uniffi.quest_mobile.QuickFields, now: Moment) = core.addQuickDraft(text, description, defaults, now)
+    override fun quickAddQuestSuggestions(query: String, now: Moment) = core.quickAddQuestSuggestions(query, now)
+    override fun taskQuestOptions(query: String, now: Moment) = core.taskQuestOptions(query, now)
+    override fun taskLoggedEntries(id: String, now: Moment) = core.taskLoggedEntries(id, now)
 
     override fun questNav(now: Moment): QuestNav = core.questNav(now)
 

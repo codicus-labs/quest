@@ -65,7 +65,6 @@ class PlanActions(
     val deleteTask: (String) -> Unit,
     val undo: () -> Unit,
     val dismissToast: () -> Unit,
-    val openFocus: (taskId: String) -> Unit,
     val editDraft: (day: String, text: String) -> Unit,
     val addTask: (day: String) -> Unit,
     val setAddPosition: (AddPosition) -> Unit,
@@ -90,7 +89,7 @@ class PlanActions(
     companion object {
         /** Does nothing; for previews and screenshots. */
         val None = PlanActions(
-            {}, {}, {}, {}, {}, {}, {}, {}, { _, _ -> }, {}, {}, {}, {}, { _, _ -> }, {}, {},
+            {}, {}, {}, {}, {}, {}, {}, { _, _ -> }, {}, {}, {}, {}, { _, _ -> }, {}, {},
             { _, _, _ -> }, { _, _ -> }, { _, _ -> }, { _, _ -> }, {}, {}, { _, _, _ -> 0f },
         )
     }
@@ -232,7 +231,6 @@ fun PlanCard(row: PlanRow.Card, quests: List<QuestRef>, drag: PlanDragState, act
                 onToggle = { actions.toggleTask(task.id) },
                 onOpen = { actions.openTask(task.id) },
                 onTimer = { if (task.timerRunning) actions.stopTimer() else actions.startTimer(task.id) },
-                onFocus = { actions.openFocus(task.id) },
                 onAssignQuest = { questId -> actions.assignQuest(task.id, questId) },
                 questOptions = quests,
             ),

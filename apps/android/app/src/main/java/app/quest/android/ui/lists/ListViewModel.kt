@@ -8,6 +8,11 @@ import app.quest.android.core.CoreState
 import app.quest.android.core.ListPage
 import app.quest.android.core.Outcome
 import app.quest.android.core.failureMessage
+import app.quest.android.core.readCalendar
+import app.quest.android.core.shiftTaskMonth
+import uniffi.quest_mobile.DateTarget
+import uniffi.quest_mobile.QuickFields
+import uniffi.quest_mobile.updateQuickDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +25,7 @@ import uniffi.quest_mobile.TaskList
 sealed interface ListUiState {
     data object Loading : ListUiState
 
-    data class Ready(val list: TaskList, val draft: String) : ListUiState
+    data class Ready(val list: TaskList, val draft: String, val quick: QuickAddFields? = null) : ListUiState
 
     /** The quest whose list this was is gone (deleted here or elsewhere). */
     data object Gone : ListUiState
@@ -38,7 +43,9 @@ class ListViewModel(private val core: CoreHolder, private val savedState: SavedS
     private val shown = MutableStateFlow<ListKind?>(null)
     private val draft: StateFlow<String> = savedState.getStateFlow(DRAFT_KEY, "")
 
-    val state: StateFlow<ListUiState> = combine(core.state, shown, draft, ::listState)
+    private val overrides = MutableStateFlow<QuickFields?>(null)
+
+    val state: StateFlow<ListUiState> = combine(core.state, shown, draft, overrides, ::listState)
         .stateIn(viewModelScope, SharingStarted.Eagerly, ListUiState.Loading)
 
     private val _message = MutableStateFlow<String?>(null)
@@ -52,7 +59,10 @@ class ListViewModel(private val core: CoreHolder, private val savedState: SavedS
     /** Shows [kind] (null: no list on screen). Another list than the last starts with an empty draft. */
     fun show(kind: ListKind?) {
         if (kind != null) {
-            if (lastShown != null && kind != lastShown) savedState[DRAFT_KEY] = ""
+            if (lastShown != null && kind != lastShown) {
+                savedState[DRAFT_KEY] = ""
+                overrides.value = null
+            }
             lastShown = kind
         }
         shown.value = kind
@@ -63,17 +73,45 @@ class ListViewModel(private val core: CoreHolder, private val savedState: SavedS
         savedState[DRAFT_KEY] = text.replace('\n', ' ')
     }
 
-    /** Adds the draft to the shown list with its defaults (Today: planned today, a quest's list: that quest). */
+    fun questOptions(query: String) = (core.read { c, now -> c.taskQuestOptions(query, now) } as? Outcome.Done)?.value.orEmpty()
+
+    fun suggestions(query: String) = (core.read { c, now -> c.quickAddQuestSuggestions(query, now) } as? Outcome.Done)?.value.orEmpty()
+
+    fun calendar(cursor: String?, fields: QuickFields, target: DateTarget) = core.readCalendar(cursor, fields, target)
+
+    fun shiftMonth(cursor: String, forward: Boolean) = core.shiftTaskMonth(cursor, forward)
+
+    fun setQuest(text: String, questId: String?) = changeFields(text) { it.copy(questId = questId) }
+
+    fun setDate(target: DateTarget, date: String?) = changeFields(draft.value) { updateQuickDate(it, target, date) }
+
+    private fun changeFields(text: String, change: (QuickFields) -> QuickFields) {
+        val kind = shown.value ?: return
+        val result = core.read { c, now ->
+            val preview = c.previewQuickAdd(text, overrides.value ?: c.listQuickDefaults(kind, now), now)
+            preview.title to change(preview.fields)
+        }
+        if (result is Outcome.Done) {
+            overrides.value = result.value.second
+            editDraft(result.value.first)
+        }
+        report(result)
+    }
+
+    /** Adds the draft with the same defaults and parser used by the live preview. */
     fun add() {
         val kind = shown.value ?: return
         val title = draft.value
         if (title.isBlank()) return
-        val outcome = core.perform { c, now -> c.addToList(kind, title, now) }
+        val outcome = core.perform { c, now -> c.addQuickDraft(title, "", overrides.value ?: c.listQuickDefaults(kind, now), now) }
         report(outcome)
-        if (outcome is Outcome.Done) savedState[DRAFT_KEY] = ""
+        if (outcome is Outcome.Done) {
+            overrides.value = null
+            savedState[DRAFT_KEY] = ""
+        }
     }
 
-    fun toggleTask(taskId: String) = report(core.perform { c, now -> c.toggleTask(taskId, now) })
+    fun toggleTask(taskId: String) = report(core.perform { c, now -> c.toggleListTask(taskId, now) })
 
     /** Starts [taskId]'s timer (stopping another); true when it started. */
     fun startTimer(taskId: String): Boolean {
@@ -95,14 +133,22 @@ class ListViewModel(private val core: CoreHolder, private val savedState: SavedS
     private fun report(outcome: Outcome<*>) {
         outcome.failureMessage()?.let { _message.value = it }
     }
-}
 
-private fun listState(state: CoreState, shown: ListKind?, draft: String): ListUiState = when (state) {
-    CoreState.Opening -> ListUiState.Loading
-    is CoreState.Failed -> ListUiState.Failed(state.message)
-    is CoreState.Ready -> when (val page = state.list?.takeIf { it.kind == shown }) {
-        null -> ListUiState.Loading
-        is ListPage.Gone -> ListUiState.Gone
-        is ListPage.Shown -> ListUiState.Ready(page.list, draft)
+    private fun listState(state: CoreState, shown: ListKind?, draft: String, defaults: QuickFields?): ListUiState = when (state) {
+        CoreState.Opening -> ListUiState.Loading
+        is CoreState.Failed -> ListUiState.Failed(state.message)
+        is CoreState.Ready -> when (val page = state.list?.takeIf { it.kind == shown }) {
+            null -> ListUiState.Loading
+            is ListPage.Gone -> ListUiState.Gone
+            is ListPage.Shown -> {
+                val quick = core.read { c, now ->
+                    val fields = c.previewQuickAdd(draft, defaults ?: c.listQuickDefaults(page.kind, now), now).fields
+                    val quest = page.list.quest?.takeIf { it.id == fields.questId }
+                        ?: fields.questId?.let { id -> c.taskQuestOptions("", now).find { it.id == id } }
+                    QuickAddFields(fields, quest, fields.plannedOn?.let(c::quickDayLabel), fields.dueOn?.let(c::quickDayLabel))
+                }
+                ListUiState.Ready(page.list, draft, (quick as? Outcome.Done)?.value)
+            }
+        }
     }
 }

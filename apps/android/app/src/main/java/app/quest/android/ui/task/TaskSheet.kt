@@ -10,16 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
@@ -33,22 +31,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import app.quest.android.R
 import app.quest.android.ui.components.CompleteToggle
 import app.quest.android.ui.components.Dot
+import app.quest.android.ui.components.QuestBottomSheet
 import app.quest.android.ui.components.QuestIcons
-import app.quest.android.ui.components.QuestPickerChip
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
+import uniffi.quest_mobile.CalendarMonth
+import uniffi.quest_mobile.DateTarget
+import uniffi.quest_mobile.LoggedEntry
+import uniffi.quest_mobile.QuestChip
+import uniffi.quest_mobile.QuickFields
 import uniffi.quest_mobile.RepeatWeekday
-import uniffi.quest_mobile.TaskDetail
 
 /** Everything the task sheet can do, wired to [TaskSheetViewModel]. */
 class TaskSheetActions(
@@ -67,6 +71,12 @@ class TaskSheetActions(
     val saveRepeat: () -> Unit,
     val stopRepeating: () -> Unit,
     val closeRepeat: () -> Unit,
+    val setDeadline: (String?) -> Unit = {},
+    val questOptions: ((String) -> List<QuestChip>)? = null,
+    val loggedEntries: (() -> List<LoggedEntry>)? = null,
+    val calendar: (String?, QuickFields, DateTarget) -> CalendarMonth? = { _, _, _ -> null },
+    val shiftMonth: (String, Boolean) -> String? = { _, _ -> null },
+    val openEntry: (String) -> Unit = {},
 ) {
     val repeatEditor get() = RepeatEditorActions(editRepeat, toggleWeekday, saveRepeat, stopRepeating, closeRepeat)
 
@@ -117,13 +127,17 @@ fun TaskSheetContent(state: TaskSheetState.Open, actions: TaskSheetActions) {
 @Composable
 private fun TaskDetails(state: TaskSheetState.Open, actions: TaskSheetActions) {
     val detail = state.detail
-    Row(verticalAlignment = Alignment.Top) {
+    val colors = QuestTheme.colors
+    var picker by rememberSaveable(detail.id) { mutableStateOf<FieldPicker?>(null) }
+    var showEntries by rememberSaveable(detail.id) { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
         CompleteToggle(detail.done, actions.toggleDone)
         CommitField(
             value = state.title,
             onEdit = { actions.editTitle(it.replace('\n', ' ')) },
             onCommit = actions.commitTitle,
-            label = stringResource(R.string.task_title),
+            placeholder = stringResource(R.string.task_title),
+            style = QuestType.focusTitle.copy(color = colors.text),
             singleLine = true,
             modifier = Modifier.weight(1f).padding(start = QuestSpacing.small).testTag("sheet-title"),
         )
@@ -133,49 +147,88 @@ private fun TaskDetails(state: TaskSheetState.Open, actions: TaskSheetActions) {
         value = state.description,
         onEdit = actions.editDescription,
         onCommit = actions.commitDescription,
-        label = stringResource(R.string.task_description),
         placeholder = stringResource(R.string.task_description_placeholder),
+        style = QuestType.body.copy(color = colors.textMuted),
         singleLine = false,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp).testTag("sheet-description"),
+        modifier = Modifier.fillMaxWidth().testTag("sheet-description"),
     )
-    Caps(stringResource(R.string.task_date))
-    DateRow(detail, actions.setDay)
-    DueRow(detail)
-    Caps(stringResource(R.string.task_repeat))
-    RepeatRow(detail.repeatLabel, actions.openRepeat)
-    Caps(stringResource(R.string.task_quest))
-    QuestPickerChip(detail.quest, detail.questOptions, { actions.setQuest(it?.id) }, stringResource(R.string.task_assign_quest), "sheet-quest")
-    LoggedTime(detail)
-    TextButton(onClick = actions.delete, modifier = Modifier.testTag("sheet-delete")) {
-        Icon(QuestIcons.Trash, contentDescription = null, tint = QuestTheme.colors.textMuted)
-        Text(stringResource(R.string.task_delete_task), style = QuestType.body, color = QuestTheme.colors.textMuted, modifier = Modifier.padding(start = QuestSpacing.small))
+    TaskFields(
+        detail.quest, detail.plannedOn?.label?.substringBefore(','), detail.dueOn?.label?.substringBefore(','),
+        onOpen = { picker = it }, planMoves = detail.postponed.plan, deadlineMoves = detail.postponed.due,
+    )
+    TextButton(onClick = { showEntries = !showEntries }) {
+        Text(
+            "◷ ${detail.loggedTotal.removeSuffix(" total")} ${if (showEntries) "⌄" else "›"}",
+            style = QuestType.small, color = QuestTheme.colors.textMuted,
+            modifier = Modifier.testTag("sheet-logged-total"),
+        )
+    }
+    if (showEntries) {
+        (actions.loggedEntries?.invoke() ?: detail.logged).forEach { entry ->
+            TextButton(onClick = { actions.openEntry(entry.id) }, modifier = Modifier.fillMaxWidth()) {
+                if (entry.running) Dot(QuestTheme.colors.accent, 7.dp, Modifier.padding(end = QuestSpacing.small))
+                Text(entry.`when`, color = QuestTheme.colors.textMuted, modifier = Modifier.weight(1f))
+                Text(entry.duration, color = QuestTheme.colors.text)
+            }
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RepeatRow(detail.repeatLabel, actions.openRepeat)
+        TextButton(onClick = actions.delete, modifier = Modifier.testTag("sheet-delete")) {
+            Icon(QuestIcons.Trash, contentDescription = stringResource(R.string.task_delete_task), tint = QuestTheme.colors.textMuted)
+        }
+    }
+    picker?.let { active ->
+        QuestBottomSheet(active.label, onDismiss = { picker = null }) {
+            val target = active.target
+            if (target == null) {
+                TaskQuestChoices(actions.questOptions ?: { detail.questOptions }) {
+                    actions.setQuest(it?.id)
+                    picker = null
+                }
+            } else {
+                val fields = QuickFields(detail.quest?.id, detail.plannedOn?.iso, detail.dueOn?.iso)
+                TaskCalendarChoices(target, { actions.calendar(it, fields, target) }, actions.shiftMonth) {
+                    if (target == DateTarget.PLAN) actions.setDay(it) else actions.setDeadline(it)
+                    picker = null
+                }
+            }
+        }
     }
 }
 
-/** A text field that saves when the keyboard's action or leaving the field ends the edit. */
 @Composable
-fun CommitField(
+private fun CommitField(
     value: String,
     onEdit: (String) -> Unit,
     onCommit: () -> Unit,
-    label: String,
+    placeholder: String,
+    style: TextStyle,
     singleLine: Boolean,
     modifier: Modifier = Modifier,
-    placeholder: String? = null,
 ) {
-    // Whether the field had focus yet: losing it only commits after it was gained.
-    val hadFocus = remember { booleanArrayOf(false) }
-    OutlinedTextField(
+    val colors = QuestTheme.colors
+    var hadFocus by remember { mutableStateOf(false) }
+    BasicTextField(
         value = value,
         onValueChange = onEdit,
-        label = { Text(label) },
-        placeholder = placeholder?.let { { Text(it) } },
+        textStyle = style,
+        cursorBrush = SolidColor(colors.accent),
+        decorationBox = { input ->
+            Box(
+                Modifier.fillMaxWidth().heightIn(min = QuestSpacing.touchTarget).padding(vertical = QuestSpacing.tight),
+                contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+            ) {
+                if (value.isEmpty()) Text(placeholder, style = style, color = colors.textMuted)
+                input()
+            }
+        },
         singleLine = singleLine,
         keyboardOptions = if (singleLine) KeyboardOptions(imeAction = ImeAction.Done) else KeyboardOptions.Default,
         keyboardActions = KeyboardActions(onDone = { onCommit() }),
         modifier = modifier.onFocusChanged { focus ->
-            if (hadFocus[0] && !focus.isFocused) onCommit()
-            hadFocus[0] = focus.isFocused
+            if (hadFocus && !focus.isFocused) onCommit()
+            hadFocus = focus.isFocused
         },
     )
 }
@@ -186,65 +239,10 @@ fun Caps(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DateRow(detail: TaskDetail, onSetDay: (String?) -> Unit) {
-    var picking by rememberSaveable { mutableStateOf(false) }
-    val colors = QuestTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = { picking = true }, modifier = Modifier.testTag("sheet-date")) {
-            Icon(Icons.Filled.DateRange, contentDescription = stringResource(R.string.task_choose_date), tint = colors.textMuted)
-            Text(
-                detail.plannedOn?.label ?: stringResource(R.string.task_backlog),
-                style = QuestType.body,
-                color = if (detail.plannedOn == null) colors.textFaint else colors.text,
-                modifier = Modifier.padding(start = QuestSpacing.small),
-            )
-        }
-        Box(Modifier.weight(1f))
-        if (detail.plannedOn != null) {
-            TextButton(onClick = { onSetDay(null) }, modifier = Modifier.testTag("sheet-backlog")) {
-                Text(stringResource(R.string.task_move_to_backlog), style = QuestType.body, color = colors.textMuted)
-            }
-        }
-    }
-    if (picking) DayPickerDialog(detail.plannedOn?.iso, onPick = { onSetDay(it) }, onDismiss = { picking = false })
-}
-
-/** The deadline, read-only (set on the desktop or by capture); nothing without one. */
-@Composable
-private fun DueRow(detail: TaskDetail) {
-    val due = detail.dueOn ?: return
-    Caps(stringResource(R.string.task_deadline))
-    Text(
-        due.label,
-        style = QuestType.body,
-        color = if (detail.overdue) QuestTheme.colors.accent else QuestTheme.colors.text,
-        modifier = Modifier.testTag("sheet-due"),
-    )
-}
-
-@Composable
 private fun RepeatRow(label: String, onOpen: () -> Unit) {
     val colors = QuestTheme.colors
     TextButton(onClick = onOpen, modifier = Modifier.testTag("sheet-repeat")) {
         Icon(QuestIcons.Repeat, contentDescription = null, tint = colors.textMuted)
         Text(label, style = QuestType.body, color = colors.text, modifier = Modifier.padding(start = QuestSpacing.small))
-    }
-}
-
-@Composable
-private fun LoggedTime(detail: TaskDetail) {
-    val colors = QuestTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Caps(stringResource(R.string.task_logged_time))
-        Box(Modifier.weight(1f))
-        Text(detail.loggedTotal, style = QuestType.small, color = colors.textFaint, modifier = Modifier.testTag("sheet-logged-total"))
-    }
-    detail.logged.forEach { entry ->
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (entry.running) Dot(colors.accent, 7.dp, Modifier.padding(end = QuestSpacing.small))
-            Text(entry.`when`, style = QuestType.small, color = colors.textMuted)
-            Box(Modifier.weight(1f))
-            Text(entry.duration, style = QuestType.small, color = colors.textFaint)
-        }
     }
 }

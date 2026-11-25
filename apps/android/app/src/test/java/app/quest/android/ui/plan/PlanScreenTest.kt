@@ -33,7 +33,7 @@ class PlanScreenTest {
     private var inputs by mutableStateOf(PlanInputs())
 
     private val actions = PlanActions(
-        {}, {}, {}, {}, {}, {}, {}, {},
+        {}, {}, {}, {}, {}, {}, {},
         editDraft = { day, text -> inputs = inputs.withDraft(day, text) },
         addTask = {}, setAddPosition = {}, setQuestFilter = {}, setShowOther = {},
         visibleRange = { _, _ -> }, jumpTo = {}, scrolled = {},

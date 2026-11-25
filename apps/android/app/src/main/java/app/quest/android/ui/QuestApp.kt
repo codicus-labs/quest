@@ -304,7 +304,7 @@ fun QuestApp(
                 accountState.dialog?.let { AccountDialogs(it, AccountDialogActions(accountVm::answerImport, accountVm::signOut, accountVm::cancelSignOut)) }
             }
             ManageWorkspacesSheet(workspacesState, manageActions(workspaces))
-            TaskSheet(sheetState, taskSheetActions(sheet))
+            TaskSheet(sheetState, taskSheetActions(sheet, entry::open))
             EntrySheet(entryState, entryActions(entry))
         }
         LogWorkSheet(logWorkState, logWorkActions(logWork))
@@ -454,7 +454,6 @@ internal fun planActions(vm: PlanViewModel, sheet: TaskSheetViewModel, focus: Fo
     deleteTask = vm::deleteTask,
     undo = vm::undo,
     dismissToast = vm::dismissToast,
-    openFocus = focus::open,
     editDraft = vm::editDraft,
     addTask = vm::addTask,
     setAddPosition = vm::setAddPosition,
@@ -485,7 +484,7 @@ internal fun ShowMessages(message: StateFlow<String?>, dismiss: () -> Unit, snac
     }
 }
 
-internal fun taskSheetActions(vm: TaskSheetViewModel) = TaskSheetActions(
+internal fun taskSheetActions(vm: TaskSheetViewModel, openEntry: (String) -> Unit = {}) = TaskSheetActions(
     close = vm::close,
     editTitle = vm::editTitle,
     commitTitle = vm::commitTitle,
@@ -501,6 +500,12 @@ internal fun taskSheetActions(vm: TaskSheetViewModel) = TaskSheetActions(
     saveRepeat = vm::saveRepeat,
     stopRepeating = vm::stopRepeating,
     closeRepeat = vm::closeRepeat,
+    setDeadline = vm::setDeadline,
+    questOptions = vm::questOptions,
+    loggedEntries = vm::loggedEntries,
+    calendar = vm::calendar,
+    shiftMonth = vm::shiftMonth,
+    openEntry = openEntry,
 )
 
 /** Where a detail page can go: another detail, back, a quest's list, and what search's results do. */

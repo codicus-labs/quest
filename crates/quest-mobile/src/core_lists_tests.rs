@@ -78,6 +78,35 @@ fn the_player_and_the_row_show_the_running_timer() {
 }
 
 #[test]
+fn list_completion_lingers_in_place_and_undo_outlives_the_toast() {
+    let (_dir, core) = open();
+    core.add_to_list(ListKind::Today, "First".into(), now()).unwrap();
+    let id = core.add_to_list(ListKind::Today, "Second".into(), now()).unwrap();
+    core.add_to_list(ListKind::Today, "Third".into(), now()).unwrap();
+
+    core.toggle_list_task(id, now()).unwrap();
+    let during = core.task_list(ListKind::Today, moment("2026-11-25T10:00:03+01:00")).unwrap();
+    assert_eq!(titles(&during, 0), ["First", "Second", "Third"]);
+    assert!(during.sections[0].rows[1].done);
+    assert_eq!(during.sections.len(), 1);
+    assert_eq!(during.toast.unwrap().text, "Done");
+    assert_eq!(core.next_wake_ms(now()).unwrap(), now().epoch_ms + crate::completion_linger_ms() + 5);
+
+    let after = moment("2026-11-25T10:00:04+01:00");
+    core.tick(after.clone()).unwrap();
+    let list = core.task_list(ListKind::Today, after).unwrap();
+    assert_eq!(titles(&list, 0), ["First", "Third"]);
+    assert_eq!(titles(&list, 1), ["Second"]);
+    assert!(list.toast.is_some());
+
+    let expired = moment("2026-11-25T10:00:05+01:00");
+    core.tick(expired.clone()).unwrap();
+    assert!(core.task_list(ListKind::Today, expired.clone()).unwrap().toast.is_none());
+    core.undo(expired.clone()).unwrap();
+    assert_eq!(titles(&core.task_list(ListKind::Today, expired).unwrap(), 0), ["First", "Second", "Third"]);
+}
+
+#[test]
 fn organizing_shows_back_to_its_task() {
     let (_dir, core) = open();
     let task = core.add_to_list(ListKind::Today, "Write".into(), now()).unwrap();

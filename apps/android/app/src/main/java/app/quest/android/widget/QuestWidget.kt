@@ -50,6 +50,7 @@ import androidx.compose.runtime.collectAsState
 import app.quest.android.INTERNAL_ENTRY
 import app.quest.android.MainActivity
 import app.quest.android.R
+import app.quest.android.quickadd.QuickAddActivity
 import app.quest.android.ui.components.questColor
 import app.quest.android.ui.theme.DarkQuestColors
 import app.quest.android.ui.theme.LightQuestColors
@@ -160,7 +161,17 @@ private fun TasksContent(home: HomeData, height: Dp) {
     val tasks = widgetTasks(home)
     val limit = visibleTasks(tasks.size, height)
     Column(GlanceModifier.fillMaxSize()) {
-        Text(home.dayLabel, style = TextStyle(color = WidgetColors.text, fontSize = 14.sp, fontWeight = FontWeight.Medium), maxLines = 1)
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(home.dayLabel, modifier = GlanceModifier.defaultWeight(), style = TextStyle(color = WidgetColors.text, fontSize = 14.sp, fontWeight = FontWeight.Medium), maxLines = 1)
+            Box(
+                GlanceModifier.width(44.dp).height(24.dp)
+                    .clickable(actionStartActivity<QuickAddActivity>())
+                    .semantics { contentDescription = context.getString(R.string.quick_add_save) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("+", style = TextStyle(color = WidgetColors.text, fontSize = 18.sp))
+            }
+        }
         Row(GlanceModifier.padding(top = 2.dp, bottom = 2.dp)) {
             Stat(context.getString(R.string.widget_today), home.todayHours)
             Spacer(GlanceModifier.width(12.dp))

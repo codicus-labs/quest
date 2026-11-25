@@ -27,6 +27,7 @@ import app.quest.android.ui.archive.ArchiveActions
 import app.quest.android.ui.archive.ArchiveScreen
 import app.quest.android.ui.components.QuestSnackbarHost
 import app.quest.android.ui.lists.ListActions
+import app.quest.android.ui.lists.QuickAddActions
 import app.quest.android.ui.lists.ListScreen
 import app.quest.android.ui.lists.ListUiState
 import app.quest.android.ui.lists.RowActions
@@ -76,7 +77,10 @@ internal fun ListDestination(
         },
         stopTimer = vm::stopTimer,
     )
-    ListScreen(state, ListActions(rows, vm::editDraft, vm::add, vm::undo, vm::dismissToast), headerActions = headerActions)
+    val quick = QuickAddActions(
+        vm::questOptions, vm::suggestions, vm::setQuest, vm::setDate, vm::calendar, vm::shiftMonth,
+    )
+    ListScreen(state, ListActions(rows, vm::editDraft, vm::add, vm::undo, vm::dismissToast, quick), headerActions = headerActions)
 }
 
 /** "‹ Quests" above a quest's list or the Logbook. */

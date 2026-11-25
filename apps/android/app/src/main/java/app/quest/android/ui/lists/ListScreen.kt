@@ -13,15 +13,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,11 +25,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import app.quest.android.R
 import app.quest.android.ui.components.HoursRing
 import app.quest.android.ui.components.QuestIcons
@@ -57,6 +48,7 @@ class ListActions(
     val add: () -> Unit,
     val undo: () -> Unit,
     val dismissToast: () -> Unit,
+    val quick: QuickAddActions = QuickAddActions(),
 )
 
 /**
@@ -100,7 +92,7 @@ private fun ListContent(state: ListUiState.Ready, actions: ListActions, top: @Co
         item(key = "top") { Box(Modifier.padding(horizontal = QuestSpacing.small)) { top() } }
         item(key = "header") { ListHeader(list, headerActions) }
         if (list.kind != ListKind.Logbook) {
-            item(key = "add") { QuickAdd(state.draft, actions) }
+            item(key = "add") { ListQuickAdd(state.draft, state.quick, actions) }
         }
         if (list.empty) item(key = "empty") { EmptyList(list.kind) }
         list.sections.forEachIndexed { index, section -> section(index, section, actions.rows) }
@@ -160,30 +152,6 @@ private fun kindIcon(kind: ListKind): Pair<ImageVector, Color>? {
         ListKind.Logbook -> QuestIcons.Logbook to colors.iconLogbook
         is ListKind.Quest -> null
     }
-}
-
-/** The quick-add field: Today plans it today, a quest's list gives it the quest, the Inbox nothing. */
-@Composable
-private fun QuickAdd(draft: String, actions: ListActions) {
-    val colors = QuestTheme.colors
-    TextField(
-        value = draft,
-        onValueChange = actions.editDraft,
-        modifier = Modifier.fillMaxWidth().padding(bottom = QuestSpacing.small).testTag("list-add"),
-        placeholder = { Text(stringResource(R.string.list_add), maxLines = 1) },
-        leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null, tint = colors.textMuted) },
-        singleLine = true,
-        shape = RoundedCornerShape(QuestSpacing.cardRadius),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = colors.card,
-            unfocusedContainerColor = colors.card,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            cursorColor = colors.accentLine,
-        ),
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { actions.add() }),
-    )
 }
 
 @Composable

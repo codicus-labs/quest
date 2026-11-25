@@ -3,17 +3,14 @@ package app.quest.android.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
@@ -56,21 +53,17 @@ class TaskCardActions(
     val onOpen: () -> Unit,
     /** Starts the timer, or pauses it when it runs. */
     val onTimer: () -> Unit,
-    /** Opens Focus on this task (tap the running time). */
-    val onFocus: () -> Unit = {},
     /** Gives a task without a quest one of [questOptions] (its "Assign quest" icon). */
     val onAssignQuest: (questId: String) -> Unit = {},
     val questOptions: List<QuestRef> = emptyList(),
 )
 
 /**
- * A task as on the desktop: title, complete toggle, quest chip, tracked time
- * and play/pause. Tapping the card, title included, opens the task's sheet, where the title is edited.
+ * Tapping the card opens the task's sheet.
  */
 @Composable
 fun TaskCard(task: HomeTask, actions: TaskCardActions, modifier: Modifier = Modifier) {
     val colors = QuestTheme.colors
-    val accent = task.quest?.let { questColor(it.colorHex) } ?: colors.textFaint
     val shape = RoundedCornerShape(QuestSpacing.cardRadius)
     val edge = if (task.timerRunning) colors.accent.copy(alpha = 0.7f) else colors.border
     Row(
@@ -85,20 +78,17 @@ fun TaskCard(task: HomeTask, actions: TaskCardActions, modifier: Modifier = Modi
     ) {
         Column(Modifier.weight(1f).padding(start = QuestSpacing.cardPadding, top = QuestSpacing.tight, bottom = 4.dp)) {
             CardTitle(task)
-            // Wraps the time and timer to a second line before it shortens the quest's name.
-            FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CompleteToggle(task.done, actions.onToggle, size = QuestSpacing.cardControl)
-                    if (task.quest != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CompleteToggle(task.done, actions.onToggle, size = QuestSpacing.cardControl)
+                if (task.quest != null) {
+                    Box(Modifier.weight(1f)) {
                         QuestChip(task.quest, Modifier.padding(start = QuestSpacing.small, end = QuestSpacing.medium))
-                    } else {
-                        AssignQuestButton(task.title, actions.questOptions, actions.onAssignQuest)
                     }
+                } else {
+                    AssignQuestButton(task.title, actions.questOptions, actions.onAssignQuest)
+                    Spacer(Modifier.weight(1f))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TrackedTime(task, accent, actions.onFocus)
-                    if (task.canStartTimer) TimerButton(task.title, task.timerRunning, actions.onTimer)
-                }
+                if (task.canStartTimer) TimerButton(task.title, task.timerRunning, actions.onTimer)
             }
         }
     }
@@ -120,26 +110,6 @@ private fun CardTitle(task: HomeTask) {
     )
 }
 
-/**
- * Tracked time like the desktop card ("36:00"), with a dot while the timer runs. While it runs,
- * tapping it opens Focus.
- */
-@Composable
-private fun TrackedTime(task: HomeTask, accent: Color, onFocus: () -> Unit, modifier: Modifier = Modifier) {
-    val tracked = task.tracked ?: return
-    val colors = QuestTheme.colors
-    val open = if (task.timerRunning) {
-        Modifier.clickable(onClickLabel = stringResource(R.string.focus_open), onClick = onFocus).testTag("task-focus:${task.title}")
-    } else {
-        Modifier
-    }
-    // Always a control high, so the row keeps its height when the timer starts or stops.
-    Row(modifier.heightIn(min = QuestSpacing.cardControl).then(open), horizontalArrangement = Arrangement.spacedBy(QuestSpacing.small), verticalAlignment = Alignment.CenterVertically) {
-        if (task.timerRunning) Dot(accent, 7.dp)
-        Text(tracked, style = QuestType.monoTime, color = if (task.done) colors.textFaint else colors.text, modifier = Modifier.testTag("task-tracked"))
-    }
-}
-
 /** Without a quest: a quiet quest icon instead of a "No quest" chip; tap for the quest picker. */
 @Composable
 private fun AssignQuestButton(title: String, quests: List<QuestRef>, onAssign: (String) -> Unit) {
@@ -159,10 +129,20 @@ private fun AssignQuestButton(title: String, quests: List<QuestRef>, onAssign: (
 
 @Composable
 private fun TimerButton(title: String, running: Boolean, onClick: () -> Unit) {
-    val label = stringResource(if (running) R.string.timer_pause else R.string.timer_start)
-    // Sized below 48 dp, IconButton still keeps a 48 dp touch target around it.
-    IconButton(onClick = onClick, modifier = Modifier.size(QuestSpacing.cardControl).testTag(if (running) "timer-pause:$title" else "timer-start:$title")) {
-        Icon(if (running) QuestIcons.Pause else Icons.Filled.PlayArrow, contentDescription = label, tint = QuestTheme.colors.textMuted)
+    IconButton(onClick = onClick, modifier = Modifier.size(QuestSpacing.cardControl).testTag(if (running) "timer-stop:$title" else "timer-start:$title")) {
+        TaskTimerIcon(running)
+    }
+}
+
+@Composable
+internal fun TaskTimerIcon(running: Boolean) {
+    val colors = QuestTheme.colors
+    if (running) {
+        Box(Modifier.size(32.dp).background(colors.accentFill, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(QuestIcons.Stop, contentDescription = stringResource(R.string.timer_stop), tint = OnAccentFill, modifier = Modifier.size(14.dp))
+        }
+    } else {
+        Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.timer_start), tint = colors.textMuted)
     }
 }
 

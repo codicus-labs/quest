@@ -144,6 +144,15 @@ interface QuestCoreApi : WorkspacesApi {
 
     /** Adds a task with the list's defaults (Today: planned today; a quest's list: its quest). Returns its id. */
     fun addToList(kind: ListKind, title: String, now: Moment): String
+    fun quickDayLabel(iso: String): String
+    fun listQuickDefaults(kind: ListKind, now: Moment): uniffi.quest_mobile.QuickFields
+    fun toggleListTask(id: String, now: Moment)
+    fun setTaskDue(id: String, day: String?, now: Moment)
+    fun previewQuickAdd(text: String, defaults: uniffi.quest_mobile.QuickFields, now: Moment): uniffi.quest_mobile.QuickPreview
+    fun addQuickDraft(text: String, description: String, defaults: uniffi.quest_mobile.QuickFields, now: Moment): String
+    fun quickAddQuestSuggestions(query: String, now: Moment): List<uniffi.quest_mobile.QuestChip>
+    fun taskQuestOptions(query: String, now: Moment): List<uniffi.quest_mobile.QuestChip>
+    fun taskLoggedEntries(id: String, now: Moment): List<uniffi.quest_mobile.LoggedEntry>
 
     /** The Quests tab: active and completed quests with this week's hours. */
     fun questNav(now: Moment): QuestNav

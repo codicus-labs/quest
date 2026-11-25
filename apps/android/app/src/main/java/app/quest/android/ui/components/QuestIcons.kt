@@ -60,6 +60,8 @@ object QuestIcons {
     val Today = outline("today", "M10.8 8a2.8 2.8 0 1 1-5.6 0 2.8 2.8 0 1 1 5.6 0Z", "M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3", width = 1.1f)
     val Flag = outline("flag", "M3.3 14V2.7h7.4L9.3 5.3 10.7 8H3.3", width = 1.1f)
     val Logbook = outline("logbook", "M4.5 2.5h7a1 1 0 0 1 1 1v10h-8a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z", "M6 6.5l1.3 1.3L10 5", width = 1.1f)
-    val Stop = outline("stop", "M4 4h8v8H4Z", width = 1.1f)
+    val Stop = ImageVector.Builder("stop", 24.dp, 24.dp, 16f, 16f)
+        .addPath(pathData = addPathNodes("M4 4h8v8H4Z"), fill = SolidColor(Color.Black))
+        .build()
     val Repeat = outline("repeat", "M3 7V6.2C3 5 4 4 5.2 4H13M11 2l2 2-2 2M13 9v.8C13 11 12 12 10.8 12H3M5 14l-2-2 2-2", width = 1.1f)
 }

@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -36,6 +34,7 @@ import app.quest.android.ui.components.CompleteToggle
 import app.quest.android.ui.components.Dot
 import app.quest.android.ui.components.OnAccentFill
 import app.quest.android.ui.components.QuestIcons
+import app.quest.android.ui.components.TaskTimerIcon
 import app.quest.android.ui.components.questColor
 import app.quest.android.ui.theme.QuestColors
 import app.quest.android.ui.theme.QuestSpacing
@@ -80,11 +79,12 @@ fun TaskRow(row: ListRow, actions: RowActions, modifier: Modifier = Modifier) {
             if (row.marks.isNotEmpty()) Marks(row.marks, colors)
         }
         if (questTint != null) Dot(questTint, 8.dp, Modifier.padding(horizontal = QuestSpacing.small))
-        when {
-            row.timerRunning -> StopPill(row.timer.orEmpty(), row.title, actions.stopTimer)
-            row.canStartTimer -> IconButton(onClick = { actions.startTimer(row.id) }, modifier = Modifier.testTag("timer-start:${row.title}")) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.timer_start), tint = colors.textMuted)
-            }
+        if (row.timerRunning || row.canStartTimer) {
+            val action = if (row.timerRunning) "stop" else "start"
+            IconButton(
+                onClick = { if (row.timerRunning) actions.stopTimer() else actions.startTimer(row.id) },
+                modifier = Modifier.testTag("timer-$action:${row.title}"),
+            ) { TaskTimerIcon(row.timerRunning) }
         }
     }
 }
@@ -106,7 +106,7 @@ private fun Marks(marks: List<RowMark>, colors: QuestColors) {
     Text(text, style = QuestType.small, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
-/** The running timer on its row: the time on the accent fill; tapping stops it. */
+/** The mini-player's timer and stop control. */
 @Composable
 fun StopPill(timer: String, title: String, onStop: () -> Unit, modifier: Modifier = Modifier) {
     val label = stringResource(R.string.timer_stop_label, timer)
