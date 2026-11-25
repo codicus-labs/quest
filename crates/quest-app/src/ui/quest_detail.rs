@@ -1,19 +1,21 @@
-//! A quest's page: its colour, name (click to rename) and hours this week; colour swatches,
-//! complete or reopen, delete; a quick-add that files tasks under it; its open tasks, then what's
-//! done.
+//! A quest's page: its heading and actions, quick-add, and open and completed tasks.
 
 use quest_domain::{Command, EntityId, Quest, QuestColor, QuestStatus};
-use rune::{ClipboardContent, Cursor, El, Key, KeyEvent, TextStyle, Tx, col, el, row, spacer, text, text_input};
+use rune::{ClipboardContent, Cursor, El, Key, KeyEvent, TextStyle, Tx, col, el, row, text, text_input};
+
+use rune_kit::{Placement, popover};
 
 use crate::format;
 use crate::icons;
-use crate::state::{QuestEdit, State};
+use crate::state::{Overlay, QuestEdit, State, View};
 use crate::theme::{Pal, color_name, quest_color, ty};
 use crate::ui::lists;
 use crate::ui::parts;
 use crate::ui::quests::week_ms;
 use crate::ui::task_row::Shows;
 use crate::undo::Deletable;
+
+const COLOR_TRIGGER: &str = "quest-color-trigger";
 
 pub fn view(s: &State, id: EntityId, p: &Pal) -> El {
     let Some(quest) = s.snap.quest(id) else {
@@ -25,8 +27,6 @@ pub fn view(s: &State, id: EntityId, p: &Pal) -> El {
     lists::page("quest-detail", heading(s, quest, p), Some(add), lists::rows(s, shows, "No tasks yet", p))
 }
 
-/// Colour dot, name (click to rename), a Completed or Archived badge, complete and delete; under
-/// it the hours this week and the colour swatches.
 fn heading(s: &State, quest: &Quest, p: &Pal) -> El {
     let id = quest.id;
     let title: El = match s.quest_edit {
@@ -50,20 +50,8 @@ fn heading(s: &State, quest: &Quest, p: &Pal) -> El {
                 tx.focus_when_shown("quest-rename", true);
             }),
     };
-    let mut name = row()
-        .w_full()
-        .center_y()
-        .gap(12.0)
-        .child(el().size(26.0, 26.0).center().child(parts::dot(quest_color(quest.color), 14.0)))
-        .child(title.grow(1.0).min_w(0.0));
-    let badge = match quest.status {
-        QuestStatus::Active => None,
-        QuestStatus::Completed => Some("Completed"),
-        QuestStatus::Archived => Some("Archived"),
-    };
-    if let Some(badge) = badge {
-        name = name.child(parts::caps(badge, p).px(10.0).py(4.0).radius(6.0).border(1.0, p.border_strong));
-    }
+    let mut name =
+        row().w_full().center_y().gap(12.0).child(color_trigger(s, quest, p)).child(title.grow(1.0).min_w(0.0));
     let (status_label, next) = match quest.status {
         QuestStatus::Active => ("Complete quest", QuestStatus::Completed),
         QuestStatus::Completed => ("Reopen quest", QuestStatus::Active),
@@ -85,27 +73,59 @@ fn heading(s: &State, quest: &Quest, p: &Pal) -> El {
             .size(32.0, 32.0)
             .help("Delete quest"),
         );
-    let sub = row()
-        .w_full()
-        .center_y()
-        .pl(38.0)
-        .child(
-            text(format!("{} this week", format::hours(week_ms(s, id))))
-                .key("quest-week")
-                .font(ty::BODY)
-                .color(p.muted),
-        )
-        .child(spacer())
-        .child(swatches(id, quest.color, p));
+    let sub = row().w_full().center_y().pl(38.0).child(
+        text(format!("{} this week", format::hours(week_ms(s, id)))).key("quest-week").font(ty::BODY).color(p.muted),
+    );
     col().w_full().gap(4.0).child(name).child(sub)
 }
 
-fn swatches(id: EntityId, current: QuestColor, p: &Pal) -> El {
-    let mut swatches = row().gap(6.0);
-    for color in QuestColor::ALL {
-        let on = color == current;
+fn color_trigger(s: &State, quest: &Quest, p: &Pal) -> El {
+    let id = quest.id;
+    let color = quest.color;
+    el().key(COLOR_TRIGGER)
+        .role("button")
+        .label("Change quest color")
+        .expanded(s.quest_edit == QuestEdit::Color(id))
+        .focusable(true)
+        .size(26.0, 26.0)
+        .radius(6.0)
+        .center()
+        .hover(p.hover)
+        .cursor(Cursor::Pointer)
+        .child(parts::dot(quest_color(color), 14.0))
+        .on_press_tx(move |s: &mut State, tx: &mut Tx| open_colors(s, tx, id, color))
+        .on_key(move |s: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+            if ev.key != Key::Enter || ev.mods != rune::Mods::default() {
+                return false;
+            }
+            open_colors(s, tx, id, color);
+            true
+        })
+}
+
+fn open_colors(s: &mut State, tx: &mut Tx, id: EntityId, color: QuestColor) {
+    s.quest_edit = QuestEdit::Color(id);
+    tx.focus_when_shown(swatch_key(color), tx.focus_visible());
+}
+
+pub fn color_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
+    let QuestEdit::Color(id) = s.quest_edit else { return };
+    if s.view != View::Quest(id) || s.overlay != Overlay::None {
+        return;
+    }
+    let Some(quest) = s.snap.quest(id) else { return };
+    let mut swatches = row()
+        .key("quest-color-popover")
+        .role("radiogroup")
+        .label("Quest color")
+        .padding(9.0)
+        .gap(6.0)
+        .focus_return(COLOR_TRIGGER)
+        .modal(true, |s: &mut State| s.quest_edit = QuestEdit::None);
+    for (index, color) in QuestColor::ALL.into_iter().enumerate() {
+        let on = color == quest.color;
         swatches = swatches.child(
-            el().key(format!("quest-color-{}", color_name(color).to_lowercase()))
+            el().key(swatch_key(color))
                 .role("radio")
                 .label(color_name(color))
                 .checked(on)
@@ -114,11 +134,38 @@ fn swatches(id: EntityId, current: QuestColor, p: &Pal) -> El {
                 .radius(10.0)
                 .fill(quest_color(color))
                 .cursor(Cursor::Pointer)
-                .border(2.0, if on { p.text } else { p.bg })
-                .on_press(move |s: &mut State| s.dispatch(Command::SetQuestColor { id, color })),
+                .border(2.0, if on { p.text } else { p.card })
+                .on_press(move |s: &mut State| choose_color(s, id, color))
+                .on_key(move |s: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                    if ev.mods != rune::Mods::default() {
+                        return false;
+                    }
+                    let len = QuestColor::ALL.len();
+                    let next = match ev.key {
+                        Key::Enter => {
+                            choose_color(s, id, color);
+                            return true;
+                        }
+                        Key::Left | Key::Up => (index + len - 1) % len,
+                        Key::Right | Key::Down => (index + 1) % len,
+                        _ => return false,
+                    };
+                    tx.focus(swatch_key(QuestColor::ALL[next]), true);
+                    true
+                }),
         );
     }
-    swatches
+    let surface = popover::raised(&p.kit, swatches, 9.0);
+    layer.push(popover::anchored(&p.kit, surface, COLOR_TRIGGER, Placement::BottomStart, 4.0));
+}
+
+fn choose_color(s: &mut State, id: EntityId, color: QuestColor) {
+    s.dispatch(Command::SetQuestColor { id, color });
+    s.quest_edit = QuestEdit::None;
+}
+
+fn swatch_key(color: QuestColor) -> String {
+    format!("quest-color-{}", color_name(color).to_lowercase())
 }
 
 /// A one-line field for a new name, in the `style` of the name it replaces, so nothing moves or

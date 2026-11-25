@@ -4,7 +4,7 @@
 
 use chrono::Local;
 use quest_view::tracked::{self, BlockKind, DayTimeline, TimelineBlock, WeekBalance};
-use rune::{Color, Cursor, El, ScrollSpec, TextStyle, col, el, row, spacer, text};
+use rune::{Color, Cursor, Cx, El, ScrollSpec, TextStyle, col, el, row, spacer, text};
 
 use crate::format;
 use crate::state::State;
@@ -17,20 +17,23 @@ const INNER: f32 = WIDTH - 2.0 * PAD;
 /// The hour labels' column; blocks start a little right of it.
 const LABELS: f32 = 40.0;
 const HOUR_PX: f32 = 38.0;
+const BLOCK_WIDTH: f32 = INNER - LABELS - 4.0;
+const BLOCK_PAD: f32 = 8.0;
 
 const HOUR_LABEL: TextStyle = TextStyle::new(10.5, 400.0).lh(12.0).features("'tnum' 1");
 const BLOCK_TITLE: TextStyle = TextStyle::new(11.5, 600.0).lh(15.0);
+const SHORT_TITLE: TextStyle = TextStyle::new(10.5, 600.0).lh(11.0);
 const BLOCK_RANGE: TextStyle = TextStyle::new(11.0, 400.0).lh(14.0).features("'tnum' 1");
 const WEEK_LINE: TextStyle = TextStyle::new(13.0, 400.0).lh(18.0).features("'tnum' 1");
 
-pub fn column(s: &State, p: &Pal) -> El {
+pub fn column(s: &State, p: &Pal, cx: &Cx<State>) -> El {
     let day = tracked::day_timeline(&s.snap, s.today(), &Local, s.now);
     let week = tracked::week_balance(&s.snap, s.today(), &Local, s.now);
     let today = col()
         .w_full()
         .child(head("Tracked today", p))
         .child(text(format::hours(day.tracked_ms)).key("tracked-total").font(ty::TOTAL).color(p.text).mt(2.0))
-        .child(timeline(&day, p).mt(18.0));
+        .child(timeline(&day, p, cx).mt(18.0));
     let content = col().w_full().px(PAD).pt(56.0).pb(60.0).gap(30.0).child(today).child(this_week(&week, p));
     col()
         .key("tracked")
@@ -44,7 +47,7 @@ fn head(label: &str, p: &Pal) -> El {
     text(label.to_uppercase()).font(ty::CAPS).color(p.faint)
 }
 
-fn timeline(day: &DayTimeline, p: &Pal) -> El {
+fn timeline(day: &DayTimeline, p: &Pal, cx: &Cx<State>) -> El {
     let hours = day.last_hour.saturating_sub(day.first_hour);
     let first_minute = day.first_hour * 60;
     let y = |minute: u32| minute.saturating_sub(first_minute) as f32 / 60.0 * HOUR_PX;
@@ -58,7 +61,7 @@ fn timeline(day: &DayTimeline, p: &Pal) -> El {
     for block in &day.blocks {
         let top = y(block.start_minute);
         let height = (y(block.end_minute) - top).max(3.0);
-        area = area.child(block_el(block, top, height, p));
+        area = area.child(block_el(block, top, height, p, cx));
     }
     if let Some(now) = day.now_minute {
         let top = y(now);
@@ -75,7 +78,7 @@ fn timeline(day: &DayTimeline, p: &Pal) -> El {
     area
 }
 
-fn block_el(block: &TimelineBlock, top: f32, height: f32, p: &Pal) -> El {
+fn block_el(block: &TimelineBlock, top: f32, height: f32, p: &Pal, cx: &Cx<State>) -> El {
     let organizing = block.kind == BlockKind::Organizing;
     let hue = block.color.filter(|_| !organizing).map_or(p.faint, quest_color);
     let range = format!(
@@ -89,10 +92,10 @@ fn block_el(block: &TimelineBlock, top: f32, height: f32, p: &Pal) -> El {
         .role("button")
         .label(format!("{} {range}", block.title))
         .absolute(LABELS + 4.0, top)
-        .w(INNER - LABELS - 4.0)
+        .w(BLOCK_WIDTH)
         .h(height)
-        .px(8.0)
-        .py(2.0)
+        .px(BLOCK_PAD)
+        .py(if height < 19.0 { 0.5 } else { 2.0 })
         .radius(6.0)
         .fill(blend(hue, p.side, 0.14))
         .border_sides([0.0, 0.0, 0.0, 2.0], blend(hue, p.side, 0.7))
@@ -103,9 +106,23 @@ fn block_el(block: &TimelineBlock, top: f32, height: f32, p: &Pal) -> El {
     if block.running {
         b = b.border(1.0, blend(hue, p.side, 0.7)).border_dash(3.0, 2.0);
     }
-    if height >= 16.0 {
-        let ink = if organizing { p.muted } else { p.text };
+    let ink = if organizing { p.muted } else { p.text };
+    if height >= 19.0 {
         b = b.child(text(block.title.clone()).font(BLOCK_TITLE).color(ink).single_line().truncate());
+    } else if height >= 12.0 {
+        let key = format!("tl-short-title-{entry}");
+        let fits = cx.layout_with(&key, |[_, _, width, _]| width <= BLOCK_WIDTH - 2.0 * BLOCK_PAD);
+        // Keep the unconstrained line in layout even when it doesn't fit.
+        b = b.child(
+            row().child(
+                text(block.title.clone())
+                    .key(key)
+                    .font(SHORT_TITLE)
+                    .color(ink)
+                    .a11y_hidden()
+                    .opacity(if fits == Some(true) { 1.0 } else { 0.0 }),
+            ),
+        );
     }
     if height > 32.0 {
         b = b.child(text(range).font(BLOCK_RANGE).color(p.muted).single_line());
@@ -173,7 +190,7 @@ fn this_week(week: &WeekBalance, p: &Pal) -> El {
         rest =
             rest.child(line(parts::dot(p.border_strong, 8.0), "No quest", format::hours(week.no_quest_ms), p.muted, p));
     }
-    rest = rest.child(line(el().size(8.0, 8.0), "Postponed", week.postponed.to_string(), p.muted, p));
+    rest = rest.child(line(parts::dot(p.faint, 8.0), "Postponed", week.postponed.to_string(), p.muted, p));
     c.child(rest)
 }
 

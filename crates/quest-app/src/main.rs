@@ -94,6 +94,8 @@ const SCENES: &[Scene] = &[
             s.go(View::Quest(quest));
         }
     }),
+    ("quest-colors", quest_colors),
+    ("quest-colors-light", |s| light(s, quest_colors)),
     ("quest-rename", quest_rename),
     ("archive", archive),
     ("undo-toast", |s| {
@@ -298,6 +300,12 @@ fn first_open_task(s: &State) -> Option<quest_domain::EntityId> {
 }
 
 /// The first quest's page with its name open in the rename field.
+fn quest_colors(s: &mut State) {
+    let Some(id) = s.snap.active_quests().next().map(|q| q.id) else { return };
+    s.go(View::Quest(id));
+    s.quest_edit = state::QuestEdit::Color(id);
+}
+
 fn quest_rename(s: &mut State) {
     let Some(quest) = s.snap.active_quests().next().map(|q| q.id) else { return };
     s.go(View::Quest(quest));

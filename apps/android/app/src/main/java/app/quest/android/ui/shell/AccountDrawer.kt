@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import app.quest.android.R
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.components.SyncPill
-import app.quest.android.ui.lists.OnAccentFill
+import app.quest.android.ui.components.OnAccentFill
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType

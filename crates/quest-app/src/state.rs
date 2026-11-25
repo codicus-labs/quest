@@ -77,11 +77,12 @@ pub enum Overlay {
     EntryEditor,
 }
 
-/// An inline editor open on the Quests view; its text is `State::quest_text`.
+/// An inline editor on a quest page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QuestEdit {
     None,
     Rename(EntityId),
+    Color(EntityId),
 }
 
 /// Where a new task lands in its list.

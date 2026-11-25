@@ -19,7 +19,7 @@ common="--demo --now 2026-10-15T14:40 --size 1440x900 --scale 2"
 for scene in today today-light inbox inbox-light logbook logbook-light tracked-closed tracked-closed-light \
   entry-editor entry-editor-light organizing organizing-light focus quests quests-completed \
   quests-empty-active quests-empty-completed quest-editor quest-new review palette account light \
-  quest-detail quest-detail-light quest-rename archive undo-toast task-modal:task-modal-today log-work \
+  quest-detail quest-detail-light quest-colors quest-colors-light quest-rename archive undo-toast task-modal:task-modal-today log-work \
   shortcuts shortcuts-light ai-notice guest-import; do
   # `scene:file` snaps the scene into another file name.
   "$app" $common --data-dir "$(fresh)" --scene "${scene%%:*}" --snap "$here/${scene##*:}.png" >/dev/null 2>&1

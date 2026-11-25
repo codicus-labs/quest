@@ -44,13 +44,38 @@ fn the_quest_page_renames_recolours_completes_and_reopens() {
     assert_eq!(rt.state.snap.quest(id).unwrap().title, format!("{title} II"));
 
     let other = QuestColor::ALL.into_iter().find(|c| *c != rt.state.snap.quest(id).unwrap().color).unwrap();
+    assert!(rt.find("quest-color-popover").is_none());
+    click(&mut rt, "quest-color-trigger");
     click(&mut rt, &format!("quest-color-{}", color_name(other).to_lowercase()));
+    assert!(rt.find("quest-color-popover").is_none());
     assert_eq!(rt.state.snap.quest(id).unwrap().color, other);
 
     click(&mut rt, "quest-status");
     assert_eq!(rt.state.snap.quest(id).unwrap().status, QuestStatus::Completed);
     click(&mut rt, "quest-status");
     assert_eq!(rt.state.snap.quest(id).unwrap().status, QuestStatus::Active);
+}
+
+#[test]
+fn the_quest_color_popover_previews_focus_and_commits_only_on_enter() {
+    let (mut rt, _dir) = app();
+    let id = open_first_quest(&mut rt);
+    let original = rt.state.snap.quest(id).unwrap().color;
+    let index = QuestColor::ALL.iter().position(|&color| color == original).unwrap();
+    let next = QuestColor::ALL[(index + 1) % QuestColor::ALL.len()];
+
+    click(&mut rt, "quest-color-trigger");
+    press(&mut rt, Key::Right, Mods::default());
+    assert_eq!(rt.state.snap.quest(id).unwrap().color, original);
+    press(&mut rt, Key::Escape, Mods::default());
+    assert!(rt.find("quest-color-popover").is_none());
+    assert_eq!(rt.state.snap.quest(id).unwrap().color, original);
+
+    enter(&mut rt);
+    press(&mut rt, Key::Right, Mods::default());
+    enter(&mut rt);
+    assert_eq!(rt.state.snap.quest(id).unwrap().color, next);
+    assert!(rt.find("quest-color-popover").is_none());
 }
 
 #[test]

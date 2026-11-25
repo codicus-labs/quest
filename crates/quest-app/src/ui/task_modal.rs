@@ -37,7 +37,7 @@ pub fn layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
         }));
     let mut popups = Vec::new();
     let body =
-        row().w_full().grow(1.0).min_h(0.0).child(main(s, &task, form, p)).child(side(s, &task, form, p, &mut popups));
+        row().w_full().grow(1.0).min_h(0.0).child(main(&task, form, p)).child(side(s, &task, form, p, &mut popups));
     let panel = col()
         .key("task-modal")
         .role("dialog")
@@ -68,9 +68,8 @@ pub fn layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
 }
 
 /// The done check, the title (one line however it wraps) and the description.
-fn main(s: &State, task: &Task, form: &TaskModal, p: &Pal) -> El {
+fn main(task: &Task, form: &TaskModal, p: &Pal) -> El {
     let id = task.id;
-    let color = parts::accent_of(parts::quest_of(s, task), p);
     let title = text_input(&form.title, TITLE)
         .key("task-modal-title")
         .label("Task title")
@@ -88,8 +87,7 @@ fn main(s: &State, task: &Task, form: &TaskModal, p: &Pal) -> El {
             s.save_task_title();
             true
         });
-    let check =
-        parts::check("task-modal-done".to_owned(), task.is_done(), color, p, move |s: &mut State| s.toggle_done(id));
+    let check = parts::check("task-modal-done".to_owned(), task.is_done(), p, move |s: &mut State| s.toggle_done(id));
     let description = super::notes::field(
         "task-modal-description",
         &form.description,

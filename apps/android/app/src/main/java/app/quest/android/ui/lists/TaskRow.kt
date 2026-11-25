@@ -19,7 +19,6 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -28,12 +27,14 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.quest.android.R
 import app.quest.android.ui.components.CompleteToggle
 import app.quest.android.ui.components.Dot
+import app.quest.android.ui.components.OnAccentFill
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.components.questColor
 import app.quest.android.ui.theme.QuestColors
@@ -43,9 +44,6 @@ import app.quest.android.ui.theme.QuestType
 import uniffi.quest_mobile.ListRow
 import uniffi.quest_mobile.MarkTone
 import uniffi.quest_mobile.RowMark
-
-/** Text on the accent fill (the Stop pill): dark in both appearances, as on the desktop. */
-val OnAccentFill = Color(0xFF1A1A1A)
 
 /** What a row can do. */
 class RowActions(
@@ -69,12 +67,13 @@ fun TaskRow(row: ListRow, actions: RowActions, modifier: Modifier = Modifier) {
             .testTag("row:${row.title}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CompleteToggle(row.done, questTint ?: colors.accentFill, onToggle = { actions.toggle(row.id) })
+        CompleteToggle(row.done, onToggle = { actions.toggle(row.id) })
         Column(Modifier.weight(1f).padding(vertical = QuestSpacing.small), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 row.title,
                 style = QuestType.task,
                 color = if (row.done) colors.textMuted else colors.text,
+                textDecoration = if (row.done) TextDecoration.LineThrough else null,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )

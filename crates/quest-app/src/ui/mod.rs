@@ -111,6 +111,7 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
         Overlay::EntryEditor => entry_editor::layer(s, p, &mut layer),
     }
     quest_picker::layer(s, p, cx, &mut layer);
+    quest_detail::color_layer(s, p, &mut layer);
     toast::layer(s, p, &mut layer);
     menu::layer(s, p, &mut layer);
     if s.view != View::Focus {
@@ -153,7 +154,7 @@ fn shell(s: &State, p: &Pal, cx: &mut Cx<State>) -> El {
         .fill(p.bg)
         .child(sidebar::view(s, p))
         .child(main)
-        .children(s.right_column.then(|| tracked::column(s, p)))
+        .children(s.right_column.then(|| tracked::column(s, p, cx)))
 }
 
 fn right_column_toggle(s: &State, p: &Pal) -> El {

@@ -379,10 +379,7 @@
     <string name="tracked_today">%1$s today</string>
     <string name="tracked_review">Weekly review</string>
     <string name="tracked_this_week">This week</string>
-    <plurals name="tracked_postponed">
-        <item quantity="one">%d postponed</item>
-        <item quantity="other">%d postponed</item>
-    </plurals>
+    <string name="tracked_postponed">Postponed</string>
     <string name="drawer_workspaces">Workspaces</string>
     <string name="workspaces_new">New workspace</string>
     <string name="drawer_account_details">Account details</string>

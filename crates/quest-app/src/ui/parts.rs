@@ -65,9 +65,12 @@ pub fn chip(quest: Option<&Quest>, p: &Pal) -> El {
 }
 
 /// The round "complete" toggle.
-pub fn check(key: String, done: bool, color: Color, p: &Pal, on_press: impl Fn(&mut State) + 'static) -> El {
-    let (fill, border, ink) =
-        if done { (color.alpha(0.85), color, Color::WHITE) } else { (Color::TRANSPARENT, p.border_strong, p.muted) };
+pub fn check(key: String, done: bool, p: &Pal, on_press: impl Fn(&mut State) + 'static) -> El {
+    let (fill, border, ink) = if done {
+        (p.accent_fill, p.accent_fill, theme::on_accent_fill())
+    } else {
+        (Color::TRANSPARENT, p.border_strong, p.muted)
+    };
     el().key(key)
         .role("checkbox")
         .label("Complete")
@@ -261,7 +264,7 @@ pub fn task_card(s: &State, task: &Task, p: &Pal, options: CardOptions) -> El {
         .gap(8.0)
         .center_y()
         .min_w(0.0)
-        .child(check(format!("{prefix}-check-{id}"), done, color, p, move |s: &mut State| s.toggle_done(id)))
+        .child(check(format!("{prefix}-check-{id}"), done, p, move |s: &mut State| s.toggle_done(id)))
         .child(chip);
     if prefix == "plan" && s.series_of(task).repeat.is_some() {
         meta = meta.child(icon(&icons::REPEAT, 14.0).role("img").color(p.muted).label("Recurring task"));
@@ -326,9 +329,6 @@ pub fn task_card(s: &State, task: &Task, p: &Pal, options: CardOptions) -> El {
         });
     if running {
         card = card.shadow(0.0, 18.0, p.accent.alpha(0.18));
-    }
-    if done {
-        card = card.opacity(0.75);
     }
     let Some(list) = options.list else {
         return card

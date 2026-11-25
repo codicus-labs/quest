@@ -80,6 +80,28 @@ fn while_organizing_the_player_goes_back_to_the_task() {
 }
 
 #[test]
+fn a_short_timeline_block_only_shows_its_title_when_it_fits() {
+    let (mut rt, _dir) = app();
+    let now = rt.state.now;
+    let organizing = rt.state.snap.time_entries.iter().find(|e| e.kind == EntryKind::Organizing).unwrap().id;
+    let long_title = EntityId::new();
+    rt.state.dispatch(Command::CreateTask {
+        id: long_title,
+        title: "A task title far too wide for a single line in the time column".to_owned(),
+        quest_id: None,
+        planned_on: None,
+        due_on: None,
+        position: quest_domain::Position::Bottom,
+    });
+    let wide = EntityId::new();
+    rt.state.dispatch(Command::StartFocus { entry_id: wide, task_id: long_title, at: now - Duration::minutes(390) });
+    rt.state.dispatch(Command::StopFocus { at: now - Duration::minutes(365) });
+    settle(&mut rt);
+    assert_eq!(rt.presented(&format!("tl-short-title-{organizing}")).unwrap().1, 1.0);
+    assert_eq!(rt.presented(&format!("tl-short-title-{wide}")).unwrap().1, 0.0);
+}
+
+#[test]
 fn a_timeline_block_opens_its_entry_editor_which_moves_the_end_and_deletes() {
     let (mut rt, _dir) = app();
     let id = first_block(&rt);

@@ -31,16 +31,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -51,7 +48,7 @@ import app.quest.android.ui.theme.QuestType
 import uniffi.quest_mobile.HomeTask
 import uniffi.quest_mobile.QuestChip as QuestRef
 
-private val AccentBarWidth = 3.dp
+internal val OnAccentFill = Color(0xFF1A1A1A)
 
 /** What a card can do; [TaskCard] wires each to its control. */
 class TaskCardActions(
@@ -67,7 +64,7 @@ class TaskCardActions(
 )
 
 /**
- * A task as on the desktop: quest colour bar, title, complete toggle, quest chip, tracked time
+ * A task as on the desktop: title, complete toggle, quest chip, tracked time
  * and play/pause. Tapping the card, title included, opens the task's sheet, where the title is edited.
  */
 @Composable
@@ -80,21 +77,10 @@ fun TaskCard(task: HomeTask, actions: TaskCardActions, modifier: Modifier = Modi
         modifier = modifier
             .fillMaxWidth()
             .then(if (task.timerRunning) Modifier.shadow(8.dp, shape, spotColor = colors.accent) else Modifier)
-            .alpha(if (task.done) 0.75f else 1f)
             .background(colors.card, shape)
             .border(QuestSpacing.hairline, edge, shape)
             .clickable(onClickLabel = stringResource(R.string.task_open), onClick = actions.onOpen)
-            // The quest colour bar; drawn, not laid out, so the card needs no intrinsic height.
-            .drawBehind {
-                val inset = QuestSpacing.medium.toPx()
-                drawRoundRect(
-                    accent.copy(alpha = if (task.done) 0.45f else 1f),
-                    topLeft = Offset(QuestSpacing.small.toPx(), inset),
-                    size = Size(AccentBarWidth.toPx(), (size.height - 2 * inset).coerceAtLeast(0f)),
-                    cornerRadius = CornerRadius(2.dp.toPx()),
-                )
-            }
-            .padding(start = QuestSpacing.small + AccentBarWidth)
+            .padding(start = QuestSpacing.small)
             .testTag("task:${task.title}"),
     ) {
         Column(Modifier.weight(1f).padding(start = QuestSpacing.cardPadding, top = QuestSpacing.tight, bottom = 4.dp)) {
@@ -102,7 +88,7 @@ fun TaskCard(task: HomeTask, actions: TaskCardActions, modifier: Modifier = Modi
             // Wraps the time and timer to a second line before it shortens the quest's name.
             FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CompleteToggle(task.done, accent, actions.onToggle, size = QuestSpacing.cardControl)
+                    CompleteToggle(task.done, actions.onToggle, size = QuestSpacing.cardControl)
                     if (task.quest != null) {
                         QuestChip(task.quest, Modifier.padding(start = QuestSpacing.small, end = QuestSpacing.medium))
                     } else {
@@ -185,15 +171,17 @@ private fun TimerButton(title: String, running: Boolean, onClick: () -> Unit) {
  * reaches 48 dp (`minimumInteractiveComponentSize`).
  */
 @Composable
-fun CompleteToggle(done: Boolean, color: Color, onToggle: () -> Unit, modifier: Modifier = Modifier, size: Dp = QuestSpacing.touchTarget) {
+fun CompleteToggle(done: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, size: Dp = QuestSpacing.touchTarget) {
     val colors = QuestTheme.colors
-    val (fill, edge, ink) =
-        if (done) Triple(color.copy(alpha = 0.85f), color, Color.White) else Triple(Color.Transparent, colors.borderStrong, colors.textMuted)
+    val fill = if (done) colors.accentFill else Color.Transparent
+    val edge = if (done) colors.accentFill else colors.borderStrong
+    val label = stringResource(R.string.task_complete)
     Box(
         modifier = modifier
             .size(size)
             .minimumInteractiveComponentSize()
             .toggleable(value = done, role = Role.Checkbox, onValueChange = { onToggle() })
+            .semantics { contentDescription = label }
             .testTag("task-check"),
         contentAlignment = Alignment.Center,
     ) {
@@ -201,7 +189,9 @@ fun CompleteToggle(done: Boolean, color: Color, onToggle: () -> Unit, modifier: 
             Modifier.size(QuestSpacing.checkSize).background(fill, CircleShape).border(QuestSpacing.hairline, edge, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.task_complete), tint = ink, modifier = Modifier.size(14.dp))
+            if (done) {
+                Icon(Icons.Filled.Check, contentDescription = null, tint = OnAccentFill, modifier = Modifier.size(14.dp))
+            }
         }
     }
 }

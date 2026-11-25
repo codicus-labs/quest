@@ -44,7 +44,6 @@ import app.quest.android.ui.components.CompleteToggle
 import app.quest.android.ui.components.Dot
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.components.QuestPickerChip
-import app.quest.android.ui.components.questColor
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
@@ -118,9 +117,8 @@ fun TaskSheetContent(state: TaskSheetState.Open, actions: TaskSheetActions) {
 @Composable
 private fun TaskDetails(state: TaskSheetState.Open, actions: TaskSheetActions) {
     val detail = state.detail
-    val accent = detail.quest?.let { questColor(it.colorHex) } ?: QuestTheme.colors.textFaint
     Row(verticalAlignment = Alignment.Top) {
-        CompleteToggle(detail.done, accent, actions.toggleDone)
+        CompleteToggle(detail.done, actions.toggleDone)
         CommitField(
             value = state.title,
             onEdit = { actions.editTitle(it.replace('\n', ' ')) },

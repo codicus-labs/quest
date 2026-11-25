@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,7 +58,7 @@ private const val NAV_LABEL_MAX_FONT_SCALE = 1.3f
 enum class Tab(@StringRes val label: Int, val icon: ImageVector) {
     Today(R.string.nav_today, QuestIcons.Today),
     Inbox(R.string.nav_inbox, QuestIcons.Inbox),
-    Quests(R.string.nav_quests, Icons.Filled.Star),
+    Quests(R.string.nav_quests, QuestIcons.Flag),
     Tracked(R.string.nav_tracked, QuestIcons.Focus),
 }
 

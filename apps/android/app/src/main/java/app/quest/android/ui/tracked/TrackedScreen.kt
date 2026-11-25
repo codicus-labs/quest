@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -188,13 +187,7 @@ private fun Week(week: WeekSummary) {
         week.quests.forEach { line -> WeekLine(line.title, line.hours, questColor(line.colorHex), line.fraction) }
         WeekLine(stringResource(R.string.organizing), week.organizing, colors.accentFill, null)
         week.noQuest?.let { WeekLine(stringResource(R.string.no_quest), it, colors.textFaint, null) }
-        if (week.postponed > 0u) {
-            Text(
-                pluralStringResource(R.plurals.tracked_postponed, week.postponed.toInt(), week.postponed.toInt()),
-                style = QuestType.small,
-                color = colors.textMuted,
-            )
-        }
+        WeekLine(stringResource(R.string.tracked_postponed), week.postponed.toString(), colors.textFaint, null)
     }
 }
 

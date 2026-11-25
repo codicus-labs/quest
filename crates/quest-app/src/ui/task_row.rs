@@ -24,7 +24,7 @@ pub struct Shows {
 pub fn task_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
     let id = task.id;
     let selected = s.selected_task == Some(id);
-    let title = text(task.title.clone())
+    let mut title = text(task.title.clone())
         .key(format!("row-title-{id}"))
         .font(ty::BODY)
         .color(if task.is_done() { p.muted } else { p.text })
@@ -32,6 +32,9 @@ pub fn task_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
         .truncate()
         .grow(1.0)
         .min_w(0.0);
+    if task.is_done() {
+        title = title.strike(0, task.title.len(), Some(p.muted));
+    }
     let mut line = row()
         .key(format!("row-{id}"))
         .role("listitem")
