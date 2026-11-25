@@ -27,7 +27,7 @@ pub fn task_row(s: &State, task: &Task, p: &Pal) -> El {
         .role("button")
         .label(format!("Repeat: {label}"))
         .focusable(true)
-        .h(36.0)
+        .h(26.0)
         .px(10.0)
         .gap(10.0)
         .center_y()

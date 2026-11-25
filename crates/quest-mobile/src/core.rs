@@ -132,9 +132,8 @@ impl QuestCore {
             let now = Now::parse(&now)?;
             let task = self.task(&task_id)?;
             self.dispatch(commands::toggle_task(&task, now))?;
-            let day_now = self.store().snapshot().task(task.id).and_then(|t| t.planned_on);
-            let moved_from = task.planned_on.filter(|_| day_now != task.planned_on);
-            self.undo_state().toggled(task.id, !task.is_done(), moved_from, task.title, now.at);
+            self.remember_completion(&task, now);
+
             Ok(())
         })
     }
@@ -182,6 +181,14 @@ impl QuestCore {
 }
 
 impl QuestCore {
+    pub(crate) fn remember_completion(&self, before: &quest_domain::Task, now: Now) {
+        let after = self.store().snapshot();
+        if let Some(edit) = after.task(before.id).and_then(|task| quest_view::undo::TaskEdit::completion(before, task))
+        {
+            self.undo_state().toggled(edit, &before.title, now.at);
+        }
+    }
+
     /// The active store. Dropping the last handle to a replaced store waits for its worker (up to
     /// 2 s), so callers keep it only for the call.
     pub(crate) fn store(&self) -> Arc<Store> {

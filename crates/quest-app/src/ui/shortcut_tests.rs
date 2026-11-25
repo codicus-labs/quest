@@ -25,6 +25,21 @@ fn runs(rt: &Runtime<State>, id: EntityId) -> bool {
 }
 
 #[test]
+fn list_timer_keeps_its_position_when_started_and_stopped() {
+    let (mut rt, _dir) = demo_app();
+    settle(&mut rt);
+    let id = task(&rt, "Draft this week’s essay").id;
+    let button = format!("row-play-{id}");
+    let before = center(&rt, &button);
+    click(&mut rt, &button);
+    assert!(runs(&rt, id));
+    assert_eq!(center(&rt, &button), before);
+    click(&mut rt, &button);
+    assert!(rt.state.snap.running_entry().is_none());
+    assert_eq!(center(&rt, &button), before);
+}
+
+#[test]
 fn keys_act_on_the_task_under_the_pointer() {
     let (mut rt, _dir) = demo_app();
     settle(&mut rt);
@@ -44,8 +59,10 @@ fn keys_act_on_the_task_under_the_pointer() {
     assert!(!task(&rt, "Draft this week’s essay").is_done(), "X reopens");
 
     let today = rt.state.today();
-    type_text(&mut rt, "d");
-    assert_eq!(task(&rt, "Draft this week’s essay").planned_on, Some(today + Days::new(1)), "D: the next day");
+    type_text(&mut rt, "p");
+    assert!(rt.find("task-calendar").is_some());
+    type_text(&mut rt, "m");
+    assert_eq!(task(&rt, "Draft this week’s essay").planned_on, Some(today + Days::new(1)), "P M: tomorrow");
     // The row left Today (and the pointer); its card under the pointer elsewhere stands in.
     rt.frame(0.0);
     assert_eq!(rt.state.hovered_task, None);
@@ -141,7 +158,7 @@ fn j_k_and_the_arrows_move_the_selection_and_x_completes_it() {
     type_text(&mut rt, "x");
     assert!(rt.state.snap.task(rows[0]).is_some_and(|t| t.is_done()), "X completes the selected row");
     press(&mut rt, Key::Enter, Mods::default());
-    assert_eq!(rt.state.overlay, Overlay::Task, "Return opens its dialog");
+    assert_eq!(rt.state.task_modal.as_ref().map(|form| form.task), Some(rows[0]), "Return expands the row");
 }
 
 #[test]

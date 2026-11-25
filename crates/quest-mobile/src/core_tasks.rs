@@ -1,9 +1,9 @@
 //! `QuestCore`'s task actions: the card (rename, timer, delete, undo) and the task sheet.
 //! Memory-only like the rest of the core; decisions live in the pure modules.
 
-use quest_domain::{Command, EntityId, Position};
+use quest_domain::{Command, EntityId};
 use quest_store::SyncStatus;
-use quest_view::undo::Deletable;
+use quest_view::undo::{Deletable, TaskEdit};
 
 use crate::core::QuestCore;
 use crate::error::MobileError;
@@ -14,6 +14,24 @@ use crate::time::Now;
 use crate::types::Moment;
 use crate::undo::UndoAction;
 use crate::{commands, repeat, task_detail};
+
+impl QuestCore {
+    fn change_task_dates(
+        &self,
+        task: &quest_domain::Task,
+        command: Option<Command>,
+        now: Now,
+    ) -> Result<(), MobileError> {
+        let Some(command) = command else { return Ok(()) };
+        let before = self.store().snapshot();
+        self.dispatch(command)?;
+        let after = self.store().snapshot();
+        if let Some(edit) = after.task(task.id).and_then(|updated| TaskEdit::dates(task, updated, &before, &after)) {
+            self.undo_state().task_edited(edit, now.at);
+        }
+        Ok(())
+    }
+}
 
 #[uniffi::export]
 impl QuestCore {
@@ -63,15 +81,8 @@ impl QuestCore {
             let now = Now::parse(&now)?;
             let Some(action) = self.undo_state().undo(now.at) else { return Ok(()) };
             match action {
+                UndoAction::Task(edit) => self.dispatch(edit.command(now.at)),
                 UndoAction::Restore(item) => self.dispatch(item.restore()),
-                UndoAction::Reopen { task, back_to } => {
-                    self.dispatch(Command::ReopenTask { id: task })?;
-                    let Some(day) = back_to else { return Ok(()) };
-                    let back =
-                        Command::MoveTask { id: task, planned_on: Some(day), position: Position::Bottom, at: now.at };
-                    self.dispatch(back)
-                }
-                UndoAction::Complete(id) => self.dispatch(Command::CompleteTask { id, at: now.at }),
                 UndoAction::SetQuestStatus { quest, status } => {
                     self.dispatch(Command::SetQuestStatus { id: quest, status })
                 }
@@ -103,7 +114,16 @@ impl QuestCore {
 
     /// Sets the task's quest; `None` is "No quest".
     pub fn set_task_quest(&self, task_id: String, quest_id: Option<String>) -> Result<(), MobileError> {
-        guard(|| self.dispatch_some(commands::set_quest(&self.task(&task_id)?, quest_id.as_deref())?))
+        guard(|| {
+            let task = self.task(&task_id)?;
+            let Some(command) = commands::set_quest(&task, quest_id.as_deref())? else {
+                return Ok(());
+            };
+            self.dispatch(command)?;
+            self.undo_state()
+                .task_edited(TaskEdit::Quest { id: task.id, previous: task.quest_id }, chrono::DateTime::UNIX_EPOCH);
+            Ok(())
+        })
     }
 
     /// Plans the task for `planned_on` ("2026-11-24"), or unplans it with `None`, at the bottom
@@ -118,7 +138,8 @@ impl QuestCore {
         guard(|| {
             let now = Now::parse(&now)?;
             let planned_on = planned_on.as_deref().map(parse_iso_day).transpose()?;
-            self.dispatch_some(commands::set_planned(&self.task(&task_id)?, planned_on, now))
+            let task = self.task(&task_id)?;
+            self.change_task_dates(&task, commands::set_planned(&task, planned_on, now), now)
         })
     }
 
@@ -128,7 +149,8 @@ impl QuestCore {
         guard(|| {
             let now = Now::parse(&now)?;
             let due_on = due_on.as_deref().map(parse_iso_day).transpose()?;
-            self.dispatch_some(commands::set_due(&self.task(&task_id)?, due_on, now))
+            let task = self.task(&task_id)?;
+            self.change_task_dates(&task, commands::set_due(&task, due_on, now), now)
         })
     }
 

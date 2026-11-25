@@ -25,6 +25,18 @@ fn a_delete_shows_a_toast_for_six_seconds() {
 }
 
 #[test]
+fn a_completion_shows_for_five_seconds_but_undo_outlives_the_toast() {
+    let edit = TaskEdit::Completion { id: EntityId::new(), previous: None, previous_plan: None };
+    let (state, _) = UndoState::default().step(UndoEvent::TaskEdited(edit.clone()), t0());
+    assert_eq!(state.shown.as_ref().unwrap().toast, Toast::Done);
+    assert_eq!(state.expires(), Some(t0() + Duration::seconds(5)));
+    let (expired, _) = state.step(UndoEvent::Tick, t0() + Duration::seconds(5));
+    assert!(expired.shown.is_none());
+    let (_, effect) = expired.step(UndoEvent::Undo, t0() + Duration::seconds(10));
+    assert_eq!(effect, UndoEffect::Task(edit));
+}
+
+#[test]
 fn undo_restores_the_last_delete_once() {
     let first = Deletable::Quest(EntityId::new());
     let second = Deletable::ChecklistItem(EntityId::new());

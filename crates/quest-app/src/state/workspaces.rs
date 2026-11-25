@@ -80,7 +80,8 @@ impl State {
         self.capture.step = CaptureStep::Compose { error: None };
         self.focus_task = None;
         self.quest_filter = None;
-        self.quick_add_quest = None;
+        self.reset_quick_add();
+        self.lingering_tasks.clear();
         self.date_picker = None;
         self.quest_picker = None;
         self.drag = DragState::Idle;

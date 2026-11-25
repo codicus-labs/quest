@@ -3,17 +3,15 @@
 //! `quest_view::lists`.
 
 use chrono::Local;
-use quest_domain::{Command, EntityId, Position, Task};
+use quest_domain::{EntityId, Task};
 use quest_view::{lists, row_meta, tracked};
-use rune::{Color, El, Icon, ScrollSpec, Tx, col, icon, row, text};
+use rune::{Color, El, Icon, ScrollSpec, col, icon, row, text};
 
 use crate::format;
 use crate::icons;
-use crate::state::quest_picker::PickFor;
-use crate::state::{AddAt, State, View};
+use crate::state::{State, View};
 use crate::theme::{Pal, ty};
 use crate::ui::task_row::{self, Shows};
-use crate::ui::{parts, quest_picker};
 
 /// Rows under an optional head ("3 done", a Logbook day).
 pub struct Group<'a> {
@@ -26,13 +24,25 @@ pub fn groups(s: &State) -> Vec<Group<'_>> {
     let snap = &s.snap;
     let today = s.today();
     match s.view {
-        View::Today => open_then_done(lists::today(snap, today), lists::done_today(snap, today, &Local)),
-        View::Inbox => vec![Group { head: None, tasks: lists::inbox(snap) }],
+        View::Today => open_then_done(
+            lists::today_with_linger(snap, today, |task| s.lingering(task)),
+            lists::done_today(snap, today, &Local).into_iter().filter(|t| s.lingering(t).is_none()).collect(),
+        ),
+        View::Inbox => vec![Group { head: None, tasks: lists::inbox_with_linger(snap, |task| s.lingering(task)) }],
         View::Logbook => lists::logbook_days(snap, &Local)
             .into_iter()
             .map(|(day, tasks)| Group { head: Some(row_meta::day_name(day, today)), tasks })
             .collect(),
-        View::Quest(quest) => open_then_done(lists::quest_open(snap, quest), lists::quest_done(snap, quest)),
+        View::Quest(quest) => open_then_done(
+            snap.tasks
+                .iter()
+                .filter(|task| {
+                    let before = s.lingering(task).unwrap_or(task);
+                    before.quest_id == Some(quest) && !before.is_done()
+                })
+                .collect(),
+            lists::quest_done(snap, quest).into_iter().filter(|t| s.lingering(t).is_none()).collect(),
+        ),
         _ => Vec::new(),
     }
 }
@@ -53,10 +63,10 @@ pub fn shown_tasks(s: &State) -> Vec<EntityId> {
 
 pub fn view(s: &State, p: &Pal) -> El {
     let (header, add, empty) = match s.view {
-        View::Today => (today_header(s, p), Some(quick_add(s, p, "Add to Today", today_chip(s, p))), "All clear"),
+        View::Today => (today_header(s, p), Some(super::task_fields::quick_add(s, p, "Add to Today")), "All clear"),
         View::Inbox => (
             header(&icons::INBOX, p.icon_inbox, "Inbox", None, p),
-            Some(quick_add(s, p, "Add to Inbox", None)),
+            Some(super::task_fields::quick_add(s, p, "Add to Inbox")),
             "Inbox zero",
         ),
         _ => (header(&icons::LOGBOOK, p.icon_logbook, "Logbook", None, p), None, "Nothing done yet"),
@@ -124,59 +134,4 @@ fn today_header(s: &State, p: &Pal) -> El {
     let tracked = tracked::day_timeline(&s.snap, s.today(), &Local, s.now).tracked_ms;
     let sub = format!("{} · {} tracked", format::long_day(s.today()), format::hours(tracked));
     header(&icons::TODAY, p.accent, "Today", Some(sub), p)
-}
-
-/// The quest Today's new task gets; "No quest" until one is picked.
-fn today_chip(s: &State, p: &Pal) -> Option<El> {
-    let quest = s.quick_add_quest.and_then(|q| s.snap.quest(q));
-    let label = format!("Quest for the new task: {}", quest.map_or("none", |q| q.title.as_str()));
-    Some(quest_picker::trigger(parts::chip(quest, p).max_w(180.0), PickFor::QuickAdd, label, s, p))
-}
-
-/// The dashed field above the rows; Return adds the task with the view's defaults.
-pub fn quick_add(s: &State, p: &Pal, placeholder: &str, chip: Option<El>) -> El {
-    row()
-        .key("quick-add-box")
-        .w_full()
-        .h(42.0)
-        .mt(18.0)
-        .px(12.0)
-        .gap(10.0)
-        .center_y()
-        .radius(10.0)
-        .border(1.0, p.border_strong)
-        .border_dash(4.0, 3.0)
-        .child(icon(&icons::ADD, 18.0).color(p.accent))
-        .child(parts::field(
-            "quick-add",
-            &s.quick_add,
-            placeholder,
-            ty::BODY,
-            p,
-            |s: &mut State| &mut s.quick_add,
-            |s: &mut State, _: &mut Tx| add_task(s),
-        ))
-        .children(chip)
-}
-
-/// Today plans the task for today with the picked quest, a quest's page files it under that
-/// quest, the Inbox gives it neither.
-fn add_task(s: &mut State) {
-    let title = s.quick_add.text.trim().to_owned();
-    if title.is_empty() {
-        return;
-    }
-    let (quest_id, planned_on) = match s.view {
-        View::Today => (s.quick_add_quest, Some(s.today())),
-        View::Quest(quest) => (Some(quest), None),
-        _ => (None, None),
-    };
-    let position = match s.add_at {
-        AddAt::Top => Position::Top,
-        AddAt::Bottom => Position::Bottom,
-    };
-    s.dispatch(Command::CreateTask { id: EntityId::new(), title, quest_id, planned_on, due_on: None, position });
-    if s.notice.is_none() {
-        s.quick_add.clear();
-    }
 }

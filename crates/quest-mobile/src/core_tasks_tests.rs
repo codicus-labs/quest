@@ -118,6 +118,26 @@ fn the_sheet_edits_description_quest_and_plan_date() {
 }
 
 #[test]
+fn date_undo_restores_both_boundaries_and_only_its_own_postponements() {
+    let (_dir, core) = open();
+    let id = add(&core, "Draft");
+    core.set_task_due(id.clone(), Some("2026-11-25".into()), now()).unwrap();
+    core.set_task_planned(id.clone(), Some("2026-11-27".into()), later(1)).unwrap();
+    let earlier = core.task_detail(id.clone(), now()).unwrap();
+    assert_eq!((earlier.postponed.plan, earlier.postponed.due), (1, 1));
+
+    core.set_task_planned(id.clone(), Some("2026-11-28".into()), later(2)).unwrap();
+    let changed = core.task_detail(id.clone(), now()).unwrap();
+    assert_eq!((changed.postponed.plan, changed.postponed.due), (2, 2));
+    assert_eq!(home(&core).toast, None);
+    core.undo(later(3)).unwrap();
+    let restored = core.task_detail(id, now()).unwrap();
+    assert_eq!(restored.planned_on, earlier.planned_on);
+    assert_eq!(restored.due_on, earlier.due_on);
+    assert_eq!(restored.postponed, earlier.postponed);
+}
+
+#[test]
 fn repeating_creates_occurrences_that_edit_their_series() {
     let (_dir, core) = open();
     let id = add(&core, "Stretch");

@@ -116,8 +116,16 @@ pub enum Command {
         id: EntityId,
         at: DateTime<Utc>,
     },
-    /// Completes a task from the plan: a repeat's occurrence planned for a later day moves to
-    /// `today`, so the next one is not skipped.
+    /// Restores an earlier edit without recording a postponement or restarting a timer.
+    RestoreTaskEdit {
+        id: EntityId,
+        dates: Option<crate::dates::TaskDates>,
+        sort_key: Option<String>,
+        completed_at: Option<Option<DateTime<Utc>>>,
+        postponements: Vec<EntityId>,
+        at: DateTime<Utc>,
+    },
+    /// A repeat's occurrence planned for a later day moves to `today`, so the next one is not skipped.
     CompleteTaskFromPlan {
         id: EntityId,
         at: DateTime<Utc>,
@@ -377,6 +385,28 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
                     || task.series.and_then(|id| snapshot.task(id)).is_some_and(|source| source.repeat.is_some()))
             {
                 writes.extend(task_dates::move_task(snapshot, *id, Some(*today), Position::Bottom, *at)?);
+            }
+            writes
+        }
+        Command::RestoreTaskEdit { id, dates, sort_key, completed_at, postponements, at } => {
+            task_exists(*id)?;
+            let mut writes = Vec::new();
+            if let Some(dates) = dates {
+                let dates = crate::dates::set_due(*dates, dates.due_on);
+                writes.push(write(Task, *id, fields::TASK_PLANNED_ON, json!(dates.planned_on)));
+                writes.push(write(Task, *id, fields::TASK_DUE_ON, json!(dates.due_on)));
+            }
+            if let Some(key) = sort_key {
+                writes.push(write(Task, *id, fields::SORT_KEY, json!(key)));
+            }
+            if let Some(completed_at) = completed_at {
+                if completed_at.is_some() {
+                    writes.extend(stop_running(snapshot, *at, |running| running.entry.task_id == Some(*id)));
+                }
+                writes.push(write(Task, *id, fields::TASK_COMPLETED_AT, json!(completed_at)));
+            }
+            for p in snapshot.postponements_of(*id).filter(|p| postponements.contains(&p.id)) {
+                writes.push(write(EntityKind::Postponement, p.id, fields::DELETED_AT, json!(at)));
             }
             writes
         }

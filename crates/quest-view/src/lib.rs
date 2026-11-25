@@ -2,6 +2,7 @@
 //! Logbook), dialogs' parsing and validation, the palette, menus and undo.
 //! Pure: no IO, no clock (time is passed in), so every client (Rune desktop, Android) can share it.
 
+pub mod calendar;
 pub mod entry_editor;
 pub mod focus;
 pub mod format;
@@ -15,6 +16,7 @@ pub mod plan_strip;
 pub mod player;
 pub mod quest_picker;
 pub mod quests;
+pub mod quick_add;
 pub mod reorder;
 pub mod repeat;
 pub mod row_meta;

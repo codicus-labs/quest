@@ -101,6 +101,17 @@ if ! await_url "$idp/.well-known/openid-configuration" || ! await_url "$server/"
 fi
 echo "server: $server  identity provider: $idp"
 
+run anna "$root/r3" r3-add r3-add --demo --now 2026-11-24T13:00
+check r3-add "r3 Quick Add planned the task for Today" has "R3 draft"
+task_id=$(tree "$out/r3-add.json" id "R3 draft" 2>/dev/null)
+if [ -n "$task_id" ]; then
+  check r3-add "r3 Quick Add assigned the quest" rowtext "R3 draft" "Run a half marathon"
+  run anna "$root/r3" r3-undo r3-undo --now 2026-11-24T13:00
+  check r3-undo "r3 Undo reopened the completed task" open "R3 draft"
+else
+  fail "r3 skipped: no task for Undo"
+fi
+
 # a. A signs in as anna through the browser and adds a task on Today.
 run anna "$root/a" a-sign-in a-signed-in
 check a-signed-in "a  A signed in as anna" shows "Signed in as Anna Example"

@@ -30,7 +30,10 @@ for scene in plan light-plan task-modal-plan repeat-editor card-menu; do
 done
 
 # The quest picker opens with a short fade: snap it once in place.
-for scene in task-modal-quests task-modal-quests-filtered; do
+for scene in task-modal-quests task-modal-quests-filtered \
+  task-detail task-detail-light task-quest-picker task-quest-picker-light \
+  task-plan-calendar task-plan-calendar-light task-deadline-calendar task-deadline-calendar-light \
+  quick-add-calendar quick-add-calendar-light task-done-toast task-done-toast-light; do
   "$app" $common --data-dir "$(fresh)" --scene "$scene" --snap "$here/$scene.png" --at 0.3 >/dev/null 2>&1
 done
 

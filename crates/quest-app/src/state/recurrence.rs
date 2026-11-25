@@ -106,6 +106,7 @@ impl State {
             | Command::SetTaskDescription { id, .. }
             | Command::AssignTask { id, .. }
             | Command::MoveTask { id, .. }
+            | Command::SetTaskDue { id, .. }
             | Command::CompleteTaskFromPlan { id, .. }
             | Command::DeleteTask { id, .. }
             | Command::StartFocus { task_id: id, .. } => *id,
@@ -125,7 +126,6 @@ impl State {
     }
 
     pub fn open_repeat_editor(&mut self, task: EntityId) {
-        self.save_task_day();
         let Some(task) = self.plan_task(task) else { return };
         let series = self.series_of(&task);
         let rule = series.repeat.map(|schedule| schedule.rule).unwrap_or(RepeatRule {
@@ -200,12 +200,6 @@ impl State {
         if self.notice.is_some() {
             self.repeat_editor.error = Some("The repeat schedule could not be saved.");
             return;
-        }
-        if let Some(form) = &mut self.task_modal
-            && form.task == id
-            && let Some(task) = self.snap.task(id)
-        {
-            form.date = TextEdit::new(super::task_modal::day_label(task.planned_on));
         }
         self.close_repeat_editor();
         if rule.is_some() {

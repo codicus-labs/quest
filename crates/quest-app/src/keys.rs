@@ -1,16 +1,16 @@
 //! Window shortcuts, as the shortcuts sheet (`?`) lists them: ⌘1–5 the sidebar's views and ⌘6…
-//! its quests, J/K and ↑/↓ move the selection, ↵ opens it, Space X D W ⌘⌫ act on it (else on the
+//! its quests, J/K and ↑/↓ move the selection, ↵ opens it, Space X L P D W ⌘⌫ act on it (else on the
 //! task under the pointer; in Focus, its task), F Focus, T and ⌥⌘I the tracked column, N quick
 //! add, V other work, ⌘K palette, ⌘, settings, ⌘Z undo, Esc back and ⌫ deletes. Single keys only
 //! arrive without text focus. And the keys a focused task card takes: the keyboard way to do what
 //! dragging does.
 
-use chrono::{Datelike, Days, NaiveDate};
 use quest_domain::{Command, EntityId, Position};
 use rune::{Key, KeyEvent, Tx};
 
 use crate::state::{Overlay, State, View};
 use crate::ui::chrome::open_palette;
+use crate::ui::task_fields::{self, Picker};
 use crate::undo::Deletable;
 
 /// What a key press asks for, decided without touching state.
@@ -33,6 +33,8 @@ pub enum Shortcut {
     Back,
     DeleteSelection,
     Undo,
+    Pick(Picker),
+    QuickPick(Picker),
     Task(TaskKey),
 }
 
@@ -45,27 +47,11 @@ pub enum TaskKey {
     ToggleDone,
     /// ⌘↵ in Focus: done, session over, back Home. In Log work: save.
     Complete,
-    /// D, W: the next day, next week.
-    Move(MoveTo),
+    MoveToNextMonday,
     /// ⌘⌫: delete, with an undo toast.
     Delete,
-    /// ↵: the task's dialog (the selected row or the card under the pointer, in Focus too).
+    /// ↵: expand or collapse the selected row or the card under the pointer.
     Open,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MoveTo {
-    NextDay,
-    NextWeek,
-}
-
-/// The day a task on `day` (None: backlog) moves to: the next day counts from its day, or
-/// from today for a backlog task; next week is the coming Monday.
-pub fn moved_day(to: MoveTo, day: Option<NaiveDate>, today: NaiveDate) -> NaiveDate {
-    match to {
-        MoveTo::NextDay => day.unwrap_or(today) + Days::new(1),
-        MoveTo::NextWeek => today + Days::new(u64::from(7 - today.weekday().num_days_from_monday())),
-    }
 }
 
 /// What a focused task card does with a key.
@@ -94,6 +80,14 @@ pub fn card_key(ev: &KeyEvent) -> Option<CardKey> {
 /// focused field's typing to the field first).
 pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
     let plain = !ev.mods.cmd && !ev.mods.ctrl && !ev.mods.alt;
+    if let Key::Command(letter) = ev.key
+        && ev.mods.shift
+        && !ev.mods.alt
+        && !ev.mods.ctrl
+        && let Some(picker) = Picker::from_letter(letter)
+    {
+        return Some(Shortcut::QuickPick(picker));
+    }
     match &ev.key {
         Key::Command('k') => Some(Shortcut::TogglePalette),
         Key::Command('z') if !ev.mods.shift => Some(Shortcut::Undo),
@@ -124,8 +118,8 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
             "v" => Some(Shortcut::ToggleOther),
             " " => Some(Shortcut::Task(TaskKey::StartPause)),
             "x" => Some(Shortcut::Task(TaskKey::ToggleDone)),
-            "d" => Some(Shortcut::Task(TaskKey::Move(MoveTo::NextDay))),
-            "w" => Some(Shortcut::Task(TaskKey::Move(MoveTo::NextWeek))),
+            "l" | "p" | "d" => t.chars().next().and_then(Picker::from_letter).map(Shortcut::Pick),
+            "w" => Some(Shortcut::Task(TaskKey::MoveToNextMonday)),
             _ => None,
         },
         _ => None,
@@ -178,16 +172,13 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             tx.focus_when_shown("quick-add", true);
         }
         Shortcut::ToggleOther => s.show_other = !s.show_other,
+        Shortcut::Back if s.task_calendar.is_some() => s.close_calendar(tx),
         Shortcut::Back if s.date_picker.is_some() => s.date_picker = None,
         Shortcut::Back if s.overlay == Overlay::LogWork => s.close_log_work(),
         Shortcut::Back if s.overlay == Overlay::RepeatEditor => s.close_repeat_editor(),
         Shortcut::Back if s.overlay == Overlay::Capture => s.capture_back(),
         Shortcut::Back if s.overlay == Overlay::GuestImport => s.keep_guest_data(),
         Shortcut::Back if s.overlay == Overlay::AiNotice => s.decline_ai_notice(),
-        Shortcut::Back if s.overlay == Overlay::Task => {
-            tx.blur();
-            s.close_task_modal();
-        }
         Shortcut::Back if s.overlay == Overlay::Quest => {
             tx.blur();
             s.close_quest_editor();
@@ -195,6 +186,10 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Shortcut::Back if s.overlay == Overlay::EntryEditor => s.close_entry_editor(),
         Shortcut::Back if s.overlay != Overlay::None => s.overlay = Overlay::None,
         Shortcut::Back if s.view == View::Focus => s.go_with(View::Today, tx),
+        Shortcut::Back if s.task_modal.is_some() => {
+            tx.blur();
+            s.close_task_modal();
+        }
         Shortcut::Back if s.selected_task.is_some() => s.selected_task = None,
         Shortcut::Back if s.menu.is_some() => s.menu = None,
         Shortcut::Back if matches!(s.view, View::Archive | View::Quest(_)) => s.go(View::Quests),
@@ -205,6 +200,11 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             s.delete(Deletable::Task(task));
         }
         Shortcut::Undo => s.undo_latest(),
+        Shortcut::Pick(picker) => {
+            let Some(task) = s.shortcut_task() else { return false };
+            task_fields::open(s, Some(task), picker, tx);
+        }
+        Shortcut::QuickPick(picker) => quick_picker(s, picker, tx),
         Shortcut::Task(key) => {
             let target = if s.view == View::Focus && key != TaskKey::Open {
                 s.focus_subject().map(|t| t.id)
@@ -219,6 +219,12 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 /// T, ⌥⌘I and the header's button: shows or hides the tracked-time column.
+pub fn quick_picker(s: &mut State, picker: Picker, tx: &mut Tx) {
+    if s.quick_hosted() {
+        task_fields::open(s, None, picker, tx);
+    }
+}
+
 pub fn toggle_tracked(s: &mut State) {
     s.right_column = !s.right_column;
 }
@@ -229,12 +235,14 @@ fn on_task_key(s: &mut State, task: EntityId, key: TaskKey, tx: &mut Tx) {
         TaskKey::ToggleDone => s.toggle_done(task),
         TaskKey::Complete if s.view == View::Focus => s.complete_focus(task, tx),
         TaskKey::Complete => {}
-        TaskKey::Open => s.open_task_modal(task),
-        TaskKey::Move(to) => {
-            let current = s.snap.task(task).and_then(|t| t.planned_on);
-            let day = moved_day(to, current, s.today());
+        TaskKey::Open => {
+            s.toggle_task_detail(task);
+            tx.scroll_into_view("task-modal");
+        }
+        TaskKey::MoveToNextMonday => {
+            let planned_on = quest_view::calendar::QuickDate::NextMonday.date(s.today());
             let at = s.clock.now();
-            s.dispatch(Command::MoveTask { id: task, planned_on: Some(day), position: Position::Bottom, at });
+            s.dispatch(Command::MoveTask { id: task, planned_on, position: Position::Bottom, at });
         }
         TaskKey::Delete => {
             tx.blur();
@@ -289,7 +297,7 @@ mod tests {
         assert_eq!(shortcut(&text("?")), Some(Shortcut::Sheet));
         assert_eq!(shortcut(&text(" ")), Some(Shortcut::Task(TaskKey::StartPause)));
         assert_eq!(shortcut(&text("x")), Some(Shortcut::Task(TaskKey::ToggleDone)));
-        assert_eq!(shortcut(&text("w")), Some(Shortcut::Task(TaskKey::Move(MoveTo::NextWeek))));
+        assert_eq!(shortcut(&text("w")), Some(Shortcut::Task(TaskKey::MoveToNextMonday)));
         let cmd = Mods { cmd: true, ..Mods::default() };
         assert_eq!(shortcut(&KeyEvent { key: Key::Backspace, mods: cmd }), Some(Shortcut::Task(TaskKey::Delete)));
         assert_eq!(shortcut(&KeyEvent { key: Key::Enter, mods: cmd }), Some(Shortcut::Task(TaskKey::Complete)));
@@ -304,16 +312,6 @@ mod tests {
         assert_eq!(shortcut(&key(Key::Command('z'))), Some(Shortcut::Undo));
     }
 
-    #[test]
-    fn moves_count_from_the_task_and_week_from_today() {
-        let thursday = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
-        let saturday = NaiveDate::from_ymd_opt(2026, 10, 17).unwrap();
-        let monday = NaiveDate::from_ymd_opt(2026, 10, 19).unwrap();
-        assert_eq!(moved_day(MoveTo::NextDay, Some(saturday), thursday), saturday + Days::new(1));
-        assert_eq!(moved_day(MoveTo::NextDay, None, thursday), thursday + Days::new(1));
-        assert_eq!(moved_day(MoveTo::NextWeek, None, thursday), monday);
-        assert_eq!(moved_day(MoveTo::NextWeek, None, monday), monday + Days::new(7));
-    }
     fn with(key: Key, alt: bool, shift: bool) -> KeyEvent {
         KeyEvent { key, mods: Mods { alt, shift, ..Mods::default() } }
     }

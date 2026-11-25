@@ -10,7 +10,6 @@ use super::tests::{TempDir, click, command, demo_app, plan_key};
 use crate::state::{Overlay, State, View};
 
 const OPEN: &str = "Design the next chapter";
-const DONE: &str = "Read a chapter, take a few notes";
 
 /// The demo with its running session stopped, so a click visibly starts none.
 fn app() -> (Runtime<State>, TempDir) {
@@ -52,7 +51,7 @@ fn title_click_opens_the_dialog(view: char, prefix: &str, title: &str) {
     settle(&mut rt);
 
     assert_eq!(rt.state.task_modal.as_ref().map(|m| m.task), Some(before.id), "the title opens the dialog");
-    assert_eq!(rt.state.overlay, Overlay::Task);
+    assert_eq!(rt.state.overlay, Overlay::None);
     let card_title = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(title_key.as_str()));
     assert_eq!(card_title.map(|e| (e.role, e.text)), Some(("text", Some(title.to_owned()))), "the card shows text");
     let modal_title = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("task-modal-title"));
@@ -65,11 +64,6 @@ fn title_click_opens_the_dialog(view: char, prefix: &str, title: &str) {
 #[test]
 fn plan_title_of_an_open_task_opens_its_dialog() {
     title_click_opens_the_dialog('3', "plan", OPEN);
-}
-
-#[test]
-fn plan_title_of_a_done_task_opens_its_dialog() {
-    title_click_opens_the_dialog('3', "plan", DONE);
 }
 
 #[test]

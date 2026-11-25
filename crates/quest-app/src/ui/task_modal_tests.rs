@@ -77,10 +77,9 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
 
     click_card(&mut rt, prefix, id);
     assert_eq!(modal_task(&rt), Some(id), "a click on the card opens its dialog");
-    assert_eq!(rt.state.overlay, Overlay::Task);
-    assert!(rt.find("task-modal-scrim").is_some(), "the view behind is dimmed");
+    assert_eq!(rt.state.overlay, Overlay::None);
+    assert!(rt.find("task-modal-scrim").is_none());
     assert_eq!(text_of(&rt, "task-modal-title").as_deref(), Some(title));
-    assert_eq!(text_of(&rt, "task-modal-status").as_deref(), Some("Saved"));
 
     edit_at_end(&mut rt, |s| &mut s.task_modal_fields().title);
     type_text(&mut rt, " v2");
@@ -110,7 +109,7 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
     assert_eq!(modal_task(&rt), Some(id));
     assert_eq!(text_of(&rt, "task-modal-title"), Some(renamed));
     assert_eq!(rt.state.task_modal.as_ref().unwrap().description.text, saved.description);
-    assert!(rt.find("task-modal-description-preview").is_some());
+    assert!(rt.find("task-modal-description").is_some());
     if let Some(place) = place {
         assert!((drawn_offset(&rt) - place).abs() < 0.5, "opening doesn't scroll the planner either");
     }
@@ -132,8 +131,11 @@ fn plan_edits_an_open_task() {
 }
 
 #[test]
-fn plan_edits_a_done_task() {
-    edits_in_the_dialog('3', "plan", DONE, false);
+fn plan_hides_completed_tasks() {
+    let (rt, _dir) = app('3');
+    let done = task(&rt, DONE);
+    assert!(done.is_done());
+    assert!(rt.find(&card_key("plan", done.id)).is_none());
 }
 
 #[test]
@@ -175,7 +177,7 @@ fn an_empty_title_is_never_saved() {
     rt.frame(0.0);
     press(&mut rt, Key::Backspace, Mods::default());
     assert_eq!(rt.state.snap.task(id).unwrap().title, OPEN);
-    assert_eq!(text_of(&rt, "task-modal-status").as_deref(), Some("Saving…"), "it isn't stored");
+    assert_eq!(rt.state.task_modal.as_ref().unwrap().title.text, "");
     press(&mut rt, Key::Escape, Mods::default());
     assert!(modal_task(&rt).is_none());
     assert_eq!(rt.state.snap.task(id).unwrap().title, OPEN, "nor on closing");
@@ -188,19 +190,19 @@ fn date_quest_and_delete_act_on_the_task() {
     let today = rt.state.today();
     click_card(&mut rt, "row", id);
 
-    rt.update(|s, _| {
-        let date = &mut s.task_modal_fields().date;
-        date.focused = true;
-        date.set_selection(0, date.text.len());
-    });
-    rt.frame(0.0);
-    let tomorrow = today + chrono::Days::new(1);
-    type_text(&mut rt, &crate::log_work::date_label(tomorrow));
-    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(today), "not while typing");
+    let plan = format!("task-{id}-plan");
+    click(&mut rt, &plan);
+    press(&mut rt, Key::Right, Mods::default());
     press(&mut rt, Key::Enter, Mods::default());
-    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(tomorrow), "Return takes the day");
-    click(&mut rt, "task-modal-backlog");
-    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, None, "Backlog");
+    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, today.succ_opt());
+    assert_eq!(quest_view::lists::postponed(&rt.state.snap, id).plan, 1);
+    command(&mut rt, 'z');
+    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(today));
+    assert_eq!(quest_view::lists::postponed(&rt.state.snap, id).plan, 0);
+    click(&mut rt, &plan);
+    press(&mut rt, Key::Escape, Mods::default());
+    assert!(rt.state.task_calendar.is_none());
+    assert!(rt.elements().iter().any(|e| e.focused && e.key.as_deref() == Some(plan.as_str())));
 
     click(&mut rt, "task-modal-quest");
     click(&mut rt, "quest-picker-none");
@@ -210,7 +212,18 @@ fn date_quest_and_delete_act_on_the_task() {
     click(&mut rt, &format!("quest-picker-{first}"));
     assert_eq!(rt.state.snap.task(id).unwrap().quest_id, Some(first));
     assert_eq!(text_of(&rt, "task-modal-repeat"), None, "Repeat is a row, not a field");
-    assert!(text_of(&rt, "task-modal-logged-total").is_some_and(|t| t.ends_with(" total")));
+    let first_entry =
+        rt.state.snap.time_entries.iter().filter(|e| e.task_id == Some(id)).max_by_key(|e| e.started_at).unwrap().id;
+    click(&mut rt, "task-time");
+    assert!(rt.state.show_task_time);
+    rt.update(|_, tx| tx.focus_when_shown("task-time", false));
+    rt.frame(0.0);
+    press(&mut rt, Key::Enter, Mods::default());
+    assert!(!rt.state.show_task_time);
+    press(&mut rt, Key::Enter, Mods::default());
+    click(&mut rt, &format!("task-time-{first_entry}"));
+    assert_eq!(rt.state.overlay, Overlay::EntryEditor);
+    press(&mut rt, Key::Escape, Mods::default());
 
     click(&mut rt, "task-modal-delete");
     assert!(rt.state.snap.task(id).is_none(), "deleted");
@@ -221,23 +234,16 @@ fn date_quest_and_delete_act_on_the_task() {
 }
 
 #[test]
-fn notes_keep_markdown_when_editing_and_hide_markers_when_viewing() {
+fn notes_show_and_save_plain_text() {
     let (mut rt, _dir) = app('2');
     let id = task(&rt, OPEN).id;
     rt.update(move |s, _| s.open_task_modal(id));
     settle(&mut rt);
-    if rt.find("task-modal-description-preview").is_some() {
-        click(&mut rt, "task-modal-description-preview");
-    } else {
-        click(&mut rt, "task-modal-description");
-    }
+    click(&mut rt, "task-modal-description");
     press(&mut rt, Key::Command('a'), Mods { cmd: true, ..Mods::default() });
     type_text(&mut rt, "# A large heading");
     assert_eq!(text_of(&rt, "task-modal-description").as_deref(), Some("# A large heading"));
     click(&mut rt, "task-modal-title");
-    assert!(rt.find("task-modal-description").is_none());
-    assert!(rt.find("task-modal-description-preview").is_some());
-    assert!(rt.elements().iter().any(|element| element.text.as_deref() == Some("A large heading")));
-    click(&mut rt, "task-modal-description-preview");
     assert_eq!(text_of(&rt, "task-modal-description").as_deref(), Some("# A large heading"));
+    assert_eq!(rt.state.snap.task(id).unwrap().description, "# A large heading");
 }

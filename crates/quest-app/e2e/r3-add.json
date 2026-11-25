@@ -1,0 +1,8 @@
+[
+  {"t": 0.05, "type": "key", "name": "1", "cmd": true},
+  {"t": 0.2, "type": "tap", "key": "quick-add"},
+  {"t": 0.3, "type": "type", "text": "R3 draft #marathon @today", "every": 0.015},
+  {"t": 0.8, "type": "key", "name": "Enter"},
+  {"t": 0.9, "type": "key", "name": "2", "cmd": true},
+  {"t": 1.1, "type": "mark", "name": "end"}
+]

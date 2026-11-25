@@ -228,7 +228,7 @@ fn the_toast_goes_after_its_time_and_command_z_still_undoes() {
 }
 
 #[test]
-fn undo_takes_back_the_capture_first_then_the_earlier_delete() {
+fn a_capture_replaces_an_earlier_delete() {
     let (mut rt, _dir) = capture_app();
     let tasks = count_tasks(&rt);
     // Not today's first task: the demo proposal logs work on that one.
@@ -241,25 +241,25 @@ fn undo_takes_back_the_capture_first_then_the_earlier_delete() {
     command(&mut rt, 'z');
     assert_eq!(count_tasks(&rt), tasks - 1, "the first ⌘Z takes back the capture");
     command(&mut rt, 'z');
-    assert_eq!(count_tasks(&rt), tasks, "the second restores the deleted task");
+    assert_eq!(count_tasks(&rt), tasks - 1, "the earlier delete is no longer in the slot");
 }
 
 #[test]
-fn a_completion_keeps_the_capture_toast_and_command_z() {
+fn a_completion_replaces_the_capture_undo_slot() {
     let (mut rt, _dir) = capture_app();
     let tasks = count_tasks(&rt);
     structure(&mut rt, "Tomorrow write the offer");
     wait_for_answer(&mut rt);
     click(&mut rt, "capture-create");
     let quest_task = rt.state.snap.tasks_on(rt.state.today()).find(|t| !t.is_done() && t.quest_id.is_some());
-    rt.state.toggle_done(quest_task.map(|t| t.id).expect("an open quest task"));
+    let id = quest_task.expect("an open quest task").id;
+    rt.state.toggle_done(id);
     rt.frame(0.0);
-    assert!(
-        rt.state.capture_undo.as_ref().is_some_and(|u| u.until.is_some()),
-        "a completion shows no toast of its own"
-    );
+    assert!(rt.state.capture_undo.is_none());
+    assert!(matches!(rt.state.undo.shown.as_ref().map(|shown| &shown.toast), Some(crate::undo::Toast::Done)));
     command(&mut rt, 'z');
-    assert_eq!(count_tasks(&rt), tasks, "⌘Z still refers to the capture, as it does to a delete");
+    assert!(!rt.state.snap.task(id).unwrap().is_done());
+    assert!(count_tasks(&rt) > tasks, "the capture remains");
 }
 
 #[test]

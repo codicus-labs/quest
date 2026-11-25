@@ -36,6 +36,26 @@ fn a_quick_add_shows_on_home_with_its_quest_and_description() {
 }
 
 #[test]
+fn quick_draft_preview_and_creation_share_defaults_and_token_order() {
+    use crate::{QuickAddContext, quick_add_defaults};
+    let dir = tempfile::tempdir().unwrap();
+    let core = open(&dir);
+    let quest = core.create_quest("Reading".into(), None).unwrap();
+    let defaults = quick_add_defaults(QuickAddContext::Inbox, now()).unwrap();
+    let text = "Read two pages #read @fri !tom";
+    let preview = core.preview_quick_add(text.into(), defaults.clone(), now()).unwrap();
+    assert_eq!(preview.title, "Read two pages");
+    assert_eq!(preview.fields.quest_id.as_deref(), Some(quest.as_str()));
+    assert_eq!(preview.fields.planned_on.as_deref(), Some("2026-11-26"));
+    assert_eq!(preview.fields.due_on, preview.fields.planned_on);
+    let id = core.add_quick_draft(text.into(), String::new(), defaults, now()).unwrap();
+    let task = core.task_detail(id, now()).unwrap();
+    assert_eq!(task.quest.unwrap().id, quest);
+    assert_eq!(task.planned_on.map(|d| d.iso), preview.fields.planned_on);
+    assert_eq!(task.due_on.map(|d| d.iso), preview.fields.due_on);
+}
+
+#[test]
 fn flushed_changes_survive_a_kill() {
     let dir = tempfile::tempdir().unwrap();
     let core = open(&dir);

@@ -80,7 +80,11 @@ impl State {
             self.quest_picker = None;
             return;
         }
-        let highlight = self.current_pick(&target);
+        self.task_calendar = None;
+        if target == PickFor::QuickAdd {
+            self.quick_fields = Some(self.quick_base());
+        }
+        let highlight = self.current_pick(&target).filter(|pick| *pick != Pick::NoQuest);
         let mut search = TextEdit::new("");
         // Asks Rune to focus the field once it shows.
         search.focused = true;
@@ -160,7 +164,11 @@ impl State {
                     review.set_task_quest(&key, quest);
                 }
             }
-            PickFor::QuickAdd => self.quick_add_quest = quest,
+            PickFor::QuickAdd => {
+                let mut fields = self.commit_quick_tokens();
+                fields.quest = quest;
+                self.quick_fields = Some(fields);
+            }
             PickFor::Focus(task) => {
                 if self.plan_task(task).is_some_and(|t| t.quest_id != quest) {
                     self.dispatch(Command::AssignTask { id: task, quest_id: quest });
@@ -187,7 +195,7 @@ impl State {
                     Some(QuestRef::New { key }) => Pick::New(key.clone()),
                 })
             }
-            PickFor::QuickAdd => quest(self.quick_add_quest),
+            PickFor::QuickAdd => quest(self.quick_draft().fields.quest),
             PickFor::Focus(task) => quest(self.plan_task(*task)?.quest_id),
         }
     }

@@ -49,6 +49,7 @@ mod server_url;
 mod settings;
 mod status;
 mod task_detail;
+mod task_fields;
 mod task_types;
 #[cfg(test)]
 mod test_support;
@@ -82,6 +83,10 @@ pub use crate::quest_types::{
 };
 pub use crate::review_types::{ReviewData, ReviewDay, ReviewQuest, ReviewSegment, ReviewWeek};
 pub use crate::search_types::{AppView, SearchKind, SearchMode, SearchOutcome, SearchResult, SearchToken};
+pub use crate::task_fields::{
+    CalendarCell, CalendarMonth, CalendarStep, DateChoice, DateTarget, QuickAddContext, QuickFields, QuickPreview,
+    completion_linger_ms, quick_add_defaults, shift_calendar_date, task_calendar, update_quick_date,
+};
 pub use crate::task_types::{
     ChecklistPosition, ChecklistRow, DayValue, LoggedEntry, PostponedCount, QuickAddForm, RepeatCheck, RepeatDraft,
     RepeatFrequency, RepeatPinChoice, RepeatWeekday, TaskDetail,

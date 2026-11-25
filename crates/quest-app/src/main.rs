@@ -107,6 +107,18 @@ const SCENES: &[Scene] = &[
         s.go(View::Plan);
         s.menu = first_open_task(s).map(|task| state::TaskMenu { task, prefix: "plan" });
     }),
+    ("task-detail", task_detail),
+    ("task-detail-light", |s| light(s, task_detail)),
+    ("task-quest-picker", task_quest_picker),
+    ("task-quest-picker-light", |s| light(s, task_quest_picker)),
+    ("task-plan-calendar", task_plan_calendar),
+    ("task-plan-calendar-light", |s| light(s, task_plan_calendar)),
+    ("task-deadline-calendar", task_deadline_calendar),
+    ("task-deadline-calendar-light", |s| light(s, task_deadline_calendar)),
+    ("quick-add-calendar", quick_add_calendar),
+    ("quick-add-calendar-light", |s| light(s, quick_add_calendar)),
+    ("task-done-toast", task_done_toast),
+    ("task-done-toast-light", |s| light(s, task_done_toast)),
     ("task-modal", |s| {
         if let Some(task) = first_open_task(s) {
             s.open_task_modal(task);
@@ -114,8 +126,7 @@ const SCENES: &[Scene] = &[
     }),
     ("task-modal-plan", |s| {
         s.go(View::Plan);
-        let done = s.snap.tasks_on(s.today()).find(|t| t.is_done()).map(|t| t.id);
-        if let Some(task) = done {
+        if let Some(task) = first_open_task(s) {
             s.open_task_modal(task);
         }
     }),
@@ -235,6 +246,48 @@ fn task_modal_quests(s: &mut State, search: &str) {
     s.toggle_quest_picker(state::quest_picker::PickFor::TaskModal);
     s.quest_picker_search().insert(search);
     s.quest_search_changed();
+}
+
+fn task_detail(s: &mut State) {
+    use quest_domain::Command;
+    let Some(id) = first_open_task(s) else { return };
+    let today = s.today();
+    s.dispatch(Command::SetTaskDescription { id, description: "Start with the opening spread.".into() });
+    s.dispatch(Command::SetTaskDue { id, due_on: Some(today), at: s.now });
+    s.dispatch(Command::SetTaskDue { id, due_on: today.checked_add_days(chrono::Days::new(3)), at: s.now });
+    s.open_task_modal(id);
+}
+
+fn task_quest_picker(s: &mut State) {
+    task_detail(s);
+    s.toggle_quest_picker(state::quest_picker::PickFor::TaskModal);
+}
+
+fn task_date_calendar(s: &mut State, field: quest_domain::DateField) {
+    task_detail(s);
+    if let Some(id) = s.task_modal.as_ref().map(|form| form.task) {
+        s.open_calendar(Some(id), field, &mut rune::Tx::default());
+    }
+}
+
+fn task_plan_calendar(s: &mut State) {
+    task_date_calendar(s, quest_domain::DateField::Plan);
+}
+
+fn task_deadline_calendar(s: &mut State) {
+    task_date_calendar(s, quest_domain::DateField::Due);
+}
+
+fn quick_add_calendar(s: &mut State) {
+    s.quick_add = rune::TextEdit::new("Sketch the cover");
+    s.open_calendar(None, quest_domain::DateField::Plan, &mut rune::Tx::default());
+}
+
+fn task_done_toast(s: &mut State) {
+    s.go(View::Inbox);
+    if let Some(id) = quest_view::lists::inbox(&s.snap).first().map(|task| task.id) {
+        s.toggle_done(id);
+    }
 }
 
 /// Eleven more quests, fifteen in all: for the quest picker.

@@ -53,7 +53,7 @@ impl QuestCore {
             };
             self.dispatch_there(&there, Command::CompleteTask { id, at: now.at })?;
             if there.workspace == self.store().snapshot().workspace {
-                self.undo_state().toggled(id, true, None, task.title, now.at);
+                self.remember_completion(&task, now);
             }
             Ok(())
         })

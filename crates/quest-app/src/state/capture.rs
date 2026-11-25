@@ -220,7 +220,7 @@ impl State {
         self.notice = None;
         self.capture.text = TextEdit::new("");
         self.discard_capture();
-        self.undo.shown = None;
+        self.undo = crate::undo::UndoState::default();
         self.capture_undo = Some(CaptureUndo {
             created: plan.created,
             message: Review::created_message(&confirmed),

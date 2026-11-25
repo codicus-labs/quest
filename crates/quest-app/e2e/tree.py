@@ -69,9 +69,12 @@ def main():
     if question == "id":
         print(task)
         return
-    if question == "done":
+    if question == "rowtext":
+        wanted = sys.argv[4]
+        sys.exit(0 if any(f"row-{task}" in e.get("path", "") and e.get("text") == wanted for e in tree["elements"]) else 1)
+    if question in ("done", "open"):
         check = find_key(tree["accessibility"], f"row-check-{task}")
-        sys.exit(0 if check and "checked" in check.get("states", []) else 1)
+        sys.exit(0 if check and ("checked" in check.get("states", [])) == (question == "done") else 1)
     sys.exit(f"unknown question {question!r}")
 
 

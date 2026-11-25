@@ -1,12 +1,11 @@
 //! A list row (Today, Inbox, Logbook, a quest's list): check and title, and on the right the
-//! muted marks (dates, the quest, the running timer). A click selects it; a double click or ↵
+//! muted marks (dates and the quest) and the timer control. A click selects it; a double click or ↵
 //! opens the task's dialog.
 
 use quest_domain::{EntityId, Task};
 use quest_view::row_meta::{self, Tone};
-use rune::{Color, Cursor, El, Tx, el, icon, row, text};
+use rune::{Color, Cursor, El, Tx, col, el, icon, row, text};
 
-use crate::format;
 use crate::icons;
 use crate::state::State;
 use crate::theme::{self, Pal, quest_color, ty};
@@ -60,14 +59,27 @@ pub fn task_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
             tx.blur();
             s.selected_task = Some(id);
         })
-        .on_double_press(move |s: &mut State| s.open_task_modal(id))
+        .on_double_press_tx(move |s: &mut State, tx| {
+            s.toggle_task_detail(id);
+            if s.task_modal.is_some() {
+                tx.scroll_into_view("task-modal");
+            }
+        })
         .child(check(id, task.is_done(), p))
         .child(title)
-        .child(marks(s, task, shows, p));
+        .child(marks(s, task, shows, p))
+        .children((!task.is_done()).then(|| {
+            let running = s.snap.running_entry().is_some_and(|e| e.task_id == Some(id));
+            parts::timer_button(format!("row-play-{id}"), id, running, p)
+        }));
     if selected {
         line = line.fill(p.selected).border_sides([0.0, 0.0, 0.0, 3.0], p.accent_line);
     }
-    line
+    if let Some(detail) = super::task_modal::inline(s, task, p, false) {
+        col().w_full().child(line).child(detail)
+    } else {
+        line
+    }
 }
 
 /// The round check: an empty ring, or the accent fill with a dark tick.
@@ -92,7 +104,7 @@ fn check(id: EntityId, done: bool, p: &Pal) -> El {
         .on_press(move |s: &mut State| s.toggle_done(id))
 }
 
-/// Dates, the quest, and the running timer as an accent pill.
+/// Dates and the quest.
 fn marks(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
     let mut marks = row().gap(10.0).center_y().shrink().min_w(0.0);
     for mark in row_meta::date_marks(task, s.today(), shows.plan_ahead) {
@@ -111,25 +123,5 @@ fn marks(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
                 ),
             );
     }
-    let running = s.snap.running_entry().filter(|e| e.task_id == Some(task.id));
-    if let Some(entry) = running {
-        marks = marks.child(timer_pill(task.id, format::timer(entry.tracked_ms(s.now)), p));
-    }
     marks
-}
-
-fn timer_pill(id: EntityId, time: String, p: &Pal) -> El {
-    row()
-        .key(format!("row-timer-{id}"))
-        .role("button")
-        .label("Stop timer")
-        .h(22.0)
-        .px(9.0)
-        .center_y()
-        .radius(11.0)
-        .fill(p.accent_fill)
-        .cursor(Cursor::Pointer)
-        .help("Stop  Space")
-        .child(text(time).font(ty::META).color(theme::on_accent_fill()))
-        .on_press(|s: &mut State| s.stop_focus())
 }

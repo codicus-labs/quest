@@ -6,10 +6,74 @@
 mod tests;
 
 use chrono::{DateTime, Duration, Utc};
-use quest_domain::{Command, EntityId, EntityKind, QuestStatus};
+use quest_domain::{Command, EntityId, EntityKind, QuestStatus, Snapshot, Task, TaskDates};
 
 /// How long a toast shows.
 pub const TOAST_SECONDS: i64 = 6;
+pub const LINGER_SECONDS: i64 = 4;
+
+pub fn linger_until(completed_at: DateTime<Utc>) -> DateTime<Utc> {
+    completed_at + Duration::seconds(LINGER_SECONDS)
+}
+
+pub fn lingering(local_completion: DateTime<Utc>, task: &Task, now: DateTime<Utc>) -> bool {
+    task.completed_at == Some(local_completion) && now < linger_until(local_completion)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TaskEdit {
+    Quest { id: EntityId, previous: Option<EntityId> },
+    Dates { id: EntityId, dates: TaskDates, sort_key: String, postponements: Vec<EntityId> },
+    Completion { id: EntityId, previous: Option<DateTime<Utc>>, previous_plan: Option<(TaskDates, String)> },
+}
+
+impl TaskEdit {
+    pub fn dates(before: &Task, after: &Task, old: &Snapshot, new: &Snapshot) -> Option<Self> {
+        (before.dates() != after.dates() || before.sort_key != after.sort_key).then(|| Self::Dates {
+            id: before.id,
+            dates: before.dates(),
+            sort_key: before.sort_key.clone(),
+            postponements: new
+                .postponements_of(before.id)
+                .filter(|p| !old.postponements_of(before.id).any(|old| old.id == p.id))
+                .map(|p| p.id)
+                .collect(),
+        })
+    }
+
+    pub fn completion(before: &Task, after: &Task) -> Option<Self> {
+        (before.completed_at != after.completed_at).then(|| Self::Completion {
+            id: before.id,
+            previous: before.completed_at,
+            previous_plan: (before.dates() != after.dates()).then(|| (before.dates(), before.sort_key.clone())),
+        })
+    }
+
+    pub fn command(self, at: DateTime<Utc>) -> Command {
+        match self {
+            Self::Quest { id, previous } => Command::AssignTask { id, quest_id: previous },
+            Self::Dates { id, dates, sort_key, postponements } => Command::RestoreTaskEdit {
+                id,
+                dates: Some(dates),
+                sort_key: Some(sort_key),
+                completed_at: None,
+                postponements,
+                at,
+            },
+            Self::Completion { id, previous, previous_plan } => {
+                let (dates, sort_key) = previous_plan.unzip();
+                Command::RestoreTaskEdit {
+                    id,
+                    dates,
+                    sort_key,
+                    completed_at: Some(previous),
+                    postponements: Vec::new(),
+                    at,
+                }
+            }
+        }
+    }
+}
 
 /// Something the user can delete (softly: it goes to the archive and can be restored).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,9 +125,10 @@ impl Deletable {
 }
 
 /// What ⌘Z takes back.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Undoable {
     Delete(Deletable),
+    Task(TaskEdit),
     /// A quest was completed or reopened: it goes back to `back_to`.
     QuestStatus {
         quest: EntityId,
@@ -74,6 +139,7 @@ pub enum Undoable {
 /// What the toast says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Toast {
+    Done,
     Deleted {
         item: Deletable,
         title: String,
@@ -102,6 +168,7 @@ pub struct UndoState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndoEvent {
+    TaskEdited(TaskEdit),
     Deleted {
         item: Deletable,
         title: String,
@@ -122,9 +189,10 @@ pub enum UndoEvent {
     Tick,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndoEffect {
     None,
+    Task(TaskEdit),
     Restore(Deletable),
     SetQuestStatus { quest: EntityId, status: QuestStatus },
 }
@@ -134,6 +202,12 @@ impl UndoState {
         let until = now + Duration::seconds(TOAST_SECONDS);
         let mut next = self.clone();
         let effect = match event {
+            UndoEvent::TaskEdited(edit) => {
+                next.shown = matches!(edit, TaskEdit::Completion { previous: None, .. })
+                    .then_some(Shown { toast: Toast::Done, until: now + Duration::seconds(5) });
+                next.last = Some(Undoable::Task(edit));
+                UndoEffect::None
+            }
             UndoEvent::Deleted { item, title } => {
                 next.last = Some(Undoable::Delete(item));
                 next.shown = Some(Shown { toast: Toast::Deleted { item, title }, until });
@@ -146,6 +220,10 @@ impl UndoState {
             }
             UndoEvent::Undo => match next.last.take() {
                 None => UndoEffect::None,
+                Some(Undoable::Task(edit)) => {
+                    next.shown = None;
+                    UndoEffect::Task(edit)
+                }
                 Some(Undoable::Delete(item)) => {
                     next.forget_toast_about(item);
                     UndoEffect::Restore(item)

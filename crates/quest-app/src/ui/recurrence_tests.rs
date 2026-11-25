@@ -16,12 +16,14 @@ fn task_repeat_round_trips_through_the_plan_overview() {
         id,
         title: "Check the next recording".into(),
         quest_id: None,
-        planned_on: None,
+        planned_on: Some(rt.state.today()),
         due_on: None,
         position: Position::Top,
     });
-    command(&mut rt, '3');
+    command(&mut rt, '2');
     rt.update(move |s, _| s.open_task_modal(id));
+    settle(&mut rt);
+    super::title_click_tests::scroll_into_view(&mut rt, "task-modal-repeat");
     click(&mut rt, "task-modal-repeat");
     assert_eq!(rt.state.overlay, Overlay::RepeatEditor);
     click(&mut rt, "repeat-frequency-trigger");
@@ -32,7 +34,8 @@ fn task_repeat_round_trips_through_the_plan_overview() {
     click(&mut rt, "repeat-save");
 
     let today = rt.state.today();
-    assert_eq!(rt.state.overlay, Overlay::Task);
+    assert_eq!(rt.state.overlay, Overlay::None);
+    assert!(rt.find("task-modal").is_some());
     let task = rt.state.snap.task(id).unwrap();
     assert_eq!(task.planned_on, Some(today));
     let rule = task.repeat.unwrap().rule;
@@ -41,6 +44,7 @@ fn task_repeat_round_trips_through_the_plan_overview() {
     assert!(rule.weekdays.contains(today.weekday()));
     assert!(rule.weekdays.contains(chrono::Weekday::Fri));
     press(&mut rt, Key::Escape, Mods::default());
+    command(&mut rt, '3');
 
     click(&mut rt, "plan-recurring");
     assert_eq!(rt.state.overlay, Overlay::RecurringTasks);
@@ -97,7 +101,7 @@ fn the_plan_shows_future_occurrences_and_saves_only_the_edited_one() {
     rt.frame(0.0);
     assert!(rt.find(&format!("plan-task-{first}")).is_some());
     click_beside_title(&mut rt, "plan", first);
-    assert_eq!(rt.state.overlay, Overlay::Task);
+    assert_eq!(rt.state.overlay, Overlay::None);
     assert_eq!(rt.state.task_modal.as_ref().unwrap().task, first);
     press(&mut rt, Key::Escape, Mods::default());
     assert!(rt.state.snap.task(first).is_none(), "viewing a preview does not save it");

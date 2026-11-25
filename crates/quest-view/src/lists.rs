@@ -15,6 +15,27 @@ pub fn today(snapshot: &Snapshot, today: NaiveDate) -> Vec<&Task> {
     tasks
 }
 
+pub fn today_with_linger<'a>(
+    snapshot: &'a Snapshot,
+    today: NaiveDate,
+    lingering: impl Fn(&Task) -> Option<&'a Task>,
+) -> Vec<&'a Task> {
+    let mut tasks: Vec<_> = snapshot
+        .tasks
+        .iter()
+        .filter_map(|task| {
+            let before = lingering(task).unwrap_or(task);
+            is_today(before, today).then_some((task, (today_rank(before, today), before.planned_on)))
+        })
+        .collect();
+    tasks.sort_by_key(|(_, order)| *order);
+    tasks.into_iter().map(|(task, _)| task).collect()
+}
+
+pub fn inbox_with_linger<'a>(snapshot: &'a Snapshot, lingering: impl Fn(&Task) -> Option<&'a Task>) -> Vec<&'a Task> {
+    snapshot.tasks.iter().filter(|task| is_inbox(lingering(task).unwrap_or(task))).collect()
+}
+
 /// Open tasks without a quest and a plan date, in list order.
 pub fn inbox(snapshot: &Snapshot) -> Vec<&Task> {
     snapshot.tasks.iter().filter(|t| is_inbox(t)).collect()

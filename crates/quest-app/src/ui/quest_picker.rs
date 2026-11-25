@@ -135,7 +135,7 @@ pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
         .child(header)
         .child(el().w_full().h(1.0).fill(p.border).a11y_hidden())
         .child(list)
-        .focus_return(anchor.clone())
+        .focus_return(return_key(&picker.target))
         .modal(true, |s: &mut State| s.quest_picker = None);
     let surface = popover::raised(&p.kit, surface, 10.0).clip_rounded(10.0);
     layer.push(popover::anchored(&p.kit, surface, &anchor, fit.placement, GAP));
@@ -173,7 +173,7 @@ fn keys(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Down => 1,
         Key::Up => -1,
         Key::Escape => {
-            let anchor = s.quest_picker.take().map(|picker| picker.target.trigger_key());
+            let anchor = s.quest_picker.take().map(|picker| return_key(&picker.target));
             if let Some(anchor) = anchor {
                 tx.focus(anchor, true);
             }
@@ -189,7 +189,7 @@ fn keys(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 /// Takes `pick` (the highlighted row without one), closes and focuses the chip again.
 fn choose(s: &mut State, pick: Option<Pick>, tx: &mut Tx) {
-    let Some(anchor) = s.quest_picker.as_ref().map(|picker| picker.target.trigger_key()) else { return };
+    let Some(anchor) = s.quest_picker.as_ref().map(|picker| return_key(&picker.target)) else { return };
     match pick {
         Some(pick) => s.choose_quest(pick),
         None => s.choose_highlighted_quest(),
@@ -198,9 +198,13 @@ fn choose(s: &mut State, pick: Option<Pick>, tx: &mut Tx) {
 }
 
 /// The key of the dialog the picker opens in, or of the whole window.
+fn return_key(target: &PickFor) -> String {
+    if *target == PickFor::QuickAdd { "quick-add".into() } else { target.trigger_key() }
+}
+
 fn bounds_key(target: &PickFor) -> &'static str {
     match target {
-        PickFor::TaskModal => "task-modal",
+        PickFor::TaskModal => "app",
         PickFor::LogWork => "log-work-dialog",
         PickFor::CaptureTask(_) => "capture-dialog",
         PickFor::QuickAdd | PickFor::Focus(_) => "app",
@@ -210,10 +214,10 @@ fn bounds_key(target: &PickFor) -> &'static str {
 /// Whether the chip that opened the picker is on screen.
 fn hosted(s: &State, target: &PickFor) -> bool {
     match target {
-        PickFor::TaskModal => s.overlay == Overlay::Task,
+        PickFor::TaskModal => s.task_modal.is_some() && s.overlay == Overlay::None,
         PickFor::LogWork => s.overlay == Overlay::LogWork && s.log_work.task.is_none(),
         PickFor::CaptureTask(_) => s.overlay == Overlay::Capture && matches!(s.capture.step, CaptureStep::Review(_)),
-        PickFor::QuickAdd => s.view == View::Today && s.overlay == Overlay::None,
+        PickFor::QuickAdd => s.quick_hosted(),
         // A session started elsewhere may change the task the chip belongs to.
         PickFor::Focus(task) => {
             s.view == View::Focus

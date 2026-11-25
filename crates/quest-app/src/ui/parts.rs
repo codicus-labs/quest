@@ -231,6 +231,27 @@ pub fn add_box_with(
         .child(switch)
 }
 
+pub(super) fn timer_button(key: String, id: EntityId, running: bool, p: &Pal) -> El {
+    let (glyph, size, label, ink) = if running {
+        (&icons::STOP, 18.0, "Stop timer", theme::on_accent_fill())
+    } else {
+        (&icons::PLAY, 14.0, "Start timer", p.muted)
+    };
+    el().key(key)
+        .role("button")
+        .label(label)
+        .help(label)
+        .focusable(true)
+        .size(26.0, 26.0)
+        .radius(13.0)
+        .fill(if running { p.accent_fill } else { Color::TRANSPARENT })
+        .hover(if running { p.accent_fill } else { p.hover })
+        .center()
+        .cursor(Cursor::Pointer)
+        .child(icon(glyph, size).color(ink))
+        .on_press(move |s: &mut State| s.toggle_focus(id))
+}
+
 /// What a task card shows besides title and quest.
 #[derive(Clone, Copy)]
 pub struct CardOptions {
@@ -241,7 +262,7 @@ pub struct CardOptions {
     pub list: Option<ListId>,
 }
 
-/// A task card: quest colour bar, title, complete check, quest chip, tracked time, play/pause.
+/// A task card: quest colour bar, title, complete check, quest chip, tracked time, play/stop.
 pub fn task_card(s: &State, task: &Task, p: &Pal, options: CardOptions) -> El {
     let id = task.id;
     let quest = quest_of(s, task);
@@ -270,29 +291,12 @@ pub fn task_card(s: &State, task: &Task, p: &Pal, options: CardOptions) -> El {
         meta = meta.child(icon(&icons::REPEAT, 14.0).role("img").color(p.muted).label("Recurring task"));
     }
     let mut controls = row().gap(10.0).center_y();
-    if running || (options.show_time && tracked > 0) {
-        let mut time = row().gap(8.0).center_y();
-        if running {
-            time = time.child(dot(color, 7.0));
-        }
-        controls = controls.child(time.child(text(format::timer(tracked)).font(ty::MONO_TIME).color(if done {
-            p.faint
-        } else {
-            p.text
-        })));
+    if options.show_time && tracked > 0 {
+        controls =
+            controls.child(text(format::timer(tracked)).font(ty::MONO_TIME).color(if done { p.faint } else { p.text }));
     }
     if !done {
-        let (glyph, label) = if running { (&icons::PAUSE, "Pause") } else { (&icons::PLAY, "Start focus") };
-        controls = controls.child(icon_button(
-            format!("{prefix}-play-{id}"),
-            label,
-            glyph,
-            p.muted,
-            p,
-            move |s: &mut State, _: &mut Tx| {
-                if running { s.stop_focus() } else { s.start_focus(id) }
-            },
-        ));
+        controls = controls.child(timer_button(format!("{prefix}-play-{id}"), id, running, p));
     }
     let more = menu::button(s, prefix, id, p);
     let mut body = col().grow(1.0).min_w(0.0).gap(10.0).py(14.0).pl(14.0).pr(8.0).child(title);
@@ -371,9 +375,20 @@ fn card_key(s: &mut State, list: ListId, id: EntityId, prefix: &str, ev: &KeyEve
     if !(tx.focus_visible() || s.hovered_task == Some(id)) {
         return false;
     }
-    if ev.key == Key::Enter && !ev.mods.cmd && !ev.mods.alt && !ev.mods.shift {
-        s.open_task_modal(id);
-        return true;
+    if !ev.mods.cmd && !ev.mods.alt && !ev.mods.ctrl {
+        if ev.key == Key::Enter && !ev.mods.shift {
+            s.toggle_task_detail(id);
+            if s.task_modal.is_some() {
+                tx.scroll_into_view("task-modal");
+            }
+            return true;
+        }
+        if let Key::Text(letter) = &ev.key
+            && let Some(picker) = letter.chars().next().and_then(super::task_fields::Picker::from_letter)
+        {
+            super::task_fields::open(s, Some(id), picker, tx);
+            return true;
+        }
     }
     if matches!(ev.key, Key::Backspace | Key::Delete) && !ev.mods.cmd && !ev.mods.alt {
         // The card goes; focus mustn't move on into a field that would take ⌘Z.

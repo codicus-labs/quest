@@ -1,5 +1,5 @@
 //! The view: the sidebar, the current view with its top band, the tracked-time column, and
-//! overlays (command palette, account, Log work, shortcuts, a task's dialog, a quest's dialog,
+//! overlays (command palette, account, Log work, shortcuts, a quest's dialog,
 //! a session's editor). Focus fills the window on its own.
 
 mod account;
@@ -26,6 +26,7 @@ mod recurrence;
 mod review;
 mod shortcuts;
 pub mod sidebar;
+pub(crate) mod task_fields;
 mod task_modal;
 mod task_picker;
 mod task_row;
@@ -72,6 +73,8 @@ mod shell_tests;
 #[cfg(test)]
 mod shortcut_tests;
 #[cfg(test)]
+mod task_fields_tests;
+#[cfg(test)]
 mod task_modal_tests;
 #[cfg(test)]
 mod tests;
@@ -100,7 +103,6 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
         Overlay::Account => account::layer(s, p, &mut layer),
         Overlay::LogWork => log_work::layer(s, p, &mut layer),
         Overlay::Shortcuts => shortcuts::layer(p, &mut layer),
-        Overlay::Task => task_modal::layer(s, p, &mut layer),
         Overlay::RepeatEditor => recurrence::editor_layer(s, p, &mut layer),
         Overlay::RecurringTasks => recurrence::overview_layer(s, p, &mut layer),
         Overlay::Capture => capture::layer(s, p, &mut layer),
@@ -110,6 +112,7 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
         Overlay::Workspaces => workspaces::manage_layer(s, p, &mut layer),
         Overlay::EntryEditor => entry_editor::layer(s, p, &mut layer),
     }
+    task_fields::layer(s, p, cx, &mut layer);
     quest_picker::layer(s, p, cx, &mut layer);
     quest_detail::color_layer(s, p, &mut layer);
     toast::layer(s, p, &mut layer);

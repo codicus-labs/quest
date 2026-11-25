@@ -1,0 +1,5 @@
+[
+  {"t": 0.3, "type": "tap", "key": "row-check-__TASK_ID__"},
+  {"t": 0.5, "type": "tap", "key": "toast-action"},
+  {"t": 0.8, "type": "mark", "name": "end"}
+]

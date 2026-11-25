@@ -17,8 +17,6 @@ use crate::time::Now;
 const LOGGED_SHOWN: usize = 4;
 
 pub(crate) fn task_detail(snapshot: &Snapshot, task: &Task, now: Now) -> TaskDetail {
-    let mut entries: Vec<&TimeEntry> = snapshot.time_entries.iter().filter(|e| e.task_id == Some(task.id)).collect();
-    entries.sort_by_key(|e| Reverse(e.started_at));
     TaskDetail {
         id: task.id.to_string(),
         title: task.title.clone(),
@@ -34,7 +32,7 @@ pub(crate) fn task_detail(snapshot: &Snapshot, task: &Task, now: Now) -> TaskDet
         repeat_label: repeat::summary(snapshot, task),
         repeats: repeat::series_of(snapshot, task).repeat.is_some(),
         logged_total: format!("{} total", duration_label(snapshot.task_tracked_ms(task.id, now.at))),
-        logged: entries.into_iter().take(LOGGED_SHOWN).map(|e| logged_entry(e, now)).collect(),
+        logged: logged_entries(snapshot, task.id, now).take(LOGGED_SHOWN).collect(),
     }
 }
 
@@ -47,6 +45,12 @@ pub(crate) fn postponed(snapshot: &Snapshot, task: EntityId) -> PostponedCount {
     let count = quest_view::lists::postponed(snapshot, task);
     let small = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
     PostponedCount { plan: small(count.plan), due: small(count.due), total: small(count.total()) }
+}
+
+pub(crate) fn logged_entries(snapshot: &Snapshot, id: EntityId, now: Now) -> impl Iterator<Item = LoggedEntry> + '_ {
+    let mut entries: Vec<_> = snapshot.time_entries.iter().filter(|entry| entry.task_id == Some(id)).collect();
+    entries.sort_by_key(|entry| Reverse(entry.started_at));
+    entries.into_iter().map(move |entry| logged_entry(entry, now))
 }
 
 /// "Nov 23 · 09:00–10:30" and its duration, in the caller's time zone.

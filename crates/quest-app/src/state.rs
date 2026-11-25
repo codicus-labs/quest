@@ -27,6 +27,7 @@ mod plan_scroll;
 pub mod quest_editor;
 pub mod quest_picker;
 pub mod recurrence;
+pub(crate) mod task_edits;
 pub mod task_modal;
 mod workspaces;
 
@@ -59,8 +60,6 @@ pub enum Overlay {
     LogWork,
     /// The keyboard shortcut sheet (?).
     Shortcuts,
-    /// A task's dialog; its fields are `State::task_modal`.
-    Task,
     RepeatEditor,
     RecurringTasks,
     /// AI capture; its steps are `State::capture`.
@@ -126,7 +125,11 @@ pub struct State {
     /// The quick-add field above Today, Inbox and a quest's list.
     pub quick_add: TextEdit,
     /// The quest picked on Today's quick-add chip; none files the task without a quest.
-    pub quick_add_quest: Option<EntityId>,
+    pub quick_fields: Option<quest_view::quick_add::Fields>,
+    pub quick_choice: usize,
+    pub task_calendar: Option<task_edits::Calendar>,
+    pub lingering_tasks: HashMap<EntityId, (DateTime<Utc>, Task)>,
+    pub show_task_time: bool,
     /// Whether the tracked-time column shows (T, ⌥⌘I); it stays across views.
     pub right_column: bool,
     /// The list row the keyboard moved to (J/K, ↑/↓); the task keys act on it.
@@ -210,7 +213,11 @@ impl State {
             palette: PaletteState { mode: Mode::Commands, query: TextEdit::new(""), picked: 0 },
             account_form: AccountForm { server: TextEdit::new("") },
             quick_add: TextEdit::new(""),
-            quick_add_quest: None,
+            quick_fields: None,
+            quick_choice: 0,
+            task_calendar: None,
+            lingering_tasks: HashMap::new(),
+            show_task_time: false,
             right_column: true,
             selected_task: None,
             quest_filter: None,
@@ -272,11 +279,23 @@ impl State {
             self.notice = Some("Signing out; this change wasn’t made.".to_owned());
             return;
         }
+        self.dispatch_task_change(command, true);
+    }
+
+    fn dispatch_task_change(&mut self, command: Command, remember: bool) {
         self.now = self.clock.now();
+        let edit = remember.then(|| task_edits::TrackedEdit::from_command(&command)).flatten();
+        let before = edit.and_then(|edit| self.plan_task(edit.id()).map(|task| task.into_owned()));
+        let old = edit.map(|_| Arc::clone(&self.snap));
         let result = self.store.dispatch(self.plan_edit(command));
         self.adopt_snapshot();
         match result {
-            Ok(()) => self.notice = None,
+            Ok(()) => {
+                self.notice = None;
+                if let (Some(edit), Some(before), Some(old)) = (edit, before, old) {
+                    self.remember_task_edit(edit, before, &old);
+                }
+            }
             Err(error) => self.notice = Some(format!("That didn’t work: {error}.")),
         }
         self.sync_focus_draft();
@@ -287,7 +306,7 @@ impl State {
         let view = if view == View::Home { View::Today } else { view };
         if view != self.view {
             self.selected_task = None;
-            self.quick_add_quest = None;
+            self.reset_quick_add();
         }
         if view == View::Plan && self.view != View::Plan {
             self.plan_mounts();
@@ -351,13 +370,16 @@ impl State {
     pub fn step_undo(&mut self, event: UndoEvent) {
         match event {
             // A newer delete is what ⌘Z takes back now; any other toast replaces the capture's.
-            UndoEvent::Deleted { .. } | UndoEvent::QuestStatusChanged { .. } => self.capture_undo = None,
+            UndoEvent::Deleted { .. } | UndoEvent::QuestStatusChanged { .. } | UndoEvent::TaskEdited(_) => {
+                self.capture_undo = None;
+            }
             _ => {}
         }
         let (next, effect) = self.undo.step(event, self.clock.now());
         self.undo = next;
         match effect {
             UndoEffect::None => {}
+            UndoEffect::Task(edit) => self.undo_task_edit(edit),
             UndoEffect::Restore(item) => self.dispatch(item.restore()),
             UndoEffect::SetQuestStatus { quest, status } => {
                 self.dispatch(Command::SetQuestStatus { id: quest, status })
@@ -405,8 +427,7 @@ impl State {
 
     /// Takes in what the store reported since the last frame; true when anything visible changed.
     pub fn refresh(&mut self, clock: f64, tx: &mut Tx) -> bool {
-        let mut changed = self.save_task_day_on_blur();
-        changed |= self.plan_edge_scroll(clock, tx);
+        let mut changed = self.plan_edge_scroll(clock, tx);
         let snapshot_changed = !Arc::ptr_eq(&self.store.snapshot(), &self.snap);
         if snapshot_changed {
             self.adopt_snapshot();
@@ -433,6 +454,7 @@ impl State {
         if snapshot_changed || self.recurrence_minute != Some(self.now.timestamp().div_euclid(60)) {
             changed |= self.generate_due_tasks();
         }
+        changed |= self.refresh_task_fields(previous, tx);
         changed |= self.take_auth_events();
         changed |= self.take_capture_answer();
         changed |= self.refresh_ai_connections();

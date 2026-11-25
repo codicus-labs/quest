@@ -71,7 +71,7 @@ pub fn source(el: El, lift: Option<Zone>, payload: Payload) -> El {
         if room(s) != room_before || matches!(effect, Effect::Drop(..) | Effect::SnapBack(_)) {
             tx.animated();
         }
-        apply(s, effect);
+        apply(s, effect, tx);
     })
 }
 
@@ -92,11 +92,14 @@ fn room(s: &State) -> Option<Room> {
     Some(Room { list, before })
 }
 
-fn apply(s: &mut State, effect: Effect) {
+fn apply(s: &mut State, effect: Effect, tx: &mut Tx) {
     match effect {
         Effect::None => {}
         Effect::SnapBack(payload) => land(s, payload),
-        Effect::Click(payload) => click(s, payload),
+        Effect::Click(payload) => {
+            s.open_task_modal(payload.task);
+            tx.scroll_into_view("task-modal");
+        }
         Effect::Drop(payload, target) => {
             land(s, payload);
             let id = payload.task;
@@ -111,37 +114,50 @@ fn apply(s: &mut State, effect: Effect) {
     }
 }
 
-/// A click (a press that didn't travel) on a card (its title too) opens the task's dialog.
-fn click(s: &mut State, payload: Payload) {
-    s.open_task_modal(payload.task);
-}
-
-/// The tasks one section of a list shows, in order: open work first, then what's done. QUEST
-/// WORK shows only the filtered quest's tasks while a filter is on.
+/// Plan keeps a locally completed card at its original date and sort key until its hold expires.
 pub fn list_tasks(s: &State, list: ListId, section: Section) -> Vec<Cow<'_, Task>> {
     let shown = |t: &Cow<'_, Task>| {
         s.section_of(t) == section
             && (section == Section::Other || s.quest_filter.is_none_or(|q| t.quest_id == Some(q)))
     };
+    let open = |task: &&Task| !task.is_done();
     let tasks: Vec<_> = match list {
         ListId::Day(day) => {
             let mut tasks: Vec<_> = s
                 .snap
                 .tasks_on(day)
+                .filter(open)
+                .chain(
+                    s.lingering_tasks
+                        .keys()
+                        .filter_map(|id| s.snap.task(*id))
+                        .filter(|task| s.lingering(task).is_some_and(|before| before.planned_on == Some(day))),
+                )
                 .map(Cow::Borrowed)
                 .chain(s.snap.planned_occurrences(day, s.now).map(Cow::Owned))
                 .filter(shown)
                 .collect();
-            tasks.sort_by(|a, b| a.sort_key.cmp(&b.sort_key).then(a.id.cmp(&b.id)));
+            tasks.sort_by(|a, b| {
+                let a = s.lingering(a).unwrap_or(a);
+                let b = s.lingering(b).unwrap_or(b);
+                a.sort_key.cmp(&b.sort_key).then(a.id.cmp(&b.id))
+            });
             tasks
         }
         ListId::Home => s.snap.tasks_on(s.today()).map(Cow::Borrowed).filter(shown).collect(),
-        ListId::Backlog => {
-            s.snap.tasks.iter().filter(|t| t.planned_on.is_none()).map(Cow::Borrowed).filter(shown).collect()
-        }
+        ListId::Backlog => s
+            .snap
+            .tasks
+            .iter()
+            .filter(|t| {
+                let before = s.lingering(t).unwrap_or(t);
+                before.planned_on.is_none() && !before.is_done()
+            })
+            .map(Cow::Borrowed)
+            .filter(shown)
+            .collect(),
     };
-    let (open, done): (Vec<_>, Vec<_>) = tasks.into_iter().partition(|t| !t.is_done());
-    open.into_iter().chain(done).collect()
+    tasks
 }
 
 /// The planner's lists that take drops, left to right, with where each shows: the day columns
@@ -241,7 +257,14 @@ pub fn list_cards(s: &State, p: &Pal, list: ListId, section: Section, options: C
     let dragged =
         s.drag.dragging().map(|p| p.task).filter(|id| s.plan_task(*id).is_some_and(|t| s.section_of(&t) == section));
     let room = if dragged.is_some() { list_drop(s, list) } else { None };
-    let card = |id: EntityId| tasks.iter().find(|t| t.id == id).map(|task| parts::task_card(s, task, p, options));
+    let card = |id: EntityId| {
+        let task = tasks.iter().find(|t| t.id == id)?;
+        let face = parts::task_card(s, task, p, options);
+        Some(match super::task_modal::inline(s, task, p, true) {
+            Some(detail) => rune::col().w_full().child(face).child(detail),
+            None => face,
+        })
+    };
     dnd::slots(&order, dragged, room)
         .into_iter()
         .filter_map(|slot| match slot {
