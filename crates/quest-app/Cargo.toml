@@ -1,6 +1,6 @@
 [package]
 name = "quest-app"
-version = "0.2.0"
+version = "0.1.0"
 description = "Quest macOS client built with Rune."
 edition.workspace = true
 rust-version.workspace = true
