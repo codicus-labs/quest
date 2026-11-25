@@ -34,15 +34,17 @@ import app.quest.android.focus.FocusNotifications
 import app.quest.android.settings.Appearance
 import app.quest.android.ui.AppViewModels
 import app.quest.android.ui.archive.ArchiveViewModel
-import app.quest.android.ui.quests.QuestDetailViewModel
+import app.quest.android.ui.quests.QuestNavViewModel
 import app.quest.android.ui.quests.QuestEditorViewModel
-import app.quest.android.ui.quests.QuestsViewModel
+import app.quest.android.ui.shell.PlayerViewModel
+import app.quest.android.ui.tracked.EntryViewModel
+import app.quest.android.ui.tracked.TrackedViewModel
 import app.quest.android.ui.review.ReviewViewModel
 import app.quest.android.ui.search.SearchViewModel
 import app.quest.android.ui.QuestApp
 import app.quest.android.ui.account.AccountViewModel
 import app.quest.android.ui.focus.FocusViewModel
-import app.quest.android.ui.home.HomeViewModel
+import app.quest.android.ui.lists.ListViewModel
 import app.quest.android.ui.logwork.LogWorkViewModel
 import app.quest.android.ui.plan.PlanViewModel
 import app.quest.android.ui.settings.SettingsViewModel
@@ -62,8 +64,8 @@ const val INTERNAL_ENTRY = "app.quest.android.InternalEntry"
 class MainActivity : ComponentActivity() {
     private val app get() = application as QuestApplication
 
-    private val home: HomeViewModel by viewModels {
-        viewModelFactory { initializer { HomeViewModel(app.core, createSavedStateHandle(), app.homePreferences) } }
+    private val list: ListViewModel by viewModels {
+        viewModelFactory { initializer { ListViewModel(app.core, createSavedStateHandle()) } }
     }
     private val taskSheet: TaskSheetViewModel by viewModels {
         viewModelFactory { initializer { TaskSheetViewModel(app.core, createSavedStateHandle(), RustRepeatRules, SystemClock) } }
@@ -87,14 +89,20 @@ class MainActivity : ComponentActivity() {
     private val logWork: LogWorkViewModel by viewModels {
         viewModelFactory { initializer { LogWorkViewModel(app.core, createSavedStateHandle()) } }
     }
-    private val quests: QuestsViewModel by viewModels {
-        viewModelFactory { initializer { QuestsViewModel(app.core, createSavedStateHandle()) } }
+    private val questNav: QuestNavViewModel by viewModels {
+        viewModelFactory { initializer { QuestNavViewModel(app.core) } }
     }
     private val questEditor: QuestEditorViewModel by viewModels {
         viewModelFactory { initializer { QuestEditorViewModel(app.core, createSavedStateHandle()) } }
     }
-    private val questDetail: QuestDetailViewModel by viewModels {
-        viewModelFactory { initializer { QuestDetailViewModel(app.core, createSavedStateHandle(), app.homePreferences) } }
+    private val tracked: TrackedViewModel by viewModels {
+        viewModelFactory { initializer { TrackedViewModel(app.core) } }
+    }
+    private val entry: EntryViewModel by viewModels {
+        viewModelFactory { initializer { EntryViewModel(app.core, createSavedStateHandle()) } }
+    }
+    private val player: PlayerViewModel by viewModels {
+        viewModelFactory { initializer { PlayerViewModel(app.core) } }
     }
     private val review: ReviewViewModel by viewModels {
         viewModelFactory { initializer { ReviewViewModel(app.core, createSavedStateHandle()) } }
@@ -131,7 +139,7 @@ class MainActivity : ComponentActivity() {
         // A restored activity already shows what it showed; only a fresh launch follows the link.
         if (savedInstanceState == null) handleIntent(intent)
         openBrowserPages()
-        val viewModels = AppViewModels(home, taskSheet, account, settings, focus, plan, logWork, quests, questEditor, questDetail, review, archive, search, workspaces)
+        val viewModels = AppViewModels(list, taskSheet, account, settings, focus, plan, logWork, questNav, questEditor, tracked, entry, player, review, archive, search, workspaces)
         var appearanceLoaded = false
         keepSplashUntil { appearanceLoaded }
         setContent {

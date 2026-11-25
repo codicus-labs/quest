@@ -1,7 +1,7 @@
 package app.quest.android.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -14,7 +14,6 @@ import app.quest.android.FakeFocusPreferences
 import app.quest.android.FakeWorkspaces
 import app.quest.android.WorkspaceSamples
 import app.quest.android.core.CoreHolder
-import app.quest.android.ui.home.HomeUiState
 import app.quest.android.ui.theme.QuestTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +33,7 @@ import uniffi.quest_mobile.SearchOutcome
 import uniffi.quest_mobile.SearchResult
 import uniffi.quest_mobile.SearchToken
 
-/** The switcher, "Manage workspaces" and what a switch resets, driven through the whole app. */
+/** The drawer's workspaces, "Manage workspaces" and what a switch resets, driven through the whole app. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h914dp-port-mdpi")
 class WorkspaceSwitchTest {
@@ -61,39 +60,41 @@ class WorkspaceSwitchTest {
     }
 
     @Test
-    fun theMenuSwitchesAndTheSwitcherShowsTheNewWorkspace() {
+    fun theDrawerSwitchesAndTheAccountTabShowsTheNewWorkspace() {
         val viewModels = showApp()
-        viewModels.home.setQuestFilter("q1")
+        viewModels.entry.open("e3")
+        compose.waitForIdle()
 
-        tap("workspace-switcher")
-        tap("workspace-menu-item1")
+        tap("tab-account")
+        tap("drawer-workspace:Work")
 
-        compose.onNodeWithTag("workspace-name", useUnmergedTree = true).assertTextEquals("Work")
+        compose.onNodeWithTag("tab-account").assertTextContains("Work")
+        compose.onNodeWithTag("account-drawer").assertDoesNotExist()
         assertEquals(listOf("switch w2"), workspaces.calls)
-        assertNull((viewModels.home.state.value as HomeUiState.Ready).inputs.questFilter)
+        assertNull(viewModels.entry.state.value)
     }
 
     @Test
-    fun aQuestPageGivesWayToQuestsWhenAnotherDeviceDeletesTheShownWorkspace() {
-        val viewModels = showApp()
-        viewModels.questDetail.open("q1")
-        compose.waitForIdle()
-        compose.onNodeWithTag("quest-detail").assertIsDisplayed()
+    fun aQuestsListGivesWayToQuestsWhenAnotherDeviceDeletesTheShownWorkspace() {
+        showApp()
+        tap("tab-quests")
+        tap("quest-row:Launch my idea")
+        compose.onNodeWithTag("list-quest").assertIsDisplayed()
 
         workspaces.switchWorkspace("w2")
         core.onChange()
         compose.waitForIdle()
 
-        compose.onNodeWithTag("quest-detail").assertDoesNotExist()
-        compose.onNodeWithTag("tab-quests").assertIsSelected()
-        compose.onNodeWithTag("workspace-name", useUnmergedTree = true).assertTextEquals("Work")
+        compose.onNodeWithTag("list-quest").assertDoesNotExist()
+        compose.onNodeWithTag("quests-list").assertIsDisplayed()
+        compose.onNodeWithTag("tab-account").assertTextContains("Work")
     }
 
     @Test
-    fun manageFromTheMenuAsksBeforeDeletingAndCreateShowsTheNewOne() {
+    fun manageFromTheDrawerAsksBeforeDeletingAndCreateShowsTheNewOne() {
         showApp()
-        tap("workspace-switcher")
-        tap("workspace-manage")
+        tap("tab-account")
+        tap("drawer-manage-workspaces")
 
         tap("workspace-delete-w2")
         compose.onNodeWithTag("workspace-delete-question").assertTextEquals(workspaces.question)
@@ -105,7 +106,7 @@ class WorkspaceSwitchTest {
 
         assertEquals(listOf("ask delete w2", "delete w2", "create Side"), workspaces.calls)
         compose.onNodeWithTag("workspaces-sheet").assertDoesNotExist()
-        compose.onNodeWithTag("workspace-name", useUnmergedTree = true).assertTextEquals("Side")
+        compose.onNodeWithTag("tab-account").assertTextContains("Side")
     }
 
     @Test

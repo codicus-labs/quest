@@ -40,6 +40,13 @@ import uniffi.quest_mobile.TaskChoices
 import uniffi.quest_mobile.TaskDetail
 import uniffi.quest_mobile.TaskSection
 import uniffi.quest_mobile.WorkspacesData
+import uniffi.quest_mobile.EntryCheck
+import uniffi.quest_mobile.EntryDraft
+import uniffi.quest_mobile.ListKind
+import uniffi.quest_mobile.PlayerCard
+import uniffi.quest_mobile.QuestNav
+import uniffi.quest_mobile.TaskList
+import uniffi.quest_mobile.TrackedData
 
 /**
  * The Rust core as the app sees it. [RustQuestCore] is the only implementation that talks to
@@ -131,6 +138,35 @@ interface QuestCoreApi : WorkspacesApi {
 
     /** Saves the session; a wrong field throws `InvalidForm`. Returns the entry's id. */
     fun logWork(draft: LogWorkDraft, now: Moment): String
+
+    /** One list (Today, Inbox, Logbook, a quest's); `UnknownQuest` when its quest is gone. */
+    fun taskList(kind: ListKind, now: Moment): TaskList
+
+    /** Adds a task with the list's defaults (Today: planned today; a quest's list: its quest). Returns its id. */
+    fun addToList(kind: ListKind, title: String, now: Moment): String
+
+    /** The Quests tab: active and completed quests with this week's hours. */
+    fun questNav(now: Moment): QuestNav
+
+    /** The Tracked tab: today's timeline and this week. */
+    fun tracked(now: Moment): TrackedData
+
+    /** The mini player above the tabs. */
+    fun player(now: Moment): PlayerCard
+
+    /** The entry editor's fields as it opens; `UnknownEntry` once the session is gone. */
+    fun entryDraft(entryId: String, now: Moment): EntryDraft
+
+    fun checkEntry(draft: EntryDraft, now: Moment): EntryCheck
+
+    /** Saves times and task; a wrong field throws `InvalidForm`. */
+    fun saveEntry(draft: EntryDraft, now: Moment)
+
+    /** Deletes the session softly; the toast offers Undo. */
+    fun deleteEntry(entryId: String, now: Moment)
+
+    /** The session keeps its times and becomes Organizing (its task is "Back to"). */
+    fun bookEntryAsOrganizing(entryId: String)
 
     /** The Quests tab: the figures, active and completed cards, a new quest's colours. */
     fun quests(now: Moment): QuestsData

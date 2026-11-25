@@ -357,4 +357,33 @@
     <string name="workspace_current">Current workspace</string>
     <string name="workspace_timer_in">in %1$s</string>
     <string name="workspace_timer_label">Timer running in %1$s: %2$s. Show it in Focus.</string>
+
+    <!-- Redesign: tabs, lists, player, drawer, Tracked -->
+    <string name="nav_today">Today</string>
+    <string name="nav_inbox">Inbox</string>
+    <string name="nav_tracked">Tracked</string>
+    <string name="timer_stop_label">Stop timer, %1$s</string>
+    <string name="list_add">New task</string>
+    <string name="list_inbox_zero">Inbox zero</string>
+    <string name="list_empty">Nothing here.</string>
+    <string name="list_gone">This quest is gone.</string>
+    <string name="list_logbook">Logbook</string>
+    <string name="quests_completed">Completed</string>
+    <string name="quests_nav_empty">No quests yet.</string>
+    <string name="organizing">Organizing</string>
+    <string name="player_back_to">Back to %1$s</string>
+    <string name="entry_title">Tracked time</string>
+    <string name="entry_no_task">No task</string>
+    <string name="entry_running">Running</string>
+    <string name="entry_end_date">End date</string>
+    <string name="tracked_today">%1$s today</string>
+    <string name="tracked_review">Weekly review</string>
+    <string name="tracked_this_week">This week</string>
+    <plurals name="tracked_postponed">
+        <item quantity="one">%d postponed</item>
+        <item quantity="other">%d postponed</item>
+    </plurals>
+    <string name="drawer_workspaces">Workspaces</string>
+    <string name="workspaces_new">New workspace</string>
+    <string name="drawer_account_details">Account details</string>
 </resources>

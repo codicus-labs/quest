@@ -1,7 +1,7 @@
 # Quest for Android (prototype)
 
 Jetpack Compose UI over the shared Rust core (`crates/quest-mobile` → `quest-store` → `quest-domain`),
-bound with UniFFI: Home, Focus, Plan, Quests, Review, Archive, Search, Account and Settings, plus a
+bound with UniFFI: Today, Plan, Inbox, Quests, Tracked, Focus, Review, Archive, Search, Account and Settings, plus a
 home-screen widget, background sync, sharing, shortcuts and a Quick Settings tile. Architecture notes and
 per-phase decisions: `docs/mobile.md`; startup and jank numbers: `docs/perf/android-startup.md`.
 
@@ -132,15 +132,21 @@ Tablet layout on the phone emulator: `adb shell wm size 2560x1600; adb shell wm 
 “Log work” (app shortcut, Search) opens a sheet over the current tab and logs the last 15 minutes by
 default; the task picker can also create the task.
 
-## Quests, Review, Archive, Search
+## Tabs, player, account drawer
 
-Quests: as on the desktop, figures (quest hours, in progress, completed), “Active · n” / “Completed · n”
-tabs and Archive beside them; cards show colour, name, open tasks and this week's and total hours. Tapping
-a card opens the quest editor as a bottom sheet (title, colour, Complete/Reopen quest with
-Undo, Open quest page, Delete); closing it keeps the tab and scroll. “New quest” (FAB on phones, header
-button on tablets, the dashed card) opens it empty; Create needs only a title. The quest page is for work:
-its tasks. Review: arrows or a sideways swipe
-turn weeks, a bar under “Recent weeks” jumps to that week. Archive (Quests header, Account, Search)
+Tabs (a rail on tablets): Today (“Today | Plan”), Inbox (open, no quest, no plan date), Quests, Tracked
+and Account. Lists come from the core (`task_list`); quick add files into the list (Today → planned
+today, a quest → that quest, Inbox → neither). Quests lists the quests with their hours ring; a quest opens its
+list, “Edit” there opens the quest editor sheet; the Logbook row sits under the quests, as it is a list
+like them. Tracked shows today's timeline (a block opens the entry sheet), “This week”, the review and
+Log work. The mini player above the tabs shows the timer (or Organizing with “Back to …”); tapping it
+opens Focus. Account (avatar with the workspace name) opens a bottom sheet with workspaces, account,
+sync, Settings and Archive.
+
+## Review, Archive, Search
+
+Review: arrows or a sideways swipe arrows or a sideways swipe
+turn weeks, a bar under “Recent weeks” jumps to that week. Archive (account drawer, Search)
 restores deleted quests, tasks, checklist items and sessions; quests an older version archived are listed with
 Open and Unarchive. Search (top bar): results come from the core;
 the keyboard's Search runs the first one; “Move to…” switches the list.
@@ -246,7 +252,7 @@ and review the diff.
 
 ## Baseline Profile and startup benchmark
 
-`:baselineprofile` (a `com.android.test` module) drives the app through start, Home and Plan.
+`:baselineprofile` (a `com.android.test` module) drives the app through start, Today and Plan.
 The generated profile is checked in (`app/src/release/generated/baselineProfiles/`) and installed by
 profileinstaller. Regenerate after larger UI changes, with the emulator running:
 

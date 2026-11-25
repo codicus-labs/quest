@@ -3,22 +3,15 @@ package app.quest.android.screenshots
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.quest.android.R
-import app.quest.android.WorkspaceSamples
 import app.quest.android.settings.HomePrefs
 import app.quest.android.ui.components.TaskCardActions
-import app.quest.android.ui.home.HomeActions
-import app.quest.android.ui.home.HomeInputs
 import app.quest.android.ui.task.RepeatEditorState
 import app.quest.android.ui.task.RepeatForm
 import app.quest.android.ui.task.SheetPage
@@ -26,8 +19,6 @@ import app.quest.android.ui.task.TaskSheetActions
 import app.quest.android.ui.task.TaskSheetContent
 import app.quest.android.ui.task.TaskSheetState
 import app.quest.android.ui.theme.QuestTheme
-import uniffi.quest_mobile.AddPosition
-import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.RepeatCheck
 import uniffi.quest_mobile.RepeatFrequency
 import androidx.compose.runtime.Composable
@@ -46,20 +37,15 @@ import app.quest.android.ui.components.UndoSnackbar
 import app.quest.android.ui.focus.FocusActions
 import app.quest.android.ui.focus.FocusScreen
 import app.quest.android.ui.focus.FocusUiState
-import app.quest.android.ui.home.HomeScreen
-import app.quest.android.ui.home.HomeUiState
 import app.quest.android.ui.navigation.DetailScaffold
-import app.quest.android.ui.navigation.QuestScaffold
-import app.quest.android.ui.navigation.TopDestination
+import app.quest.android.ui.navigation.Tab
+import app.quest.android.ui.shell.TodaySegment
 import app.quest.android.ui.settings.SettingsActions
 import app.quest.android.ui.settings.SettingsScreen
 import app.quest.android.ui.settings.SettingsUiState
 import uniffi.quest_mobile.SyncState
 import uniffi.quest_mobile.PlanData
 import app.quest.android.PlanSamples
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.runtime.remember
 import app.quest.android.LogWorkSamples
 import app.quest.android.ui.logwork.LogWorkActions
 import app.quest.android.ui.logwork.LogWorkForm
@@ -95,27 +81,13 @@ class Scene(val name: String, val kind: SceneKind, val content: @Composable () -
 internal val noAccountActions = AccountActions()
 internal val noSettingsActions = SettingsActions(changeWeeklyTarget = {}, setAppearance = {}, setKeepScreenOn = {})
 
-@Composable
-private fun Top(destination: TopDestination, content: @Composable () -> Unit) =
-    QuestScaffold(destination, onNavigate = {}, onSearch = {}, onAccount = {}, workspaces = WorkspaceSamples.one, content = content)
-
 private val noCardActions = TaskCardActions({}, {}, {})
-
-private fun homeState(
-    home: HomeData = Samples.home,
-    sync: SyncState = SyncState.Live(0u),
-    prefs: HomePrefs = HomePrefs(),
-    inputs: HomeInputs = HomeInputs(),
-) = HomeUiState.Ready(home, sync, prefs, inputs)
 
 private fun planState(plan: PlanData = PlanSamples.plan, prefs: HomePrefs = HomePrefs(), inputs: PlanInputs = PlanInputs()) =
     PlanUiState.Ready(plan, prefs, inputs, moveSheet = null, scroll = null)
 
 @Composable
-private fun Plan(state: PlanUiState.Ready) = Top(TopDestination.Plan) { PlanScreen(state, PlanActions.None) }
-
-@Composable
-private fun Home(state: HomeUiState) = Top(TopDestination.Home) { HomeScreen(state, HomeActions.None) }
+private fun Plan(state: PlanUiState.Ready) = Shell(Tab.Today, leading = { TodaySegment(showPlan = true, onChange = {}) }) { PlanScreen(state, PlanActions.None) }
 
 /** Focus over the app, as in [app.quest.android.ui.QuestApp]. */
 @Composable
@@ -169,23 +141,6 @@ val scenes = listOf(
     Scene("undo-snackbar", SceneKind.Component) {
         UndoSnackbar("Task deleted", onUndo = {})
         UndoSnackbar(Samples.toast.text, onUndo = {}, onDismiss = {})
-    },
-    Scene("home", SceneKind.Screen) { Home(homeState()) },
-    Scene("home-filtered", SceneKind.Screen) {
-        Home(homeState(home = Samples.home.copy(questFilter = Samples.fitness, addQuest = null), inputs = HomeInputs(questFilter = Samples.fitness.id)))
-    },
-    Scene("home-empty", SceneKind.Screen) { Home(homeState(Samples.emptyHome, SyncState.SignedOut)) },
-    Scene("home-filtered-toast", SceneKind.Screen) {
-        val home = Samples.home.copy(
-            questWork = Samples.home.questWork.filter { it.quest == Samples.writing },
-            questFilter = Samples.writing,
-            addQuest = null,
-            toast = Samples.toast,
-        )
-        Home(homeState(home, prefs = HomePrefs(showOther = false, addPosition = AddPosition.BOTTOM), inputs = HomeInputs(questFilter = "q1")))
-    },
-    Scene("home-add-draft", SceneKind.Screen) {
-        Home(homeState(prefs = HomePrefs(addPosition = AddPosition.BOTTOM), inputs = HomeInputs(questWorkDraft = "Sketch the storm scene")))
     },
     Scene("focus-running", SceneKind.Screen) { Focus(FocusUiState.Session(Samples.focusSession, Samples.focusSession.title, Samples.focusSession.description, Samples.home.quests)) },
     Scene("focus-paused", SceneKind.Screen) {
@@ -252,4 +207,4 @@ val scenes = listOf(
     Scene("settings", SceneKind.Screen) {
         DetailScaffold("Settings", onBack = {}) { SettingsScreen(SettingsUiState(Samples.settings, Appearance.Dark), noSettingsActions) }
     },
-) + questPickerScenes + questScenes + workspaceScenes + platformScenes + captureScenes + settingsScenes + accountScenes
+) + shellScenes + questPickerScenes + questScenes + workspaceScenes + platformScenes + captureScenes + settingsScenes + accountScenes

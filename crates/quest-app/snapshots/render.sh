@@ -14,17 +14,18 @@ app="$CARGO_TARGET_DIR/debug/quest-app"
 data=$(mktemp -d)
 trap 'rm -rf "$data"' EXIT
 fresh() { rm -rf "$data/q"; echo "$data/q"; }
-common="--demo --now 2026-10-15T14:40 --size 1100x750 --scale 2"
+common="--demo --now 2026-10-15T14:40 --size 1440x900 --scale 2"
 
-for scene in home focus quests quests-completed quests-empty-active quests-empty-completed quest-editor \
-  quest-new review palette account light \
-  quest-detail quest-rename archive undo-toast card-menu task-modal:task-modal-home log-work shortcuts \
-  ai-notice guest-import; do
+for scene in today today-light inbox inbox-light logbook logbook-light tracked-closed tracked-closed-light \
+  entry-editor entry-editor-light organizing organizing-light focus quests quests-completed \
+  quests-empty-active quests-empty-completed quest-editor quest-new review palette account light \
+  quest-detail quest-detail-light quest-rename archive undo-toast task-modal:task-modal-today log-work \
+  shortcuts shortcuts-light ai-notice guest-import; do
   # `scene:file` snaps the scene into another file name.
   "$app" $common --data-dir "$(fresh)" --scene "${scene%%:*}" --snap "$here/${scene##*:}.png" >/dev/null 2>&1
 done
 # The planner puts its strip in place a frame after a scene mounts it: snap a moment later.
-for scene in plan light-plan task-modal-plan repeat-editor; do
+for scene in plan light-plan task-modal-plan repeat-editor card-menu; do
   "$app" $common --data-dir "$(fresh)" --scene "${scene%%:*}" --snap "$here/${scene##*:}.png" --at 0.1 >/dev/null 2>&1
 done
 
@@ -33,19 +34,13 @@ for scene in task-modal-quests task-modal-quests-filtered; do
   "$app" $common --data-dir "$(fresh)" --scene "$scene" --snap "$here/$scene.png" --at 0.3 >/dev/null 2>&1
 done
 
-"$app" $common --data-dir "$(fresh)" --scene home --script "$here/scripts/dnd-list.json" \
-  --snap "$here/dnd-list.png" --at mark:end >/dev/null 2>&1
 "$app" $common --data-dir "$(fresh)" --scene plan --script "$here/scripts/dnd-plan-scrolled.json" \
   --snap "$here/dnd-plan-scrolled.png" --at mark:end >/dev/null 2>&1
 # A trackpad swipe a few weeks on: the month follows what shows.
 "$app" $common --data-dir "$(fresh)" --scene plan --script "$here/scripts/plan-scroll.json" \
   --snap "$here/plan-scroll.png" --at mark:end >/dev/null 2>&1
-# The room opening in Home's list as the card is dragged up: one crop of the list per frame.
-"$app" $common --data-dir "$(fresh)" --scene home --script "$here/scripts/dnd-list.json" \
-  --start 0.3 --frames 36 --every 3 --cols 4 --crop 24,190,556,520 \
-  --strip "$here/dnd-make-room-strip.png" >/dev/null 2>&1
 # Later glides the planner one day on: the columns move as one board, with their cards.
 "$app" $common --data-dir "$(fresh)" --scene plan --script "$here/scripts/plan-paging.json" \
-  --start 0.3 --frames 8 --every 3 --cols 2 --crop 0,150,1100,250 \
+  --start 0.3 --frames 8 --every 3 --cols 2 --crop 250,150,890,250 \
   --strip "$here/plan-paging-strip.png" >/dev/null 2>&1
 echo "rendered into $here"

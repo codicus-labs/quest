@@ -89,6 +89,15 @@ impl QuestCore {
         })
     }
 
+    /// The entry editor's "Organizing": the session keeps its times and becomes organizing, its task
+    /// the one to go back to. Already organizing: nothing happens.
+    pub fn book_entry_as_organizing(&self, entry_id: String) -> Result<(), MobileError> {
+        guard(|| {
+            let id = work_forms::entry(&self.store().snapshot(), &entry_id)?.id;
+            self.dispatch(Command::BookEntryAsOrganizing { id })
+        })
+    }
+
     /// Deletes the session softly; the snackbar offers to undo it.
     pub fn delete_entry(&self, entry_id: String, now: Moment) -> Result<(), MobileError> {
         guard(|| {

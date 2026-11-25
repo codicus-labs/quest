@@ -1,15 +1,16 @@
-//! Window shortcuts, as the shortcuts sheet (`?`) lists them: Tab / ⇧Tab and H P F Q R views,
-//! ⌘K palette, ⌘, settings, N new task, V other work, and Space X T D W ⌘⌫ on the task under the
-//! pointer (else the selected one; in Focus, its task). Also ⌘1–5, ⌘Z undo, Esc back and ⌫
-//! deletes the selected task. And the keys a focused task card takes: the keyboard way to do
-//! what dragging does.
+//! Window shortcuts, as the shortcuts sheet (`?`) lists them: ⌘1–5 the sidebar's views and ⌘6…
+//! its quests, J/K and ↑/↓ move the selection, ↵ opens it, Space X D W ⌘⌫ act on it (else on the
+//! task under the pointer; in Focus, its task), F Focus, T and ⌥⌘I the tracked column, N quick
+//! add, V other work, ⌘K palette, ⌘, settings, ⌘Z undo, Esc back and ⌫ deletes. Single keys only
+//! arrive without text focus. And the keys a focused task card takes: the keyboard way to do what
+//! dragging does.
 
 use chrono::{Datelike, Days, NaiveDate};
 use quest_domain::{Command, EntityId, Position};
 use rune::{Key, KeyEvent, Tx};
 
 use crate::state::{Overlay, State, View};
-use crate::ui::topbar::open_palette;
+use crate::ui::chrome::open_palette;
 use crate::undo::Deletable;
 
 /// What a key press asks for, decided without touching state.
@@ -17,14 +18,18 @@ use crate::undo::Deletable;
 pub enum Shortcut {
     TogglePalette,
     Go(View),
-    /// Tab / ⇧Tab: the next or previous view.
-    Cycle {
-        back: bool,
-    },
+    /// ⌘ and a digit past the sidebar's views: the active quest at this index.
+    GoQuest(usize),
     Settings,
     Sheet,
     NewTask,
     ToggleOther,
+    /// T, ⌥⌘I: show or hide the tracked-time column.
+    ToggleTracked,
+    /// J / ↓ and K / ↑: the next or previous row.
+    Select {
+        next: bool,
+    },
     Back,
     DeleteSelection,
     Undo,
@@ -40,17 +45,16 @@ pub enum TaskKey {
     ToggleDone,
     /// ⌘↵ in Focus: done, session over, back Home. In Log work: save.
     Complete,
-    /// T, D, W: today, the next day, next week.
+    /// D, W: the next day, next week.
     Move(MoveTo),
     /// ⌘⌫: delete, with an undo toast.
     Delete,
-    /// ↵: the task's dialog (the card under the pointer only, in Focus too).
+    /// ↵: the task's dialog (the selected row or the card under the pointer, in Focus too).
     Open,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MoveTo {
-    Today,
     NextDay,
     NextWeek,
 }
@@ -59,7 +63,6 @@ pub enum MoveTo {
 /// from today for a backlog task; next week is the coming Monday.
 pub fn moved_day(to: MoveTo, day: Option<NaiveDate>, today: NaiveDate) -> NaiveDate {
     match to {
-        MoveTo::Today => today,
         MoveTo::NextDay => day.unwrap_or(today) + Days::new(1),
         MoveTo::NextWeek => today + Days::new(u64::from(7 - today.weekday().num_days_from_monday())),
     }
@@ -95,28 +98,32 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         Key::Command('k') => Some(Shortcut::TogglePalette),
         Key::Command('z') if !ev.mods.shift => Some(Shortcut::Undo),
         Key::Command(',') => Some(Shortcut::Settings),
-        Key::Command(c @ '1'..='5') => {
+        // ⌥⌘I; with ⌥ held a layout may report the dead key's character instead.
+        Key::Command('i' | 'ˆ') if ev.mods.alt => Some(Shortcut::ToggleTracked),
+        Key::Command(c @ '1'..='9') if !ev.mods.alt && !ev.mods.shift => {
             let index = (*c as usize) - ('1' as usize);
-            View::ALL.get(index).map(|v| Shortcut::Go(*v))
+            Some(match View::SIDEBAR.get(index) {
+                Some(view) => Shortcut::Go(*view),
+                None => Shortcut::GoQuest(index - View::SIDEBAR.len()),
+            })
         }
-        Key::Tab if plain => Some(Shortcut::Cycle { back: ev.mods.shift }),
+        Key::Down if plain => Some(Shortcut::Select { next: true }),
+        Key::Up if plain => Some(Shortcut::Select { next: false }),
         Key::Escape => Some(Shortcut::Back),
         Key::Enter if ev.mods.cmd => Some(Shortcut::Task(TaskKey::Complete)),
         Key::Enter if plain && !ev.mods.shift => Some(Shortcut::Task(TaskKey::Open)),
         Key::Backspace | Key::Delete if ev.mods.cmd => Some(Shortcut::Task(TaskKey::Delete)),
         Key::Backspace | Key::Delete => Some(Shortcut::DeleteSelection),
         Key::Text(t) if plain => match t.to_lowercase().as_str() {
-            "h" => Some(Shortcut::Go(View::Home)),
-            "p" => Some(Shortcut::Go(View::Plan)),
             "f" => Some(Shortcut::Go(View::Focus)),
-            "q" => Some(Shortcut::Go(View::Quests)),
-            "r" => Some(Shortcut::Go(View::Review)),
+            "j" => Some(Shortcut::Select { next: true }),
+            "k" => Some(Shortcut::Select { next: false }),
+            "t" => Some(Shortcut::ToggleTracked),
             "?" => Some(Shortcut::Sheet),
             "n" => Some(Shortcut::NewTask),
             "v" => Some(Shortcut::ToggleOther),
             " " => Some(Shortcut::Task(TaskKey::StartPause)),
             "x" => Some(Shortcut::Task(TaskKey::ToggleDone)),
-            "t" => Some(Shortcut::Task(TaskKey::Move(MoveTo::Today))),
             "d" => Some(Shortcut::Task(TaskKey::Move(MoveTo::NextDay))),
             "w" => Some(Shortcut::Task(TaskKey::Move(MoveTo::NextWeek))),
             _ => None,
@@ -147,14 +154,28 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             open_palette(s, tx);
         }
         Shortcut::Go(view) => s.go_with(view, tx),
-        Shortcut::Cycle { back } => s.go_with(s.view.cycled(back), tx),
+        Shortcut::GoQuest(index) => {
+            let Some(quest) = s.snap.active_quests().nth(index).map(|q| q.id) else { return false };
+            s.go_with(View::Quest(quest), tx);
+        }
+        Shortcut::ToggleTracked => toggle_tracked(s),
+        Shortcut::Select { next } => {
+            if !s.select_next_row(next) {
+                return false;
+            }
+            if let Some(task) = s.selected_task {
+                tx.scroll_into_view(format!("row-{task}"));
+            }
+        }
         Shortcut::Settings => s.overlay = Overlay::Account,
         Shortcut::Sheet if s.overlay == Overlay::Shortcuts => s.overlay = Overlay::None,
         Shortcut::Sheet if s.overlay == Overlay::None => s.overlay = Overlay::Shortcuts,
         Shortcut::Sheet => return false,
         Shortcut::NewTask => {
-            s.go_with(View::Home, tx);
-            tx.focus_when_shown("home-add", true);
+            if !matches!(s.view, View::Today | View::Inbox | View::Quest(_)) {
+                s.go_with(View::Today, tx);
+            }
+            tx.focus_when_shown("quick-add", true);
         }
         Shortcut::ToggleOther => s.show_other = !s.show_other,
         Shortcut::Back if s.date_picker.is_some() => s.date_picker = None,
@@ -171,8 +192,10 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             tx.blur();
             s.close_quest_editor();
         }
+        Shortcut::Back if s.overlay == Overlay::EntryEditor => s.close_entry_editor(),
         Shortcut::Back if s.overlay != Overlay::None => s.overlay = Overlay::None,
-        Shortcut::Back if s.view == View::Focus => s.go_with(View::Home, tx),
+        Shortcut::Back if s.view == View::Focus => s.go_with(View::Today, tx),
+        Shortcut::Back if s.selected_task.is_some() => s.selected_task = None,
         Shortcut::Back if s.menu.is_some() => s.menu = None,
         Shortcut::Back if matches!(s.view, View::Archive | View::Quest(_)) => s.go(View::Quests),
         Shortcut::Back => return false,
@@ -195,6 +218,11 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
+/// T, ⌥⌘I and the header's button: shows or hides the tracked-time column.
+pub fn toggle_tracked(s: &mut State) {
+    s.right_column = !s.right_column;
+}
+
 fn on_task_key(s: &mut State, task: EntityId, key: TaskKey, tx: &mut Tx) {
     match key {
         TaskKey::StartPause => s.toggle_focus(task),
@@ -211,6 +239,7 @@ fn on_task_key(s: &mut State, task: EntityId, key: TaskKey, tx: &mut Tx) {
         TaskKey::Delete => {
             tx.blur();
             s.hovered_task = None;
+            s.selected_task = None;
             s.delete(Deletable::Task(task));
         }
     }
@@ -230,22 +259,27 @@ mod tests {
     }
 
     #[test]
-    fn command_digits_pick_views_in_tab_order() {
-        assert_eq!(shortcut(&key(Key::Command('1'))), Some(Shortcut::Go(View::Home)));
-        assert_eq!(shortcut(&key(Key::Command('5'))), Some(Shortcut::Go(View::Review)));
-        assert_eq!(shortcut(&key(Key::Command('6'))), None);
+    fn command_digits_pick_the_sidebars_views_then_its_quests() {
+        assert_eq!(shortcut(&key(Key::Command('1'))), Some(Shortcut::Go(View::Inbox)));
+        assert_eq!(shortcut(&key(Key::Command('2'))), Some(Shortcut::Go(View::Today)));
+        assert_eq!(shortcut(&key(Key::Command('5'))), Some(Shortcut::Go(View::Logbook)));
+        assert_eq!(shortcut(&key(Key::Command('6'))), Some(Shortcut::GoQuest(0)));
+        assert_eq!(shortcut(&key(Key::Command('9'))), Some(Shortcut::GoQuest(3)));
     }
 
     #[test]
-    fn letters_jump_to_views_and_tab_cycles() {
-        assert_eq!(shortcut(&text("h")), Some(Shortcut::Go(View::Home)));
-        assert_eq!(shortcut(&text("P")), Some(Shortcut::Go(View::Plan)));
+    fn letters_and_arrows_select_focus_and_toggle_the_tracked_column() {
+        assert_eq!(shortcut(&text("j")), Some(Shortcut::Select { next: true }));
+        assert_eq!(shortcut(&text("K")), Some(Shortcut::Select { next: false }));
+        assert_eq!(shortcut(&key(Key::Down)), Some(Shortcut::Select { next: true }));
+        assert_eq!(shortcut(&key(Key::Up)), Some(Shortcut::Select { next: false }));
         assert_eq!(shortcut(&text("f")), Some(Shortcut::Go(View::Focus)));
-        assert_eq!(shortcut(&key(Key::Tab)), Some(Shortcut::Cycle { back: false }));
-        let shift_tab = KeyEvent { key: Key::Tab, mods: Mods { shift: true, ..Mods::default() } };
-        assert_eq!(shortcut(&shift_tab), Some(Shortcut::Cycle { back: true }));
-        assert_eq!(View::Home.cycled(true), View::Review);
-        assert_eq!(View::Review.cycled(false), View::Home);
+        assert_eq!(shortcut(&text("t")), Some(Shortcut::ToggleTracked));
+        let option_command_i =
+            KeyEvent { key: Key::Command('i'), mods: Mods { alt: true, cmd: true, ..Mods::default() } };
+        assert_eq!(shortcut(&option_command_i), Some(Shortcut::ToggleTracked));
+        assert_eq!(shortcut(&key(Key::Tab)), None, "Tab stays focus navigation");
+        assert_eq!(shortcut(&text("h")), None);
     }
 
     #[test]
@@ -275,7 +309,6 @@ mod tests {
         let thursday = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
         let saturday = NaiveDate::from_ymd_opt(2026, 10, 17).unwrap();
         let monday = NaiveDate::from_ymd_opt(2026, 10, 19).unwrap();
-        assert_eq!(moved_day(MoveTo::Today, Some(saturday), thursday), thursday);
         assert_eq!(moved_day(MoveTo::NextDay, Some(saturday), thursday), saturday + Days::new(1));
         assert_eq!(moved_day(MoveTo::NextDay, None, thursday), thursday + Days::new(1));
         assert_eq!(moved_day(MoveTo::NextWeek, None, thursday), monday);

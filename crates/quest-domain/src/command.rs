@@ -208,6 +208,11 @@ pub enum Command {
         started_at: DateTime<Utc>,
         ended_at: Option<DateTime<Utc>>,
     },
+    /// Books a session as organizing: it keeps its times, has no task or quest any more and
+    /// remembers its task as the one it came from.
+    BookEntryAsOrganizing {
+        id: EntityId,
+    },
     /// Moves or resizes a session. A running session keeps running unless `ended_at` is given;
     /// a finished session cannot be made running again.
     SetEntryTimes {
@@ -426,6 +431,7 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
         Command::EditEntry { id, task, quest_id, started_at, ended_at } => {
             edit_entry::plan_edit(snapshot, *id, task.as_ref(), *quest_id, *started_at, *ended_at)?
         }
+        Command::BookEntryAsOrganizing { id } => edit_entry::as_organizing(snapshot, *id)?,
         Command::SetEntryTimes { id, started_at, ended_at } => {
             let entry = entry(snapshot, *id)?;
             if !entry.is_running() && ended_at.is_none() {

@@ -45,7 +45,7 @@ import app.quest.android.ui.components.QuestFilterButton
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.components.QuestSheetContent
 import app.quest.android.ui.components.UndoSnackbar
-import app.quest.android.ui.home.CenteredNote
+import app.quest.android.ui.components.CenteredNote
 import app.quest.android.ui.task.DayPickerDialog
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme

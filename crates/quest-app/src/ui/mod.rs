@@ -1,14 +1,17 @@
-//! The view: top bar, the current view, and overlays (command palette, account, Log work, shortcuts,
-//! a task's dialog, a quest's dialog).
+//! The view: the sidebar, the current view with its top band, the tracked-time column, and
+//! overlays (command palette, account, Log work, shortcuts, a task's dialog, a quest's dialog,
+//! a session's editor). Focus fills the window on its own.
 
 mod account;
 mod archive;
 mod auth_dialogs;
 mod capture;
+pub mod chrome;
 pub(crate) mod date_picker;
 pub mod drag;
+mod entry_editor;
 mod focus;
-mod home;
+pub(crate) mod lists;
 mod log_work;
 mod menu;
 mod notes;
@@ -22,10 +25,12 @@ mod quests;
 mod recurrence;
 mod review;
 mod shortcuts;
+pub mod sidebar;
 mod task_modal;
 mod task_picker;
+mod task_row;
 mod toast;
-pub mod topbar;
+mod tracked;
 pub(crate) mod workspaces;
 
 #[cfg(test)]
@@ -63,6 +68,8 @@ mod recurrence_tests;
 #[cfg(test)]
 mod sections_tests;
 #[cfg(test)]
+mod shell_tests;
+#[cfg(test)]
 mod shortcut_tests;
 #[cfg(test)]
 mod task_modal_tests;
@@ -73,30 +80,19 @@ mod title_click_tests;
 #[cfg(test)]
 mod workspaces_tests;
 
-use rune::{Cx, El, col, row, text};
+use rune::{Cx, El, Tx, col, el, row, spacer, text};
 
+use crate::icons;
 use crate::state::{Overlay, State, View};
 use crate::theme::{self, Pal, ty};
 
 pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     let p = theme::pal(s.dark);
-    let page = match s.view {
-        View::Home => home::view(s, p),
-        View::Plan => plan::view(s, p, cx),
-        View::Focus => focus::view(s, p, cx.chrome_insets().leading),
-        View::Quests => quests::view(s, p),
-        View::Review => review::view(s, p),
-        View::Archive => archive::view(s, p),
-        View::Quest(id) => quest_detail::view(s, id, p),
+    let base = if s.view == View::Focus {
+        col().key("app").w_full().h_full().fill(p.bg).child(focus::view(s, p, cx.chrome_insets().leading))
+    } else {
+        shell(s, p, cx)
     };
-    let mut base = col().key("app").w_full().h_full().fill(p.bg);
-    if s.view != View::Focus {
-        base = base.child(topbar::topbar(s, p, cx)).child(rune::el().w_full().h(1.0).fill(p.border));
-    }
-    base = base.child(page.grow(1.0).min_h(0.0));
-    if let Some(notice) = &s.notice {
-        base = base.child(notice_bar(notice, p));
-    }
     let mut layer = Vec::new();
     match s.overlay {
         Overlay::None => {}
@@ -112,6 +108,7 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
         Overlay::AiNotice => auth_dialogs::ai_notice_layer(p, &mut layer),
         Overlay::Quest => quest_editor::layer(s, p, &mut layer),
         Overlay::Workspaces => workspaces::manage_layer(s, p, &mut layer),
+        Overlay::EntryEditor => entry_editor::layer(s, p, &mut layer),
     }
     quest_picker::layer(s, p, cx, &mut layer);
     toast::layer(s, p, &mut layer);
@@ -121,6 +118,59 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     }
     drag::layer(s, p, &mut layer);
     rune_kit::root(base, layer)
+}
+
+/// Sidebar, the main column (its top band, the view, a notice), and the tracked column when on.
+fn shell(s: &State, p: &Pal, cx: &mut Cx<State>) -> El {
+    let page = match s.view {
+        View::Plan => plan::view(s, p, cx),
+        View::Quests => quests::view(s, p),
+        View::Review => review::view(s, p),
+        View::Archive => archive::view(s, p),
+        View::Quest(id) => quest_detail::view(s, id, p),
+        View::Home | View::Today | View::Inbox | View::Logbook | View::Focus => lists::view(s, p),
+    };
+    let band = row()
+        .key("main-band")
+        .w_full()
+        .h(sidebar::TITLEBAR)
+        .pr(14.0)
+        .gap(4.0)
+        .center_y()
+        .window_drag()
+        .child(spacer())
+        .child(chrome::search_button(p))
+        .child(right_column_toggle(s, p));
+    let mut main =
+        col().key("main").grow(1.0).min_w(0.0).h_full().fill(p.bg).child(band).child(page.grow(1.0).min_h(0.0));
+    if let Some(notice) = &s.notice {
+        main = main.child(notice_bar(notice, p));
+    }
+    row()
+        .key("app")
+        .w_full()
+        .h_full()
+        .fill(p.bg)
+        .child(sidebar::view(s, p))
+        .child(main)
+        .children(s.right_column.then(|| tracked::column(s, p)))
+}
+
+fn right_column_toggle(s: &State, p: &Pal) -> El {
+    let label = if s.right_column { "Hide tracked time" } else { "Show tracked time" };
+    el().key("right-column-toggle")
+        .role("button")
+        .label(label)
+        .checked(s.right_column)
+        .focusable(true)
+        .size(32.0, 32.0)
+        .center()
+        .radius(8.0)
+        .cursor(rune::Cursor::Pointer)
+        .hover(p.hover)
+        .help(format!("{label}  T  ⌥⌘I"))
+        .child(rune::icon(&icons::PANEL, 18.0).color(if s.right_column { p.muted } else { p.faint }))
+        .on_press_tx(|s: &mut State, _: &mut Tx| crate::keys::toggle_tracked(s))
 }
 
 fn notice_bar(notice: &str, p: &Pal) -> El {

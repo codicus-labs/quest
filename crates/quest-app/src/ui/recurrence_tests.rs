@@ -20,7 +20,7 @@ fn task_repeat_round_trips_through_the_plan_overview() {
         due_on: None,
         position: Position::Top,
     });
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     rt.update(move |s, _| s.open_task_modal(id));
     click(&mut rt, "task-modal-repeat");
     assert_eq!(rt.state.overlay, Overlay::RepeatEditor);
@@ -87,7 +87,7 @@ fn the_plan_shows_future_occurrences_and_saves_only_the_edited_one() {
         position: Position::Top,
     });
     rt.state.dispatch(Command::SetTaskRepeat { id, rule: Some(rule), now: rt.state.now });
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     let preview = |rt: &rune::Runtime<crate::state::State>, day| {
         rt.state.snap.planned_occurrences(day, rt.state.now).find(|task| task.series == Some(id)).unwrap().id
     };
@@ -164,7 +164,7 @@ fn moving_one_occurrence_leaves_the_series_alone_and_completing_another_brings_i
     let moved = preview(tomorrow);
     let finished = preview(next);
     let other = preview(following);
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     let from = center(&rt, &format!("plan-title-{moved}"));
     let [x, y, w, h] = rect(&rt, &format!("plan-task-{finished}"));

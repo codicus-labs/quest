@@ -4,7 +4,7 @@
   {"t": 2.0, "type": "tap", "key": "workspace-new"},
   {"t": 2.1, "type": "type", "text": "Work", "every": 0.01},
   {"t": 2.6, "type": "key", "name": "Enter"},
-  {"t": 3.4, "type": "tap", "key": "home-add"},
+  {"t": 3.4, "type": "tap", "key": "quick-add"},
   {"t": 3.5, "type": "type", "text": "Work task", "every": 0.01},
   {"t": 4.1, "type": "key", "name": "Enter"},
   {"t": 7.0, "type": "mark", "name": "end"}

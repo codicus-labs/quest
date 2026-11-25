@@ -9,7 +9,7 @@ use crate::icons;
 use crate::state::quest_picker::PickFor;
 use crate::state::{FocusTarget, State, View};
 use crate::theme::{Pal, quest_color, ty};
-use crate::ui::topbar;
+use crate::ui::chrome;
 use crate::ui::workspaces;
 use crate::ui::{parts, quest_picker};
 
@@ -29,7 +29,7 @@ pub fn view(s: &State, p: &Pal, leading: f32) -> El {
     let top = row()
         .w_full()
         .h(64.0)
-        .pl(topbar::leading_pad(leading))
+        .pl(chrome::leading_pad(leading))
         .pr(26.0)
         .center_y()
         .gap(10.0)
@@ -142,7 +142,7 @@ fn pick(s: &State, p: &Pal, leading: f32) -> El {
     let top = row()
         .w_full()
         .h(64.0)
-        .pl(topbar::leading_pad(leading))
+        .pl(chrome::leading_pad(leading))
         .pr(26.0)
         .gap(10.0)
         .center_y()

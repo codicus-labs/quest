@@ -5,7 +5,7 @@ use quest_domain::{EntityId, EntityKind};
 use rune::{Key, Mods, Runtime};
 
 use super::shortcut_tests::hover;
-use super::tests::{TempDir, click, command, demo_app, press, type_text};
+use super::tests::{TempDir, click, command, demo_app, go, press, type_text};
 use crate::menu::TaskAction;
 use crate::state::{Overlay, State, View};
 
@@ -52,10 +52,11 @@ fn undo(rt: &mut Runtime<State>) {
 const DRAFT: &str = "Draft this week’s essay";
 
 #[test]
-fn a_task_deleted_from_its_menu_comes_back_with_command_z() {
+fn a_task_deleted_from_its_planner_menu_comes_back_with_command_z() {
     let (mut rt, _dir) = app();
+    command(&mut rt, '3');
     let id = task_id(&rt, DRAFT);
-    click(&mut rt, &format!("home-menu-{id}"));
+    click(&mut rt, &format!("plan-menu-{id}"));
     assert!(rt.find("card-menu-menu").is_some(), "the menu opens");
     let delete = menu_row(&rt, id, TaskAction::Delete);
     click(&mut rt, &delete);
@@ -69,7 +70,7 @@ fn a_task_deleted_from_its_menu_comes_back_with_command_z() {
 }
 
 #[test]
-fn backspace_deletes_the_card_under_the_pointer_and_the_toast_undoes_it() {
+fn backspace_deletes_the_row_under_the_pointer_and_the_toast_undoes_it() {
     let (mut rt, _dir) = app();
     let id = task_id(&rt, DRAFT);
     hover(&mut rt, id);
@@ -114,7 +115,7 @@ fn the_archive_restores_deleted_things_and_unarchives_quests() {
     rt.state.delete(crate::undo::Deletable::Task(id));
     let quest = quest_id(&rt, &rt.state.snap.quests[1].title.clone());
     rt.state.dispatch(quest_domain::Command::SetQuestStatus { id: quest, status: quest_domain::QuestStatus::Archived });
-    command(&mut rt, '4');
+    go(&mut rt, View::Quests);
     click(&mut rt, "quests-archive");
     assert_eq!(rt.state.view, View::Archive);
     assert!(rt.find(&format!("archive-item-{id}")).is_some(), "the deleted task is listed");

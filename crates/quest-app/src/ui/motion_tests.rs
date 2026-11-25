@@ -31,7 +31,7 @@ fn task_id(rt: &Runtime<State>, title: &str) -> EntityId {
 #[test]
 fn later_glides_the_columns_with_their_cards() {
     let (mut rt, _dir) = app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     let tomorrow = rt.state.today() + Days::new(1);
     let card = format!("plan-task-{}", task_id(&rt, "Polish the details that matter"));
@@ -74,11 +74,8 @@ fn switching_views_flies_no_card() {
     let (mut rt, _dir) = app();
     let today = rt.state.today();
     let ids: Vec<EntityId> = rt.state.snap.tasks_on(today).map(|t| t.id).collect();
-    let keys: Vec<String> = ids
-        .iter()
-        .flat_map(|id| ["home", "plan"].map(|prefix| [format!("{prefix}-face-{id}"), format!("{prefix}-task-{id}")]))
-        .flatten()
-        .collect();
+    let keys: Vec<String> =
+        ids.iter().flat_map(|id| [format!("row-{id}"), format!("plan-face-{id}"), format!("plan-task-{id}")]).collect();
     for from in '1'..='5' {
         for to in '1'..='5' {
             if from == to {
@@ -87,9 +84,12 @@ fn switching_views_flies_no_card() {
             command(&mut rt, from);
             settle(&mut rt);
             command(&mut rt, to);
-            let page_key = |key: char| ["home", "plan", "focus", "quests", "review"][(key as usize) - ('1' as usize)];
-            assert_eq!(rt.presented(page_key(to)).map(|(_, opacity)| opacity), Some(1.0));
-            assert!(rt.presented(page_key(from)).is_none());
+            let page_key =
+                |key: char| ["list-page", "list-page", "plan", "review", "list-page"][(key as usize) - ('1' as usize)];
+            assert_eq!(rt.presented(page_key(to)).map(|(_, opacity)| opacity), Some(1.0), "⌘{from} → ⌘{to}");
+            if page_key(from) != page_key(to) {
+                assert!(rt.presented(page_key(from)).is_none());
+            }
             assert_nothing_flies(&mut rt, &keys);
         }
     }

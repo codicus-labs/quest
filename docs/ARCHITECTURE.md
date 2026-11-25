@@ -14,9 +14,14 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
 - Listen (Regeln pur in `quest-domain/src/dates.rs`, Abfragen in `quest-view/src/lists.rs`): **Today** (offen und
   Plan oder Deadline ≤ heute; überfällig, liegengeblieben, heute fällig, Rest), **Inbox** (offen, ohne Quest und
   ohne Plan-Datum), **Logbook** (erledigt, neueste zuerst). Nur der User verschiebt Daten.
-- Ansichten der Desktop-App (Top-Navigation): **Home**, **Plan** (Spalten pro Tag nach Plan-Datum), **Focus**
-  (ein Task, großer Timer), **Quests**, **Review** (Woche: Stunden pro Quest, Organizing-Anteil; die Abfragen für
-  Verschiebungen, liegengebliebene und überfällige Tasks liefert `WeekTasks`). Das neue Layout folgt.
+- Desktop-Shell ohne Top-Navigation: links die Sidebar (Workspace-Wechsler, **Inbox**, **Today**, **Plan**, **Review**,
+  **Logbook** mit Zählern, aktive Quests mit Stundenring, abgeschlossene Quests, neue Quest, Player-Karte mit dem
+  laufenden Timer oder Organizing), in der Mitte die Ansicht, rechts die Spalte „Tracked today“ (Timeline, ein Block
+  öffnet den Entry-Editor) und „This week“ (ein-/ausblendbar mit `T` und ⌥⌘I). Dazu **Focus** (ein Task, großer
+  Timer), **Quests** und die Seite einer Quest. **Plan** zeigt Spalten pro Tag nach Plan-Datum, **Review** die Woche
+  (Stunden pro Quest, Organizing-Anteil; Verschiebungen, liegengebliebene und überfällige Tasks aus `WeekTasks`).
+  Was Sidebar, Zeilen, Timeline und Player zeigen, rechnet `quest-view` (`nav`, `lists`, `row_meta`, `tracked`,
+  `player`).
 - ⌘K Command-Menü („Search or jump…“), Tastatur-first, Light/Dark.
 - Offline-First: Alles funktioniert ohne Server und ohne Konto (Gast); Sync, sobald angemeldet und verbunden.
 
@@ -85,7 +90,7 @@ entfernt; neue Entities oben). Deshalb:
 - **Zuordnung** (reine Lesefunktion, `quest-domain/src/workspace.rs`): der eigene `workspace_id`, sonst der der
   Eltern-Entität (ein Termin folgt seiner Serie, ein kopierter Checklist-Punkt seinem Task), sonst der Default.
 - `Snapshot::from_store(store, workspace)` liefert die Sicht genau eines Workspace. Ein gelöschter oder unbekannter
-  Workspace fällt auf den Default zurück, ist der gelöscht, auf den ersten lebenden. Alle Views (Home, Plan, Focus, Review, Suche, Archiv) und der
+  Workspace fällt auf den Default zurück, ist der gelöscht, auf den ersten lebenden. Alle Views (Today, Inbox, Plan, Focus, Review, Logbook, Suche, Archiv) und der
   Kontext der KI-Erfassung lesen nur diese Sicht. Commands legen Neues im Workspace des Snapshots an. IDs aus anderen
   Workspaces kennen sie nicht (`UnknownTask` usw.). So kann ein veralteter Dialog nichts in einen anderen Workspace
   schreiben.

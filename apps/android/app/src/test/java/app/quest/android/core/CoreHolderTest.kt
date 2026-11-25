@@ -2,6 +2,7 @@ package app.quest.android.core
 
 import app.quest.android.FakeClock
 import app.quest.android.FakeCore
+import app.quest.android.ListSamples
 import app.quest.android.NOW_MS
 import app.quest.android.PlanSamples
 import app.quest.android.Samples
@@ -18,7 +19,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uniffi.quest_mobile.HomeQuery
+import uniffi.quest_mobile.ListKind
 import uniffi.quest_mobile.InternalException
 import uniffi.quest_mobile.MobileException
 import uniffi.quest_mobile.SyncOutcome
@@ -43,7 +44,7 @@ class CoreHolderTest {
         runCurrent()
 
         assertEquals(listOf(NOW_MS), fake.ticks)
-        assertEquals(CoreState.Ready(Samples.home, fake.sync, null, Samples.settings, WorkspaceSamples.one), holder.state.value)
+        assertEquals(CoreState.Ready(Samples.home, fake.sync, null, Samples.settings, WorkspaceSamples.one, player = ListSamples.playerRunning), holder.state.value)
     }
 
     @Test
@@ -200,14 +201,25 @@ class CoreHolderTest {
     }
 
     @Test
-    fun homeIsReadWithTheLatestQuery() = runTest {
+    fun onlyTheShownListIsRead() = runTest {
         val holder = holder()
         runCurrent()
+        assertEquals(null, (holder.state.value as CoreState.Ready).list)
 
-        holder.setHomeQuery(HomeQuery(questFilter = "q1", questPick = null))
+        holder.setListShown(ListKind.Inbox)
         runCurrent()
 
-        assertEquals(HomeQuery(questFilter = "q1", questPick = null), fake.queries.last())
+        assertEquals(ListPage.Shown(ListSamples.inbox), (holder.state.value as CoreState.Ready).list)
+        assertEquals(ListKind.Inbox, fake.listReads.last())
+    }
+
+    @Test
+    fun aGoneQuestsListReadsAsGone() = runTest {
+        val holder = holder()
+        holder.setListShown(ListKind.Quest("gone"))
+        runCurrent()
+
+        assertEquals(ListPage.Gone(ListKind.Quest("gone")), (holder.state.value as CoreState.Ready).list)
     }
 
     @Test

@@ -1,6 +1,6 @@
 #!/bin/sh
 # End-to-end sync through the real UI: headless Quest instances (one data dir each) drive the
-# account dialog and Home with Rune `--script --realtime` and assert on `--tree` JSON.
+# account dialog and Today with Rune `--script --realtime` and assert on `--tree` JSON.
 #
 # The run starts its own OIDC fake (quest-oidc-fake, users anna and ben) and its own quest-server
 # on free loopback ports, and stops both at the end. Signing in goes through the app's real flow
@@ -63,7 +63,7 @@ run() {
   user=$1 dir=$2 template=$3 name=$4
   shift 4
   QUEST_E2E_USER=$user QUEST_E2E_IDP=$idp "$app" --data-dir "$dir" --token-file "$dir/tokens.json" \
-    --browser "$here/browser.py" "$@" --script "$(script "$template")" --realtime --size 1100x750 --scale 2 \
+    --browser "$here/browser.py" "$@" --script "$(script "$template")" --realtime --size 1440x900 --scale 2 \
     --snap "$out/$name.png" --tree "$out/$name.json" >"$out/$name.log" 2>&1
 }
 
@@ -74,7 +74,7 @@ check() {
   if tree "$out/$1.json" "$3" "$4" ${5:+"$5"}; then pass "$2"; else fail "$2 (see $out/$1.log)"; fi
 }
 
-# absent NAME DESCRIPTION TITLE: NAME's Home shows no task card TITLE.
+# absent NAME DESCRIPTION TITLE: NAME's Today shows no task row TITLE.
 absent() {
   if tree "$out/$1.json" has "$3"; then fail "$2 (see $out/$1.log)"; else pass "$2"; fi
 }
@@ -101,7 +101,7 @@ if ! await_url "$idp/.well-known/openid-configuration" || ! await_url "$server/"
 fi
 echo "server: $server  identity provider: $idp"
 
-# a. A signs in as anna through the browser and adds a task on Home.
+# a. A signs in as anna through the browser and adds a task on Today.
 run anna "$root/a" a-sign-in a-signed-in
 check a-signed-in "a  A signed in as anna" shows "Signed in as Anna Example"
 run anna "$root/a" a-create a-after-create

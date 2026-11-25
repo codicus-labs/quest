@@ -7,11 +7,18 @@ use crate::clock;
 use crate::palette::{self, Action, Entry};
 use crate::state::{Overlay, State, View};
 use crate::theme::{Pal, ty};
-use crate::ui::topbar::{keycap, open_palette_in};
+use crate::ui::chrome::{keycap, open_palette_in};
 
 /// The entries for the query; "Capture with AI" only while it is on in the settings.
 pub(super) fn current_entries(s: &State) -> Vec<Entry> {
-    let mut entries = palette::entries(s.palette.mode, &s.palette.query.text, &s.snap, clock::local(s.now), s.now);
+    let mut entries = palette::entries_for(
+        &View::SIDEBAR,
+        s.palette.mode,
+        &s.palette.query.text,
+        &s.snap,
+        clock::local(s.now),
+        s.now,
+    );
     if !s.ai_capture_enabled() {
         entries.retain(|e| e.action != Action::CaptureWithAi);
     }
@@ -115,7 +122,7 @@ pub fn run(s: &mut State, action: Action, tx: &mut Tx) {
                 due_on: None,
                 position: Position::Top,
             });
-            s.go_with(View::Home, tx);
+            s.go_with(View::Today, tx);
         }
         Action::CreateQuest(title) => {
             let color = quest_domain::QuestColor::ALL[s.snap.quests.len() % quest_domain::QuestColor::ALL.len()];

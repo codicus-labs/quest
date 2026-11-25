@@ -91,7 +91,7 @@ fn without_a_timer_home_and_plan_wake_only_for_the_minute() {
 fn the_undo_toast_goes_once_and_the_window_rests_again() {
     let (mut rt, _dir) = demo_app();
     stop_the_timer(&mut rt);
-    command(&mut rt, '1');
+    command(&mut rt, '2');
     quiet(&mut rt);
     let essay = task(&rt, "Draft this week’s essay").id;
     rt.update(|s, _| s.delete(Deletable::Task(essay)));
@@ -107,7 +107,7 @@ fn the_undo_toast_goes_once_and_the_window_rests_again() {
 fn a_drag_resting_where_the_edge_scroll_cannot_move_stops_ticking() {
     let (mut rt, _dir) = demo_app();
     stop_the_timer(&mut rt);
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     quiet(&mut rt);
     let [x, y, w, h] = rect(&rt, "plan-board");
     // Just inside the edge zone the speed is too small to move the strip a point.

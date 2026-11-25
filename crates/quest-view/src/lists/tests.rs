@@ -85,3 +85,32 @@ fn the_logbook_lists_done_tasks_newest_first_and_postponements_are_counted() {
     assert_eq!(postponed(&b.snapshot, first), Postponed { plan: 1, due: 1 });
     assert_eq!(postponed(&b.snapshot, second).total(), 0);
 }
+
+#[test]
+fn done_today_and_the_logbook_by_day_follow_the_local_day() {
+    let mut b = Board::new();
+    let (early, late, before) =
+        (b.task("early", None, None, None), b.task("late", None, None, None), b.task("before", None, None, None));
+    b.run(Command::CompleteTask { id: early, at: at(25) });
+    b.run(Command::CompleteTask { id: late, at: at(25) + chrono::Duration::hours(3) });
+    b.run(Command::CompleteTask { id: before, at: at(24) });
+    assert_eq!(titles(&done_today(&b.snapshot, d(25), &Utc)), ["late", "early"]);
+    let days: Vec<(NaiveDate, Vec<String>)> =
+        logbook_days(&b.snapshot, &Utc).into_iter().map(|(day, tasks)| (day, titles(&tasks))).collect();
+    assert_eq!(days, [(d(25), vec!["late".to_owned(), "early".to_owned()]), (d(24), vec!["before".to_owned()])]);
+}
+
+#[test]
+fn a_quest_page_splits_open_and_done_and_the_sidebar_counts() {
+    let mut b = Board::new();
+    let quest = EntityId::new();
+    b.run(Command::CreateQuest { id: quest, title: "Q".into(), color: QuestColor::Red });
+    b.task("open", Some(quest), Some(27), None);
+    let done = b.task("done", Some(quest), None, None);
+    b.task("elsewhere", None, None, None);
+    b.task("today", None, Some(25), None);
+    b.run(Command::CompleteTask { id: done, at: at(25) });
+    assert_eq!(titles(&quest_open(&b.snapshot, quest)), ["open"]);
+    assert_eq!(titles(&quest_done(&b.snapshot, quest)), ["done"]);
+    assert_eq!(nav_counts(&b.snapshot, d(25)), NavCounts { inbox: 1, today: 1, plan: 1 });
+}

@@ -1,6 +1,7 @@
 package app.quest.android.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -15,7 +16,9 @@ import app.quest.android.FakeClock
 import app.quest.android.FakeCore
 import app.quest.android.FakeFocusPreferences
 import app.quest.android.core.CoreHolder
-import app.quest.android.ui.navigation.TopDestination
+import app.quest.android.ListSamples
+import app.quest.android.ui.navigation.Tab
+import uniffi.quest_mobile.ListKind
 import app.quest.android.settings.Appearance
 import app.quest.android.ui.theme.QuestTheme
 import kotlinx.coroutines.CoroutineScope
@@ -34,13 +37,15 @@ import uniffi.quest_mobile.AppView
 import uniffi.quest_mobile.SearchOutcome
 import uniffi.quest_mobile.SearchToken
 
-/** Search, the archive and the quest page, driven through the whole app. */
+/** Search, the archive and a quest's list, driven through the whole app. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h914dp-port-mdpi")
 class AppNavigationTest {
     @get:Rule val compose = createComposeRule()
 
-    private val core = FakeCore()
+    private val core = FakeCore().also {
+        it.lists[ListKind.Quest("q1")] = ListSamples.questList.copy(kind = ListKind.Quest("q1"), title = "Write the book")
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     private val appearance = FixedAppearance()
 
@@ -64,13 +69,13 @@ class AppNavigationTest {
     fun everyTabHasAHeadingForScreenReaders() {
         showApp()
 
-        val tabsWithoutHeading = TopDestination.entries.filter { tab ->
+        val tabsWithoutHeading = Tab.entries.filter { tab ->
             compose.onNodeWithTag("tab-${tab.name.lowercase()}").performClick()
             compose.waitForIdle()
             compose.onAllNodes(isHeading()).fetchSemanticsNodes().isEmpty()
         }
 
-        assertEquals(emptyList<TopDestination>(), tabsWithoutHeading)
+        assertEquals(emptyList<Tab>(), tabsWithoutHeading)
     }
 
     @Test
@@ -87,24 +92,25 @@ class AppNavigationTest {
     }
 
     @Test
-    fun theKeyboardsSearchOpensTheFirstResultsQuestPage() {
+    fun theKeyboardsSearchOpensTheFirstResultsQuestList() {
         core.searchOutcome = { token -> SearchOutcome.ShowQuest((token as SearchToken.ShowQuest).questId) }
         showApp()
 
         search("book")
         compose.onNodeWithTag("search-query").performImeAction()
 
-        compose.onNodeWithTag("quest-detail").assertIsDisplayed()
+        compose.onNodeWithTag("list-quest").assertIsDisplayed()
+        compose.onNodeWithTag("tab-quests").assertIsSelected()
         compose.onNodeWithTag("search").assertDoesNotExist()
     }
 
     @Test
-    fun searchOpensEmptyAgainAfterAResultOpenedAQuestPage() {
+    fun searchOpensEmptyAgainAfterAResultOpenedAQuestList() {
         core.searchOutcome = { token -> SearchOutcome.ShowQuest((token as SearchToken.ShowQuest).questId) }
         showApp()
         search("book")
         compose.onNodeWithTag("search-query").performImeAction()
-        compose.onNodeWithTag("quest-back").performClick()
+        compose.onNodeWithTag("quests-back").performClick()
 
         compose.onNodeWithTag("open-search").performClick()
 
@@ -124,10 +130,10 @@ class AppNavigationTest {
     }
 
     @Test
-    fun restoringFromTheArchiveOpenedOnTheQuestsTab() {
+    fun restoringFromTheArchiveOpenedFromTheDrawer() {
         showApp()
-        compose.onNodeWithTag("tab-quests").performClick()
-        compose.onNodeWithTag("quests-archive").performClick()
+        compose.onNodeWithTag("tab-account").performClick()
+        compose.onNodeWithTag("open-archive").performClick()
 
         compose.onNodeWithTag("archive-restore:Old hobby").performClick()
 

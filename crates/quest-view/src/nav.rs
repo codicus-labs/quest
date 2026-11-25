@@ -1,10 +1,16 @@
-//! The app's screens and how the top bar's tabs cycle through them. Pure.
+//! The app's screens, how the mobile tabs cycle through them, and the desktop sidebar's order. Pure.
 
 use quest_domain::EntityId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum View {
     Home,
+    /// Desktop sidebar: open tasks without a quest and a plan date.
+    Inbox,
+    /// Desktop sidebar: open tasks planned or due today or earlier.
+    Today,
+    /// Desktop sidebar: done tasks by day.
+    Logbook,
     Plan,
     Focus,
     Quests,
@@ -17,6 +23,8 @@ pub enum View {
 
 impl View {
     pub const ALL: [View; 5] = [View::Home, View::Plan, View::Focus, View::Quests, View::Review];
+    /// The desktop sidebar's views, in ⌘1… order.
+    pub const SIDEBAR: [View; 5] = [View::Inbox, View::Today, View::Plan, View::Review, View::Logbook];
 
     /// The tab after (or before) this view's, wrapping around: Tab and ⇧Tab.
     pub fn cycled(self, back: bool) -> View {
@@ -28,6 +36,9 @@ impl View {
     pub fn title(self) -> &'static str {
         match self {
             View::Home => "Home",
+            View::Inbox => "Inbox",
+            View::Today => "Today",
+            View::Logbook => "Logbook",
             View::Plan => "Plan",
             View::Focus => "Focus",
             View::Quests => "Quests",

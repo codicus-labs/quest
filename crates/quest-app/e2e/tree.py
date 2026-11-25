@@ -1,8 +1,8 @@
-"""Reads a Rune `--tree` JSON and answers questions about Home's task cards.
+"""Reads a Rune `--tree` JSON and answers questions about the task rows on Today.
 
-usage: tree.py TREE has TITLE        exit 0 if a task card titled TITLE is shown
-       tree.py TREE id TITLE         print that card's task id
-       tree.py TREE done TITLE       exit 0 if that card's "Complete" checkbox is checked
+usage: tree.py TREE has TITLE        exit 0 if a task row titled TITLE is shown
+       tree.py TREE id TITLE         print that row's task id
+       tree.py TREE done TITLE       exit 0 if that row's "Complete" checkbox is checked
        tree.py TREE shows TEXT       exit 0 if any element's text contains TEXT
        tree.py TREE key KEY          exit 0 if an element keyed KEY is shown
        tree.py TREE checked KEY      exit 0 if the element keyed KEY (a switch) is checked
@@ -14,7 +14,7 @@ import json
 import re
 import sys
 
-CARD = re.compile(r"home-task-([0-9a-f-]{36})")
+CARD = re.compile(r"row-([0-9a-f-]{36})")
 
 
 def card_id(tree, title):
@@ -64,13 +64,13 @@ def main():
     if question == "has":
         sys.exit(0 if task else 1)
     if task is None:
-        print(f"no task card titled {title!r}", file=sys.stderr)
+        print(f"no task row titled {title!r}", file=sys.stderr)
         sys.exit(1)
     if question == "id":
         print(task)
         return
     if question == "done":
-        check = find_key(tree["accessibility"], f"home-check-{task}")
+        check = find_key(tree["accessibility"], f"row-check-{task}")
         sys.exit(0 if check and "checked" in check.get("states", []) else 1)
     sys.exit(f"unknown question {question!r}")
 

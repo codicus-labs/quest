@@ -15,9 +15,9 @@ use crate::palette::Mode;
 use crate::plan_strip::{GAP, Strip, VISIBLE_DAYS};
 use crate::state::{AddAt, PLAN_BOARD, State};
 use crate::theme::{Pal, ty};
+use crate::ui::chrome::open_palette_in;
 use crate::ui::drag::{self, Zone};
 use crate::ui::parts;
-use crate::ui::topbar::open_palette_in;
 
 /// Fits the widest month ("September 2026").
 const MONTH_W: f32 = 170.0;
@@ -58,16 +58,23 @@ pub fn view(s: &State, p: &Pal, cx: &mut Cx<State>) -> El {
         if s.show_other { (&icons::EYE, "Hide other tasks") } else { (&icons::EYE_OFF, "Show other tasks") };
     let header = header
         .child(spacer())
-        .child(parts::button(
-            "plan-recurring",
-            "Recurring tasks",
-            Some(&icons::REPEAT),
-            p,
-            |s: &mut State, tx: &mut Tx| {
-                tx.blur();
-                s.overlay = crate::state::Overlay::RecurringTasks;
-            },
-        ))
+        // An icon, so the header fits beside the sidebar and the tracked column.
+        .child(
+            parts::icon_button(
+                "plan-recurring",
+                "Recurring tasks",
+                &icons::REPEAT,
+                p.muted,
+                p,
+                |s: &mut State, tx: &mut Tx| {
+                    tx.blur();
+                    s.overlay = crate::state::Overlay::RecurringTasks;
+                },
+            )
+            .size(34.0, 34.0)
+            .border(1.0, p.border)
+            .help("Recurring tasks"),
+        )
         // As wide for every month, so the buttons before it stay put while the strip glides.
         .child(text(month(s)).key("plan-month").font(ty::STAT.lh(24.0)).color(p.muted).w(MONTH_W).align(Align::End))
         .child(parts::icon_button(

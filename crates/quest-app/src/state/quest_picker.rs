@@ -17,8 +17,8 @@ pub enum PickFor {
     LogWork,
     /// A task in the AI capture's proposal.
     CaptureTask(TempKey),
-    /// Home's new quest work.
-    HomeAdd,
+    /// The quick-add field's new task (Today).
+    QuickAdd,
     /// Focus's task.
     Focus(EntityId),
 }
@@ -30,7 +30,7 @@ impl PickFor {
             PickFor::TaskModal => "task-modal-quest".into(),
             PickFor::LogWork => "log-work-quest".into(),
             PickFor::CaptureTask(key) => format!("capture-item-{}-quest", key.0),
-            PickFor::HomeAdd => "home-add-quest".into(),
+            PickFor::QuickAdd => "quick-add-quest".into(),
             PickFor::Focus(_) => "focus-quest".into(),
         }
     }
@@ -160,11 +160,7 @@ impl State {
                     review.set_task_quest(&key, quest);
                 }
             }
-            PickFor::HomeAdd => {
-                if quest.is_some() {
-                    self.home_quest_pick = quest;
-                }
-            }
+            PickFor::QuickAdd => self.quick_add_quest = quest,
             PickFor::Focus(task) => {
                 if self.plan_task(task).is_some_and(|t| t.quest_id != quest) {
                     self.dispatch(Command::AssignTask { id: task, quest_id: quest });
@@ -191,7 +187,7 @@ impl State {
                     Some(QuestRef::New { key }) => Pick::New(key.clone()),
                 })
             }
-            PickFor::HomeAdd => self.home_quest().map(Pick::Quest),
+            PickFor::QuickAdd => quest(self.quick_add_quest),
             PickFor::Focus(task) => quest(self.plan_task(*task)?.quest_id),
         }
     }
@@ -219,9 +215,7 @@ impl State {
                 });
             }
         }
-        if *target != PickFor::HomeAdd {
-            rows.push(PickRow { pick: Pick::NoQuest, title: "No quest".into(), label: "No quest".into(), color: None });
-        }
+        rows.push(PickRow { pick: Pick::NoQuest, title: "No quest".into(), label: "No quest".into(), color: None });
         rows
     }
 }

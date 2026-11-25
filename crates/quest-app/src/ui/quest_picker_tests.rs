@@ -34,7 +34,7 @@ fn quest_id(rt: &Runtime<State>, title: &str) -> EntityId {
 fn task_dialog() -> (Runtime<State>, TempDir, EntityId) {
     let (mut rt, dir) = demo_app();
     rt.state.stop_focus();
-    command(&mut rt, '1');
+    command(&mut rt, '2');
     let id = task(&rt, TASK).id;
     rt.state.open_task_modal(id);
     settle(&mut rt);

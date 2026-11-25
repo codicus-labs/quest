@@ -18,6 +18,13 @@ import app.quest.android.settings.HomePreferences
 import app.quest.android.settings.HomePrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.quest.android.core.ConnectionsException
+import uniffi.quest_mobile.EntryCheck
+import uniffi.quest_mobile.EntryDraft
+import uniffi.quest_mobile.ListKind
+import uniffi.quest_mobile.PlayerCard
+import uniffi.quest_mobile.QuestNav
+import uniffi.quest_mobile.TaskList
+import uniffi.quest_mobile.TrackedData
 import uniffi.quest_mobile.Account
 import uniffi.quest_mobile.AiConnectionRow
 import uniffi.quest_mobile.AddPosition
@@ -248,6 +255,17 @@ class FakeCore(
     /** Runs inside every [revokeAiConnection] call. */
     var onRevoke: () -> Unit = {},
     val workspaces: FakeWorkspaces = FakeWorkspaces(),
+    /** The lists by kind; a missing quest's list is an unknown quest. */
+    var lists: MutableMap<ListKind, TaskList> = mutableMapOf(
+        ListKind.Today to ListSamples.today,
+        ListKind.Inbox to ListSamples.inbox,
+        ListKind.Logbook to ListSamples.logbook,
+        ListSamples.questList.kind to ListSamples.questList,
+    ),
+    var questNav: QuestNav = ListSamples.questNav,
+    var tracked: TrackedData = ListSamples.tracked,
+    var player: PlayerCard = ListSamples.playerRunning,
+    var entryCheck: EntryCheck = ListSamples.entryCheck,
 ) : QuestCoreApi, WorkspacesApi by workspaces {
     /** Every [capture] as text and language; every applied draft; [reconnectNow] calls. */
     val captures = mutableListOf<Pair<String, String>>()
@@ -655,6 +673,44 @@ class FakeCore(
     override fun reconnectNow() {
         reconnects++
     }
+
+    /** Every list kind read, in order. */
+    val listReads = mutableListOf<ListKind>()
+
+    override fun taskList(kind: ListKind, now: Moment): TaskList {
+        maybeFail()
+        listReads += kind
+        val list = lists[kind] ?: throw MobileException.UnknownQuest((kind as? ListKind.Quest)?.questId ?: "")
+        // The core shares one undo: a quest's status change shows its toast on the list too.
+        return if (beforeStatusChange == null) list else list.copy(toast = quests.toast)
+    }
+
+    override fun addToList(kind: ListKind, title: String, now: Moment): String {
+        if (title.isBlank()) throw MobileException.EmptyTitle("Enter a title.")
+        record("add-to-list $kind $title")
+        return "new"
+    }
+
+    override fun questNav(now: Moment): QuestNav = questNav.also { maybeFail() }
+
+    override fun tracked(now: Moment): TrackedData = tracked.also { maybeFail() }
+
+    override fun player(now: Moment): PlayerCard = player
+
+    override fun entryDraft(entryId: String, now: Moment): EntryDraft {
+        maybeFail()
+        if (entryId != ListSamples.entryDraft.entryId) throw MobileException.UnknownEntry(entryId)
+        return ListSamples.entryDraft
+    }
+
+    override fun checkEntry(draft: EntryDraft, now: Moment): EntryCheck = entryCheck.also { maybeFail() }
+
+    override fun saveEntry(draft: EntryDraft, now: Moment) =
+        record("save-entry ${draft.entryId} ${draft.taskId} ${draft.startMinute}-${draft.endMinute}")
+
+    override fun deleteEntry(entryId: String, now: Moment) = record("delete-entry $entryId")
+
+    override fun bookEntryAsOrganizing(entryId: String) = record("organizing-entry $entryId")
 }
 
 /** 2026-11-24 00:00 in Berlin + 5 ms. */

@@ -1,20 +1,17 @@
 package app.quest.android.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.assertTextEquals
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import app.quest.android.FakeClock
 import app.quest.android.FakeCore
 import app.quest.android.FakeFocusPreferences
+import app.quest.android.ListSamples
 import app.quest.android.QuestSamples
 import app.quest.android.core.CoreHolder
 import app.quest.android.ui.theme.QuestTheme
@@ -30,8 +27,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import uniffi.quest_mobile.ListKind
 
-/** The Quests tab with its editor sheet and the archive, driven through the whole app. */
+/** The Quests tab, a quest's list with its editor sheet, and the archive, driven through the whole app. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h914dp-port-mdpi")
 class QuestsFlowTest {
@@ -57,115 +55,74 @@ class QuestsFlowTest {
         compose.waitForIdle()
     }
 
-    private fun assertFigures(active: String, completed: String, inProgress: String, completedCount: String) {
-        compose.onNodeWithTag("quests-tab-active").assertTextEquals(active)
-        compose.onNodeWithTag("quests-tab-completed").assertTextEquals(completed)
-        compose.onNodeWithTag("quests-in-progress", useUnmergedTree = true).assertTextEquals(inProgress)
-        compose.onNodeWithTag("quests-completed", useUnmergedTree = true).assertTextEquals(completedCount)
+    private fun showList(questId: String, title: String) {
+        core.lists[ListKind.Quest(questId)] = ListSamples.questList.copy(kind = ListKind.Quest(questId), title = title)
     }
 
     @Test
-    fun aQuestGoesFromActiveToCompletedAndBackWithItsHours() {
+    fun aQuestOpensItsListAndBackGoesToTheQuests() {
+        showList("q1", "Write the book")
         showQuests()
-        assertFigures("Active · 2", "Completed · 1", "02", "01")
 
-        tap("quest-card:Write the book")
+        tap("quest-row:Write the book")
+        compose.onNodeWithTag("list-quest").assertIsDisplayed()
+        tap("quests-back")
+
+        compose.onNodeWithTag("quests-list").assertIsDisplayed()
+    }
+
+    @Test
+    fun tappingTheQuestsTabAgainGoesBackToTheQuests() {
+        showQuests()
+        tap("quests-logbook")
+        compose.onNodeWithTag("list-logbook").assertIsDisplayed()
+
+        tap("tab-quests")
+
+        compose.onNodeWithTag("quests-list").assertIsDisplayed()
+    }
+
+    @Test
+    fun theEditOnAQuestsListOpensTheEditorAndCompletesTheQuest() {
+        showList("q1", "Write the book")
+        showQuests()
+        tap("quest-row:Write the book")
+
+        tap("quest-edit")
         tap("quest-editor-status")
-        assertFigures("Active · 1", "Completed · 2", "01", "02")
-        compose.onNodeWithTag("quest-card:Write the book").assertDoesNotExist()
+
+        assertEquals(listOf("toggle-quest q1"), core.calls)
         compose.onNodeWithText("Completed quest “Write the book”").assertIsDisplayed()
-
-        tap("quests-tab-completed")
-        compose.onNodeWithTag("quest-week:Write the book", useUnmergedTree = true).assertTextEquals("4.5h")
-        compose.onNodeWithTag("quest-total:Write the book", useUnmergedTree = true).assertTextEquals("62h total")
-        tap("quest-card:Write the book")
-        compose.onNodeWithTag("quest-editor-status").assertTextEquals("Reopen quest")
-        tap("quest-editor-status")
-
-        assertFigures("Active · 2", "Completed · 1", "02", "01")
-        tap("quests-tab-active")
-        compose.onNodeWithTag("quest-week:Write the book", useUnmergedTree = true).assertTextEquals("4.5h")
-        assertEquals(listOf("toggle-quest q1", "toggle-quest q1"), core.calls)
     }
 
     @Test
-    fun undoInTheSnackbarTakesACompletionBack() {
-        showQuests()
-        tap("quest-card:Write the book")
-        tap("quest-editor-status")
-
-        compose.onNodeWithTag("snackbar-action").performClick()
-        compose.waitForIdle()
-
-        assertFigures("Active · 2", "Completed · 1", "02", "01")
-        compose.onNodeWithTag("quest-card:Write the book").assertExists()
-        assertEquals(listOf("toggle-quest q1", "undo"), core.calls)
-    }
-
-    @Test
-    fun closingTheEditorKeepsTheTabAndTheScroll() {
-        val many = List(12) { QuestSamples.doneCard.copy(id = "c$it", title = "Done quest $it") }
-        core.quests = QuestSamples.listed(QuestSamples.quests, QuestSamples.quests.active, many)
-        core.questDetails["c10"] = QuestSamples.toggled(QuestSamples.detail).copy(id = "c10", title = "Done quest 10")
-        val viewModels = showQuests()
-        tap("quests-tab-completed")
-        compose.onNodeWithTag("quests-list").performScrollToNode(hasTestTag("quest-card:Done quest 10"))
-        compose.waitForIdle()
-
-        compose.onNodeWithTag("quest-card:Done quest 10").performClick()
-        compose.onNodeWithTag("quest-editor-title").assertExists()
-        compose.runOnIdle { viewModels.questEditor.close() }
-        compose.waitForIdle()
-
-        compose.onNodeWithTag("quest-editor-title").assertDoesNotExist()
-        compose.onNodeWithTag("quest-card:Done quest 10").assertIsDisplayed()
-        // Still scrolled down: the figures above the tabs are out of view (a lazy grid drops them).
-        compose.onNodeWithTag("quests-in-progress", useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithTag("quests-list").performScrollToNode(hasTestTag("quests-tab-completed"))
-        compose.onNodeWithTag("quests-tab-completed").assertIsSelected()
-    }
-
-    @Test
-    fun newQuestCreatesTheQuestFromItsTitleOnly() {
+    fun newQuestCreatesTheQuestAndItsPageOpensItsList() {
         core.questDetails["q-new"] = QuestSamples.detail.copy(id = "q-new", title = "Learn piano")
+        showList("q-new", "Learn piano")
         showQuests()
 
         tap("quests-new")
         compose.onNode(hasText("New quest") and isHeading()).assertExists()
         compose.onNodeWithTag("quest-editor-title").performTextInput("Learn piano")
         tap("quest-editor-create")
+        compose.onNode(hasText("Edit quest") and isHeading()).assertExists()
+        tap("quest-editor-page")
 
         assertEquals(listOf("create-quest Learn piano|null"), core.calls)
-        compose.onNode(hasText("Edit quest") and isHeading()).assertExists()
-        compose.onNodeWithTag("quest-editor-status").assertExists()
+        compose.onNodeWithTag("quest-editor-title").assertDoesNotExist()
+        compose.onNodeWithTag("list-quest").assertIsDisplayed()
     }
 
     @Test
-    fun anArchivedQuestIsInTheArchiveUntilUnarchived() {
+    fun anArchivedQuestIsUnarchivedFromTheDrawersArchive() {
         showQuests()
-        tap("quests-archive")
+        tap("tab-account")
+        tap("open-archive")
         compose.onNodeWithText("Archived quests", ignoreCase = true).assertIsDisplayed()
 
         tap("archive-unarchive:Old blog")
 
         assertEquals(listOf("unarchive-quest q8"), core.calls)
         compose.onNodeWithTag("archive-item:Old blog").assertDoesNotExist()
-        compose.onNodeWithTag("back").performClick()
-        compose.waitForIdle()
-        compose.onNodeWithTag("quests-list").performScrollToNode(hasTestTag("quest-card:Old blog"))
-        compose.onNodeWithTag("quest-card:Old blog").assertIsDisplayed()
-        compose.onNodeWithTag("quests-list").performScrollToNode(hasTestTag("quests-tab-active"))
-        assertFigures("Active · 3", "Completed · 1", "03", "01")
-    }
-
-    @Test
-    fun openQuestPageLeavesTheSheetForThePage() {
-        showQuests()
-        tap("quest-card:Write the book")
-
-        tap("quest-editor-page")
-
-        compose.onNodeWithTag("quest-editor-title").assertDoesNotExist()
-        compose.onNodeWithTag("quest-detail").assertIsDisplayed()
     }
 }

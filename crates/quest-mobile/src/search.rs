@@ -89,13 +89,13 @@ fn touch_hint(hint: &str) -> String {
 
 fn app_view(view: View) -> Option<AppView> {
     Some(match view {
-        View::Home => AppView::Home,
+        View::Home | View::Today => AppView::Home,
         View::Plan => AppView::Plan,
         View::Focus => AppView::Focus,
         View::Quests => AppView::Quests,
         View::Review => AppView::Review,
         View::Archive => AppView::Archive,
-        View::Quest(_) => return None,
+        View::Quest(_) | View::Inbox | View::Logbook => return None,
     })
 }
 

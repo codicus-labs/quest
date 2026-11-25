@@ -127,7 +127,7 @@ impl State {
     /// asked for it, so asking here puts a planner that mounts at its place in the frame that
     /// first draws it.
     pub fn go_with(&mut self, view: View, tx: &mut Tx) {
-        if self.view != view && View::ALL.contains(&view) {
+        if self.view != view {
             tx.instant();
         }
         self.go(view);

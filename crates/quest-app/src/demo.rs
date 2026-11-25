@@ -14,7 +14,7 @@ const QUESTS: [(&str, QuestColor); 4] = [
     ("Keep learning", QuestColor::Green),
 ];
 
-const TASKS: [SeedTask; 22] = [
+const TASKS: [SeedTask; 25] = [
     ("Design the next chapter", Some(0), Some(0), false),
     ("Make the first impression feel effortless", Some(0), Some(0), false),
     ("Draft this week’s essay", Some(1), Some(0), false),
@@ -37,7 +37,16 @@ const TASKS: [SeedTask; 22] = [
     ("Find a beta reader", Some(1), None, false),
     ("Pick up the dry cleaning", None, Some(0), false),
     ("Call the landlord", None, Some(1), false),
+    ("Renew the passport", None, Some(-2), false),
+    ("Idea: a monthly newsletter", None, None, false),
+    ("Look into standing desks", None, None, false),
 ];
+
+/// Deadlines: task index, day offset from today (overdue, today, tomorrow, in a few days).
+const DUE: [(usize, i64); 4] = [(22, -1), (2, 0), (15, 1), (18, 2)];
+
+/// An Organizing session today, back to a task: task index, minutes ago it started, minutes long.
+const ORGANIZING: (usize, i64, i64) = (1, 160, 20);
 
 /// Tracked time on past days: task index, day offset, minutes. Each day starts at 09:00.
 const PAST_ENTRIES: [(usize, i64, i64); 11] = [
@@ -70,13 +79,13 @@ pub fn commands(now: DateTime<Utc>, today: NaiveDate, to_utc: impl Fn(NaiveDateT
     for ((title, color), id) in QUESTS.iter().zip(&quest_ids) {
         out.push(Command::CreateQuest { id: *id, title: (*title).to_owned(), color: *color });
     }
-    for ((title, quest, offset, _), id) in TASKS.iter().zip(&task_ids) {
+    for (i, ((title, quest, offset, _), id)) in TASKS.iter().zip(&task_ids).enumerate() {
         out.push(Command::CreateTask {
             id: *id,
             title: (*title).to_owned(),
             quest_id: quest.map(|q| quest_ids[q]),
             planned_on: offset.map(day),
-            due_on: None,
+            due_on: DUE.iter().find(|(task, _)| *task == i).map(|(_, offset)| day(*offset)),
             position: Position::Bottom,
         });
     }
@@ -98,6 +107,10 @@ pub fn commands(now: DateTime<Utc>, today: NaiveDate, to_utc: impl Fn(NaiveDateT
         out.push(Command::StartFocus { entry_id: EntityId::new(), task_id: task_ids[task], at: start });
         out.push(Command::StopFocus { at: end });
     }
+    let (origin, ago, minutes) = ORGANIZING;
+    let start = now - Duration::minutes(ago);
+    out.push(Command::StartOrganizing { entry_id: EntityId::new(), origin_task_id: Some(task_ids[origin]), at: start });
+    out.push(Command::StopFocus { at: start + Duration::minutes(minutes) });
     for (task, _, offset, done) in TASKS.iter().enumerate().map(|(i, t)| (i, t.0, t.2, t.3)) {
         if done && !COMPLETED_TODAY.contains(&task) {
             let at = to_utc(day(offset.unwrap_or(0)).and_time(NaiveTime::from_hms_opt(18, 0, 0).unwrap_or_default()));

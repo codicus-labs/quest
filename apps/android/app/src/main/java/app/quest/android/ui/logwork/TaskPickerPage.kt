@@ -41,37 +41,47 @@ import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
 import uniffi.quest_mobile.TaskOption
 
+/** What the task search does; without [create] it only picks existing tasks. */
+class TaskPickerActions(
+    val back: () -> Unit,
+    val editQuery: (String) -> Unit,
+    val pick: (String) -> Unit,
+    val create: ((title: String) -> Unit)?,
+)
+
 /**
- * The task search of Log work (desktop combobox): what was typed filters the core's choices; with
- * nothing matching, it offers "Create “…”" (a new, completed task).
+ * The task search of Log work and the entry sheet (desktop combobox): what was typed filters the
+ * core's choices; with nothing matching, it offers "Create “…”" (a new, completed task) where
+ * creating is allowed.
  */
 @Composable
-fun TaskPickerPage(state: TaskPickerState, actions: LogWorkActions) {
+fun TaskPickerPage(state: TaskPickerState, actions: TaskPickerActions) {
     val colors = QuestTheme.colors
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    val create = state.choices.createLabel
+    val createTask = actions.create
+    val create = state.choices.createLabel?.takeIf { createTask != null }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = actions.closeTaskPicker, modifier = Modifier.testTag("task-picker-back")) {
+        IconButton(onClick = actions.back, modifier = Modifier.testTag("task-picker-back")) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = colors.textMuted)
         }
         Text(stringResource(R.string.form_task), style = QuestType.stat, color = colors.text, modifier = Modifier.semantics { heading() })
     }
     // The field owns what is typed and reports it; mirroring the ViewModel back would drop fast typing.
     val query = rememberTextFieldState(state.query)
-    LaunchedEffect(query) { snapshotFlow { query.text.toString() }.collect(actions.editTaskQuery) }
+    LaunchedEffect(query) { snapshotFlow { query.text.toString() }.collect(actions.editQuery) }
     OutlinedTextField(
         state = query,
         placeholder = { Text(stringResource(R.string.task_picker_search_or_create)) },
         lineLimits = TextFieldLineLimits.SingleLine,
         // A fixed IME action: changing it while typing restarts the input and drops keys.
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        onKeyboardAction = { if (create != null) actions.createTask(query.text.toString()) },
+        onKeyboardAction = { if (create != null) createTask?.invoke(query.text.toString()) },
         modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("task-picker-query"),
     )
     Column {
         create?.let { label ->
-            OptionRow(onClick = { actions.createTask(query.text.toString()) }, tag = "task-picker-create") {
+            OptionRow(onClick = { createTask?.invoke(query.text.toString()) }, tag = "task-picker-create") {
                 Icon(Icons.Filled.Add, contentDescription = null, tint = colors.accent)
                 Column(Modifier.weight(1f).padding(start = QuestSpacing.medium)) {
                     Text(label, style = QuestType.task, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -79,7 +89,7 @@ fun TaskPickerPage(state: TaskPickerState, actions: LogWorkActions) {
                 }
             }
         }
-        state.choices.options.forEach { option -> TaskOptionRow(option) { actions.pickTask(option.id) } }
+        state.choices.options.forEach { option -> TaskOptionRow(option) { actions.pick(option.id) } }
         if (create == null && state.choices.options.isEmpty()) {
             Text(stringResource(R.string.task_picker_empty), style = QuestType.body, color = colors.textMuted, modifier = Modifier.padding(vertical = QuestSpacing.medium))
         }

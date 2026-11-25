@@ -20,6 +20,7 @@ pub mod capture;
 pub mod capture_draft;
 #[cfg(test)]
 mod capture_tests;
+pub mod entry_editor;
 mod focus;
 mod log_work;
 mod plan_scroll;
@@ -72,6 +73,8 @@ pub enum Overlay {
     Quest,
     /// Manage workspaces; its fields are `State::workspaces`.
     Workspaces,
+    /// A session's editor, opened from the timeline; its fields are `State::entry_form`.
+    EntryEditor,
 }
 
 /// An inline editor open on the Quests view; its text is `State::quest_text`.
@@ -89,8 +92,8 @@ pub enum AddAt {
 }
 
 /// The planner's board width before its first layout reports the real one (the default window
-/// less the view's padding).
-const PLAN_BOARD_GUESS_W: f32 = 1076.0;
+/// less the sidebar, the tracked column and the view's padding).
+const PLAN_BOARD_GUESS_W: f32 = 866.0;
 
 pub struct PaletteState {
     pub mode: Mode,
@@ -119,12 +122,14 @@ pub struct State {
     pub overlay: Overlay,
     pub palette: PaletteState,
     pub account_form: AccountForm,
-    pub home_add: TextEdit,
-    /// Home's OTHER field ("Add a task…").
-    pub home_other_add: TextEdit,
-    /// The quest picked on the "Add quest work…" field's chip; without one it offers the quest
-    /// used last (`State::home_quest`).
-    pub home_quest_pick: Option<EntityId>,
+    /// The quick-add field above Today, Inbox and a quest's list.
+    pub quick_add: TextEdit,
+    /// The quest picked on Today's quick-add chip; none files the task without a quest.
+    pub quick_add_quest: Option<EntityId>,
+    /// Whether the tracked-time column shows (T, ⌥⌘I); it stays across views.
+    pub right_column: bool,
+    /// The list row the keyboard moved to (J/K, ↑/↓); the task keys act on it.
+    pub selected_task: Option<EntityId>,
     /// Quest work shows only this quest's tasks (Home and Plan).
     pub quest_filter: Option<EntityId>,
     /// Whether tasks without a quest (OTHER) show, on Home and Plan (V).
@@ -168,10 +173,6 @@ pub struct State {
     closed_quest_editor: QuestEditor,
     pub quest_edit: QuestEdit,
     pub quest_text: TextEdit,
-    /// The quest page's "Add a task" field.
-    pub quest_add: TextEdit,
-    /// Whether the quest page's new tasks go to the backlog rather than today.
-    pub quest_add_backlog: bool,
     /// The last command or sign-in failure, shown until the next action.
     pub notice: Option<String>,
     pub capture: CaptureState,
@@ -184,6 +185,9 @@ pub struct State {
     /// Whether the top bar's workspace switcher is open.
     pub workspace_menu: bool,
     pub workspaces: WorkspacesForm,
+    pub entry_form: Option<entry_editor::EntryForm>,
+    /// Takes edits for an entry editor that already closed (`State::entry_form_mut`).
+    closed_entry_form: entry_editor::EntryForm,
 }
 
 impl State {
@@ -200,13 +204,14 @@ impl State {
             clock,
             now,
             dark: true,
-            view: View::Home,
+            view: View::Today,
             overlay: Overlay::None,
             palette: PaletteState { mode: Mode::Commands, query: TextEdit::new(""), picked: 0 },
             account_form: AccountForm { server: TextEdit::new("") },
-            home_add: TextEdit::new(""),
-            home_other_add: TextEdit::new(""),
-            home_quest_pick: None,
+            quick_add: TextEdit::new(""),
+            quick_add_quest: None,
+            right_column: true,
+            selected_task: None,
             quest_filter: None,
             show_other: true,
             add_at: AddAt::Top,
@@ -236,8 +241,6 @@ impl State {
             closed_quest_editor: QuestEditor::scratch(),
             quest_edit: QuestEdit::None,
             quest_text: TextEdit::new(""),
-            quest_add: TextEdit::new(""),
-            quest_add_backlog: false,
             notice: None,
             capture: CaptureState::default(),
             ai_connections: AiConnectionsState::default(),
@@ -245,6 +248,8 @@ impl State {
             language: "en".to_owned(),
             workspace_menu: false,
             workspaces: WorkspacesForm::default(),
+            entry_form: None,
+            closed_entry_form: entry_editor::EntryForm::scratch(),
         }
     }
 
@@ -276,7 +281,13 @@ impl State {
         self.sync_focus_draft();
     }
 
+    /// Shows `view`. The desktop has no Home: it shows Today.
     pub fn go(&mut self, view: View) {
+        let view = if view == View::Home { View::Today } else { view };
+        if view != self.view {
+            self.selected_task = None;
+            self.quick_add_quest = None;
+        }
         if view == View::Plan && self.view != View::Plan {
             self.plan_mounts();
         }
@@ -284,6 +295,7 @@ impl State {
         self.close_repeat_editor();
         self.close_task_modal();
         self.close_quest_editor();
+        self.close_entry_editor();
         self.overlay = Overlay::None;
         self.menu = None;
         self.workspace_menu = false;
@@ -297,16 +309,23 @@ impl State {
         if self.snap.is_quest_work(task) { Section::Quest } else { Section::Other }
     }
 
-    /// The quest "Add quest work…" gives a new task: the filtered one, the one picked on the
-    /// field's chip, else the quest of the newest quest task (ids grow with creation time),
-    /// else the first active quest.
-    pub fn home_quest(&self) -> Option<EntityId> {
-        quest_view::home::new_task_quest(&self.snap, self.quest_filter, self.home_quest_pick)
+    /// The task the task shortcuts act on: the selected row, else the card under the pointer.
+    pub fn shortcut_task(&self) -> Option<EntityId> {
+        self.selected_task.or(self.hovered_task).filter(|id| self.plan_task(*id).is_some())
     }
 
-    /// The task the task shortcuts act on: the card under the pointer.
-    pub fn shortcut_task(&self) -> Option<EntityId> {
-        self.hovered_task.filter(|id| self.plan_task(*id).is_some())
+    /// J/K: selects the next (or previous) row of the shown list; false without rows.
+    pub fn select_next_row(&mut self, next: bool) -> bool {
+        let rows = crate::ui::lists::shown_tasks(self);
+        let Some(last) = rows.len().checked_sub(1) else { return false };
+        let index = match self.selected_task.and_then(|id| rows.iter().position(|row| *row == id)) {
+            None if next => 0,
+            None => last,
+            Some(i) if next => (i + 1).min(last),
+            Some(i) => i.saturating_sub(1),
+        };
+        self.selected_task = Some(rows[index]);
+        true
     }
 
     /// Soft-deletes `item` and offers to undo it.

@@ -61,8 +61,8 @@ import app.quest.android.ui.components.Dot
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.components.QuestPickerSheet
 import app.quest.android.ui.components.questColor
-import app.quest.android.ui.home.CenteredNote
-import app.quest.android.ui.home.EmptyNote
+import app.quest.android.ui.components.CenteredNote
+import app.quest.android.ui.components.EmptyNote
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType

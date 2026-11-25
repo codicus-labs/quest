@@ -14,9 +14,9 @@ use crate::keys::{self, CardKey};
 use crate::palette::Mode;
 use crate::state::{AddAt, State};
 use crate::theme::{self, Pal, quest_color, ty};
+use crate::ui::chrome::open_palette_in;
 use crate::ui::drag::{self, CardLook, Zone};
 use crate::ui::menu;
-use crate::ui::topbar::open_palette_in;
 use crate::undo::Deletable;
 
 pub fn quest_of<'a>(s: &'a State, task: &Task) -> Option<&'a Quest> {

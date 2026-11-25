@@ -1,11 +1,11 @@
-//! QUEST WORK and OTHER: V hides other work on Home and Plan, the filter shows one quest's work,
-//! and "Add quest work…" files new tasks under the filtered (or the chip's) quest.
+//! QUEST WORK and OTHER on the planner: V hides other work and the filter shows one quest's work;
+//! the quick-add field's defaults on Today, the Inbox and a quest's page.
 
 use rune::{Key, Mods, Runtime};
 
 use super::dnd_tests::{settle, task};
 use super::tests::{click, command, demo_app, press, type_text};
-use crate::state::State;
+use crate::state::{State, View};
 
 fn shown(rt: &Runtime<State>, key: &str) -> bool {
     rt.find(key).is_some()
@@ -15,87 +15,84 @@ fn quest_id(rt: &Runtime<State>, title: &str) -> quest_domain::EntityId {
     rt.state.snap.quests.iter().find(|q| q.title == title).map(|q| q.id).unwrap_or_else(|| panic!("quest {title}"))
 }
 
+fn plan(rt: &mut Runtime<State>) {
+    command(rt, '3');
+    settle(rt);
+}
+
 #[test]
-fn v_hides_other_work_on_home_and_plan() {
+fn v_hides_other_work_on_plan() {
     let (mut rt, _dir) = demo_app();
-    settle(&mut rt);
+    plan(&mut rt);
     let errand = task(&rt, "Pick up the dry cleaning").id;
     let quest_work = task(&rt, "Design the next chapter").id;
-    assert!(shown(&rt, &format!("home-task-{errand}")), "other work shows under OTHER");
+    assert!(shown(&rt, &format!("plan-task-{errand}")), "other work shows");
     type_text(&mut rt, "v");
-    assert!(!shown(&rt, &format!("home-task-{errand}")), "V hides it on Home");
-    assert!(shown(&rt, &format!("home-task-{quest_work}")), "quest work stays");
-    command(&mut rt, '2');
-    settle(&mut rt);
-    assert!(!shown(&rt, &format!("plan-task-{errand}")), "and on Plan");
-    assert!(shown(&rt, &format!("plan-task-{quest_work}")));
+    assert!(!shown(&rt, &format!("plan-task-{errand}")), "V hides it");
+    assert!(shown(&rt, &format!("plan-task-{quest_work}")), "quest work stays");
     type_text(&mut rt, "v");
     assert!(shown(&rt, &format!("plan-task-{errand}")), "V shows it again");
-    command(&mut rt, '1');
-    assert!(shown(&rt, &format!("home-task-{errand}")));
 }
 
 #[test]
 fn a_task_changes_section_with_its_quest() {
     let (mut rt, _dir) = demo_app();
+    plan(&mut rt);
     let errand = task(&rt, "Pick up the dry cleaning").id;
     let quest = quest_id(&rt, "Launch my idea");
     rt.state.dispatch(quest_domain::Command::AssignTask { id: errand, quest_id: Some(quest) });
     type_text(&mut rt, "v");
-    assert!(shown(&rt, &format!("home-task-{errand}")), "with a quest it is quest work, shown with OTHER hidden");
+    assert!(shown(&rt, &format!("plan-task-{errand}")), "with a quest it is quest work, shown with OTHER hidden");
 }
 
 #[test]
-fn the_filter_shows_one_quests_work_and_adds_to_it() {
+fn the_filter_shows_one_quests_work() {
     let (mut rt, _dir) = demo_app();
+    plan(&mut rt);
     let writing = quest_id(&rt, "Write every week");
     let essay = task(&rt, "Draft this week’s essay").id;
     let design = task(&rt, "Design the next chapter").id;
-    click(&mut rt, "home-filter");
+    click(&mut rt, "plan-filter");
     type_text(&mut rt, "Write every");
     press(&mut rt, Key::Enter, Mods::default());
     assert_eq!(rt.state.quest_filter, Some(writing));
-    assert!(shown(&rt, &format!("home-task-{essay}")));
-    assert!(!shown(&rt, &format!("home-task-{design}")), "other quests' work is filtered out");
+    assert!(shown(&rt, &format!("plan-task-{essay}")));
+    assert!(!shown(&rt, &format!("plan-task-{design}")), "other quests' work is filtered out");
 
-    click(&mut rt, "home-add");
-    type_text(&mut rt, "Essay intro");
-    press(&mut rt, Key::Enter, Mods::default());
-    let added = task(&rt, "Essay intro");
-    assert_eq!(
-        (added.quest_id, added.planned_on),
-        (Some(writing), Some(rt.state.today())),
-        "the filtered quest, today"
-    );
-
-    click(&mut rt, "home-filter-chip");
+    click(&mut rt, "plan-filter-chip");
     assert_eq!(rt.state.quest_filter, None, "the chip clears the filter");
-    assert!(shown(&rt, &format!("home-task-{design}")));
+    assert!(shown(&rt, &format!("plan-task-{design}")));
+}
+
+fn quick_add(rt: &mut Runtime<State>, title: &str) -> quest_domain::Task {
+    click(rt, "quick-add");
+    type_text(rt, title);
+    press(rt, Key::Enter, Mods::default());
+    task(rt, title)
 }
 
 #[test]
-fn add_quest_work_uses_the_chips_quest_and_add_a_task_none() {
+fn quick_add_plans_today_with_the_picked_quest_files_on_a_quest_page_and_leaves_inbox_bare() {
     let (mut rt, _dir) = demo_app();
+    let today = rt.state.today();
     let running = quest_id(&rt, "Run a half marathon");
-    click(&mut rt, "home-add-quest");
+    let plain = quick_add(&mut rt, "Water the plants");
+    assert_eq!((plain.quest_id, plain.planned_on), (None, Some(today)), "Today: today, no quest yet");
+
+    click(&mut rt, "quick-add-quest");
     type_text(&mut rt, "half marathon");
     press(&mut rt, Key::Enter, Mods::default());
-    click(&mut rt, "home-add");
-    type_text(&mut rt, "Buy new shoes");
-    press(&mut rt, Key::Enter, Mods::default());
-    assert_eq!(task(&rt, "Buy new shoes").quest_id, Some(running));
+    let shoes = quick_add(&mut rt, "Buy new shoes");
+    assert_eq!((shoes.quest_id, shoes.planned_on), (Some(running), Some(today)), "the picked quest");
+    assert!(shown(&rt, &format!("row-{}", shoes.id)), "and it lists on Today");
 
-    // OTHER sits below the quest work: scroll down to it.
-    let (x, y) = rt.find("home-lists").expect("Home's lists");
-    rt.wheel(x, y, -600.0);
-    settle(&mut rt);
-    click(&mut rt, "home-other-add");
-    type_text(&mut rt, "Water the plants");
-    press(&mut rt, Key::Enter, Mods::default());
-    let other = task(&rt, "Water the plants");
-    assert_eq!(
-        (other.quest_id, other.planned_on),
-        (None, Some(rt.state.today())),
-        "OTHER's field adds without a quest"
-    );
+    command(&mut rt, '1');
+    let idea = quick_add(&mut rt, "Learn to juggle");
+    assert_eq!((idea.quest_id, idea.planned_on), (None, None), "the Inbox: neither");
+    assert!(shown(&rt, &format!("row-{}", idea.id)));
+
+    rt.state.go(View::Quest(running));
+    rt.frame(0.0);
+    let laces = quick_add(&mut rt, "Lace the new shoes");
+    assert_eq!((laces.quest_id, laces.planned_on), (Some(running), None), "a quest's page: that quest");
 }

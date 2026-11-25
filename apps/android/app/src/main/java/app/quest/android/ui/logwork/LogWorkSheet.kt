@@ -86,7 +86,7 @@ fun LogWorkSheetContent(state: LogWorkSheetState, actions: LogWorkActions) {
     ) {
         state.error?.let { FieldError(it) }
         when {
-            picker != null -> TaskPickerPage(picker, actions)
+            picker != null -> TaskPickerPage(picker, TaskPickerActions(actions.closeTaskPicker, actions.editTaskQuery, actions.pickTask, actions.createTask))
             state.logWork != null -> LogWorkFields(state.logWork, actions)
         }
     }

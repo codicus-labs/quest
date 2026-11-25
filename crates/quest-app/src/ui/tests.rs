@@ -35,7 +35,7 @@ pub(super) fn test_app(demo: bool) -> (Runtime<State>, TempDir) {
         crate::seed_demo(&store, clock).expect("demo seeds");
     }
     let state = State::new(Arc::new(store), profiles, clock);
-    let mut rt = Runtime::new(state, super::view, (1100.0, 750.0), Env::new(true, 1.0));
+    let mut rt = Runtime::new(state, super::view, (1440.0, 900.0), Env::new(true, 1.0));
     rt.on_key = Some(keys::on_key);
     rt.poll = Some(|s: &mut State, clock, tx| s.refresh(clock, tx));
     rt.frame(0.0);
@@ -85,6 +85,12 @@ pub(super) fn type_text(rt: &mut Runtime<State>, text: &str) {
     press(rt, Key::Text(text.into()), Mods::default());
 }
 
+/// Goes to `view` as the sidebar would.
+pub(super) fn go(rt: &mut Runtime<State>, view: View) {
+    rt.state.go(view);
+    rt.frame(0.0);
+}
+
 /// The key of a planner column's `part` ("col", "add", "list") at `index`; the backlog is last.
 pub(super) fn plan_key(rt: &Runtime<State>, part: &str, index: usize) -> String {
     if index >= crate::plan_strip::VISIBLE_DAYS {
@@ -103,6 +109,18 @@ pub(super) fn click(rt: &mut Runtime<State>, key: &str) {
     rt.frame(0.0);
 }
 
+/// Two quick clicks on `key`.
+pub(super) fn double_click(rt: &mut Runtime<State>, key: &str) {
+    rt.settle_all();
+    rt.frame(0.0);
+    let (x, y) = rt.find(key).unwrap_or_else(|| panic!("`{key}` is on screen"));
+    for _ in 0..2 {
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+    }
+    rt.frame(0.0);
+}
+
 /// Clicks a card just right of its title, on the title's line: its free space, away from the
 /// buttons.
 pub(super) fn click_beside_title(rt: &mut Runtime<State>, prefix: &str, id: quest_domain::EntityId) {
@@ -117,15 +135,22 @@ pub(super) fn click_beside_title(rt: &mut Runtime<State>, prefix: &str, id: ques
 }
 
 #[test]
-fn command_digits_switch_views_and_escape_leaves_focus_for_home() {
+fn command_digits_switch_views_and_escape_leaves_focus_for_today() {
     let (mut rt, _dir) = demo_app();
-    command(&mut rt, '2');
+    command(&mut rt, '1');
+    assert_eq!(rt.state.view, View::Inbox);
+    command(&mut rt, '3');
     assert_eq!(rt.state.view, View::Plan);
     assert!(rt.find("plan").is_some(), "the planner is drawn");
-    command(&mut rt, '3');
+    command(&mut rt, '5');
+    assert_eq!(rt.state.view, View::Logbook);
+    let first_quest = rt.state.snap.active_quests().next().map(|q| q.id).expect("a demo quest");
+    command(&mut rt, '6');
+    assert_eq!(rt.state.view, View::Quest(first_quest), "⌘6 opens the first quest");
+    go(&mut rt, View::Focus);
     assert_eq!(rt.state.view, View::Focus);
     press(&mut rt, Key::Escape, Mods::default());
-    assert_eq!(rt.state.view, View::Home, "Esc goes back to Home");
+    assert_eq!(rt.state.view, View::Today, "Esc goes back to Today");
 }
 
 #[test]
@@ -142,9 +167,9 @@ fn the_palette_jumps_to_a_view() {
 #[test]
 fn n_focuses_the_add_field_and_enter_creates_a_task() {
     let (mut rt, _dir) = demo_app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     type_text(&mut rt, "n");
-    assert_eq!(rt.state.view, View::Home);
+    assert_eq!(rt.state.view, View::Today);
     let before = rt.state.snap.tasks.len();
     type_text(&mut rt, "Stretch for ten minutes");
     press(&mut rt, Key::Enter, Mods::default());
@@ -153,11 +178,13 @@ fn n_focuses_the_add_field_and_enter_creates_a_task() {
 }
 
 #[test]
-fn play_on_a_card_moves_focus_to_that_task() {
+fn space_on_the_selected_row_moves_focus_to_that_task() {
     let (mut rt, _dir) = demo_app();
     let task =
         rt.state.snap.tasks.iter().find(|t| t.title == "Draft this week’s essay").map(|t| t.id).expect("demo task");
-    click(&mut rt, &format!("home-play-{task}"));
+    click(&mut rt, &format!("row-title-{task}"));
+    assert_eq!(rt.state.selected_task, Some(task), "a click selects the row");
+    type_text(&mut rt, " ");
     let running = rt.state.snap.running_entry().expect("a focus session runs");
     assert_eq!(running.task_id, Some(task));
 }

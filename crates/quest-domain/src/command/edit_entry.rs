@@ -67,3 +67,14 @@ pub(super) fn plan_edit(
     }
     Ok(writes)
 }
+
+pub(super) fn as_organizing(snapshot: &Snapshot, id: EntityId) -> Result<Vec<FieldWrite>, CommandError> {
+    let current = entry(snapshot, id)?;
+    if current.kind == EntryKind::Organizing {
+        return Ok(Vec::new());
+    }
+    Ok(vec![
+        write(EntityKind::TimeEntry, id, fields::ENTRY_KIND, json!(EntryKind::Organizing)),
+        write(EntityKind::TimeEntry, id, fields::ENTRY_ORIGIN_TASK_ID, json!(current.task_id)),
+    ])
+}

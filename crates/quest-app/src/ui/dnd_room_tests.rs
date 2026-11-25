@@ -11,8 +11,10 @@ use crate::state::State;
 
 const FRAME: f64 = 1.0 / 60.0;
 
+/// The planner, whose today column the drags here use.
 fn app() -> (Runtime<State>, TempDir) {
     let (mut rt, dir) = demo_app();
+    command(&mut rt, '3');
     settle(&mut rt);
     (rt, dir)
 }
@@ -57,28 +59,28 @@ fn siblings_spring_aside_and_the_target_holds_while_they_move() {
     let (mut rt, _dir) = app();
     let order = home_order(&rt);
     let (first, second) = (order[0], order[1]);
-    let first_rect = rect(&rt, &format!("home-task-{first}"));
-    let second_rect = rect(&rt, &format!("home-task-{second}"));
-    let from = center(&rt, &format!("home-title-{first}"));
+    let first_rect = rect(&rt, &format!("plan-task-{first}"));
+    let second_rect = rect(&rt, &format!("plan-task-{second}"));
+    let from = center(&rt, &format!("plan-title-{first}"));
     press_and_lift(&mut rt, from);
-    assert_eq!(rect(&rt, &format!("home-task-{second}")), second_rect, "a small drag keeps the room in place");
+    assert_eq!(rect(&rt, &format!("plan-task-{second}")), second_rect, "a small drag keeps the room in place");
 
     // Down by the second card's height: the room moves below it, and it springs up.
     let down = second_rect[1] + second_rect[3] - first_rect[1] - first_rect[3];
     move_to(&mut rt, (from.0, from.1 + down));
     let target = rt.state.drag.target();
-    assert_eq!(target, Some(Target { list: ListId::Home, before: order.get(2).copied() }));
+    assert_eq!(target, Some(Target { list: ListId::Day(rt.state.today()), before: order.get(2).copied() }));
     let mut ys = Vec::new();
     for _ in 0..6 {
         rt.frame(FRAME);
-        ys.push(rect(&rt, &format!("home-task-{second}"))[1]);
+        ys.push(rect(&rt, &format!("plan-task-{second}"))[1]);
         // The pointer holds still while the card springs: the target must too.
         move_to(&mut rt, (from.0, from.1 + down));
         assert_eq!(rt.state.drag.target(), target, "no flicker while siblings move");
     }
     assert!(ys[0] > first_rect[1] && ys[0] < second_rect[1], "on its way up, not there at once: {ys:?}");
     settle(&mut rt);
-    assert_eq!(rect(&rt, &format!("home-task-{second}"))[1], first_rect[1], "landed in the first place");
+    assert_eq!(rect(&rt, &format!("plan-task-{second}"))[1], first_rect[1], "landed in the first place");
 
     rt.pointer_up(from.0, from.1 + down);
     settle(&mut rt);
@@ -88,7 +90,7 @@ fn siblings_spring_aside_and_the_target_holds_while_they_move() {
 #[test]
 fn another_list_opens_a_ghost_and_leaving_every_list_closes_it() {
     let (mut rt, _dir) = app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     let polish = task(&rt, "Polish the details that matter").id;
     let own = rect(&rt, &format!("plan-task-{polish}"));
@@ -126,7 +128,7 @@ fn a_drop_where_nothing_changes_runs_no_command() {
     let (mut rt, _dir) = app();
     let order = home_order(&rt);
     let before = task(&rt, "Design the next chapter");
-    let from = center(&rt, &format!("home-title-{}", before.id));
+    let from = center(&rt, &format!("plan-title-{}", before.id));
     press_and_lift(&mut rt, from);
     move_to(&mut rt, (from.0, from.1 + 20.0));
     assert!(matches!(rt.state.drag, DragState::Dragging { .. }));
@@ -140,9 +142,9 @@ fn a_drop_where_nothing_changes_runs_no_command() {
 fn escape_flies_the_card_back_to_its_place() {
     let (mut rt, _dir) = app();
     let id = home_order(&rt)[0];
-    let face = format!("home-face-{id}");
+    let face = format!("plan-face-{id}");
     let home = rect(&rt, &face);
-    let from = center(&rt, &format!("home-title-{id}"));
+    let from = center(&rt, &format!("plan-title-{id}"));
     press_and_lift(&mut rt, from);
     move_to(&mut rt, (from.0 + 200.0, from.1 + 220.0));
     settle(&mut rt);
@@ -171,11 +173,11 @@ fn lifted_beside(rt: &mut Runtime<State>, card: &str, grip: &str) -> ([f32; 4], 
 fn the_lifted_card_keeps_its_cards_size() {
     let (mut rt, _dir) = app();
     let id = home_order(&rt)[1];
-    let (lift, own) = lifted_beside(&mut rt, &format!("home-task-{id}"), &format!("home-title-{id}"));
+    let (lift, own) = lifted_beside(&mut rt, &format!("plan-task-{id}"), &format!("plan-title-{id}"));
     assert_eq!((lift[2], lift[3]), (own[2], own[3]), "Home");
 
     let (mut rt, _dir) = app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     let id = task(&rt, "Polish the details that matter").id;
     let (lift, own) = lifted_beside(&mut rt, &format!("plan-task-{id}"), &format!("plan-title-{id}"));

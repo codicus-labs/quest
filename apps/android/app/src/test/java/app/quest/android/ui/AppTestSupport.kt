@@ -14,12 +14,14 @@ import app.quest.android.settings.AppearanceRepository
 import app.quest.android.ui.account.AccountViewModel
 import app.quest.android.ui.archive.ArchiveViewModel
 import app.quest.android.ui.focus.FocusViewModel
-import app.quest.android.ui.home.HomeViewModel
+import app.quest.android.ui.lists.ListViewModel
 import app.quest.android.ui.logwork.LogWorkViewModel
 import app.quest.android.ui.plan.PlanViewModel
-import app.quest.android.ui.quests.QuestDetailViewModel
+import app.quest.android.ui.quests.QuestNavViewModel
+import app.quest.android.ui.shell.PlayerViewModel
+import app.quest.android.ui.tracked.EntryViewModel
+import app.quest.android.ui.tracked.TrackedViewModel
 import app.quest.android.ui.quests.QuestEditorViewModel
-import app.quest.android.ui.quests.QuestsViewModel
 import app.quest.android.ui.review.ReviewViewModel
 import app.quest.android.ui.search.SearchViewModel
 import app.quest.android.ui.settings.SettingsViewModel
@@ -39,16 +41,18 @@ class FixedAppearance(initial: Appearance = Appearance.Light) : AppearanceReposi
 
 /** Every screen's ViewModel over [holder], with fakes for preferences and rules. */
 fun testAppViewModels(holder: CoreHolder, appearance: AppearanceRepository = FixedAppearance()) = AppViewModels(
-    home = HomeViewModel(holder, SavedStateHandle(), FakeHomePreferences()),
+    list = ListViewModel(holder, SavedStateHandle()),
     taskSheet = TaskSheetViewModel(holder, SavedStateHandle(), FakeRepeatRules(), FakeClock()),
     account = AccountViewModel(holder, ServerUrlPolicy { null }, SavedStateHandle(), emptyFlow()),
     settings = SettingsViewModel(holder, appearance, FakeFocusPreferences(), FakeCapturePreferences()),
     focus = FocusViewModel(holder, SavedStateHandle()),
     plan = PlanViewModel(holder, SavedStateHandle(), FakeHomePreferences(), FakePlanRules(), FakeClock()),
     logWork = LogWorkViewModel(holder, SavedStateHandle()),
-    quests = QuestsViewModel(holder, SavedStateHandle()),
+    questNav = QuestNavViewModel(holder),
     questEditor = QuestEditorViewModel(holder, SavedStateHandle()),
-    questDetail = QuestDetailViewModel(holder, SavedStateHandle(), FakeHomePreferences()),
+    tracked = TrackedViewModel(holder),
+    entry = EntryViewModel(holder, SavedStateHandle()),
+    player = PlayerViewModel(holder),
     review = ReviewViewModel(holder, SavedStateHandle()),
     archive = ArchiveViewModel(holder),
     search = SearchViewModel(holder, SavedStateHandle()),

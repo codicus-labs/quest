@@ -27,8 +27,18 @@ pub struct Pal {
     pub selected: Color,
     pub bar_track: Color,
     pub bar_idle: Color,
+    /// Accent for text and icons (≥ 4.5:1 on every surface).
     pub accent: Color,
-    /// Errors and failures (sync failed).
+    /// Accent fills (checked box, the running timer's pill) under dark text.
+    pub accent_fill: Color,
+    /// Focus ring, keyboard selection edge, the "now" line (≥ 3:1).
+    pub accent_line: Color,
+    /// The sidebar and the tracked column.
+    pub side: Color,
+    pub icon_inbox: Color,
+    pub icon_plan: Color,
+    pub icon_logbook: Color,
+    /// Errors, failures and overdue deadlines.
     pub error: Color,
     pub scrim: Color,
     pub kit: Kit,
@@ -54,6 +64,12 @@ fn build(dark: bool) -> Pal {
         bar_track: c("bar-track"),
         bar_idle: c("bar-idle"),
         accent: c("accent"),
+        accent_fill: c("accent-fill"),
+        accent_line: c("accent-line"),
+        side: c("side"),
+        icon_inbox: c("icon-inbox"),
+        icon_plan: c("icon-plan"),
+        icon_logbook: c("icon-logbook"),
         error: c("error"),
         scrim: c("scrim"),
         kit,
@@ -101,4 +117,19 @@ pub mod ty {
     pub const FOCUS_TITLE: TextStyle = TextStyle::new(26.0, 400.0).lh(32.0);
     pub const TIMER: TextStyle = TextStyle::new(120.0, 500.0).lh(130.0).tracking(-2.0).features("'tnum' 1");
     pub const MONO_TIME: TextStyle = TextStyle::new(14.0, 500.0).lh(20.0).features("'tnum' 1");
+    /// A list page's title (Today, Inbox, a quest).
+    pub const H1: TextStyle = TextStyle::new(28.0, 700.0).lh(34.0).tracking(-0.4);
+    /// The muted marks on a row's right and the timeline's labels.
+    pub const META: TextStyle = TextStyle::new(12.5, 400.0).lh(16.0).features("'tnum' 1");
+    pub const NAV_ON: TextStyle = TextStyle::new(14.0, 600.0).lh(20.0);
+    /// A list group's head ("3 done", a Logbook day).
+    pub const GROUP: TextStyle = TextStyle::new(13.0, 700.0).lh(18.0);
+    /// The player's clock and the tracked column's totals.
+    pub const TOTAL: TextStyle = TextStyle::new(26.0, 600.0).lh(32.0).tracking(-0.4).features("'tnum' 1");
+}
+
+/// Text and icons on an accent fill (the checked box, the running timer's pill): dark in both
+/// appearances, as the fill is the same amber.
+pub fn on_accent_fill() -> Color {
+    hex("#1a1a1a").unwrap_or(Color::BLACK)
 }

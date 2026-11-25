@@ -44,11 +44,11 @@ class QuestAppFocusTest {
         val sheet = viewModels.taskSheet
         val focus = viewModels.focus
         compose.setContent { QuestTheme(dark = false) { QuestApp(viewModels, emptyFlow(), FakeFocusPreferences()) } }
-        compose.onNodeWithTag("home").assertExists()
+        compose.onNodeWithTag("list-today").assertExists()
 
         focus.open()
         compose.waitForIdle()
-        compose.onNodeWithTag("home").assertDoesNotExist()
+        compose.onNodeWithTag("list-today").assertDoesNotExist()
         // Where Home's cards are: an empty part of Focus.
         compose.onRoot().performTouchInput {
             click(Offset(centerX, height * 0.5f))

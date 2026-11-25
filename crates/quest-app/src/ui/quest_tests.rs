@@ -1,11 +1,11 @@
 //! The quest page: open it from the quest's dialog, rename, recolour, complete, add a task; and
-//! a card's body: a click selects it, its buttons stay buttons.
+//! a planner card's body: a click opens it, its buttons stay buttons.
 
 use quest_domain::{EntityId, QuestColor, QuestStatus};
 use rune::{Key, Mods, Runtime};
 
 use super::dnd_tests::rect;
-use super::tests::{TempDir, click, click_beside_title, command, demo_app, press, type_text};
+use super::tests::{TempDir, click, command, demo_app, go, press, type_text};
 use crate::dnd::DragState;
 use crate::palette::Mode;
 use crate::state::{Overlay, State, View};
@@ -24,7 +24,7 @@ fn enter(rt: &mut Runtime<State>) {
 }
 
 fn open_first_quest(rt: &mut Runtime<State>) -> EntityId {
-    command(rt, '4');
+    go(rt, View::Quests);
     let quest = rt.state.snap.active_quests().next().map(|q| q.id).expect("a demo quest");
     click(rt, &format!("quest-{quest}"));
     assert_eq!(rt.state.overlay, Overlay::Quest, "a card opens the quest's dialog");
@@ -69,36 +69,36 @@ fn escape_cancels_a_rename() {
 fn the_quest_page_adds_tasks() {
     let (mut rt, _dir) = app();
     let id = open_first_quest(&mut rt);
-    click(&mut rt, "quest-add-task");
+    type_text(&mut rt, "n");
     type_text(&mut rt, "Outline chapter four");
     enter(&mut rt);
     let task = rt.state.snap.tasks.iter().find(|t| t.title == "Outline chapter four").expect("created");
-    let today = rt.state.today();
-    assert_eq!((task.quest_id, task.planned_on), (Some(id), Some(today)), "on this quest, today (the default)");
-    assert!(rt.find(&format!("quest-task-{}", task.id)).is_some(), "listed on the page");
-    click(&mut rt, "quest-add-backlog");
-    click(&mut rt, "quest-add-task");
-    type_text(&mut rt, "Someday chapter");
-    enter(&mut rt);
-    let later = rt.state.snap.tasks.iter().find(|t| t.title == "Someday chapter").expect("created");
-    assert_eq!((later.quest_id, later.planned_on), (Some(id), None), "on this quest, in the backlog");
+    assert_eq!((task.quest_id, task.planned_on), (Some(id), None), "N adds to this quest, unplanned");
+    assert!(rt.find(&format!("row-{}", task.id)).is_some(), "listed on the page");
+    assert_eq!(rt.state.view, View::Quest(id), "N stays on the page");
 }
 
 #[test]
 fn a_click_on_a_card_opens_its_dialog_and_its_buttons_do_not_drag() {
     let (mut rt, _dir) = app();
+    command(&mut rt, '3');
     let today = rt.state.today();
     let order = |rt: &Runtime<State>| rt.state.snap.tasks_on(today).map(|t| t.id).collect::<Vec<_>>();
     let before = order(&rt);
     let id = rt.state.snap.tasks_on(today).find(|t| !t.is_done()).map(|t| t.id).unwrap();
-    click_beside_title(&mut rt, "home", id);
+    click(&mut rt, &format!("plan-title-{id}"));
     assert_eq!(rt.state.task_modal.as_ref().map(|m| m.task), Some(id), "a click without travel opens the dialog");
     assert_eq!(order(&rt), before, "and moves nothing");
     press(&mut rt, Key::Escape, Mods::default());
     assert!(rt.state.task_modal.is_none() && rt.find("task-modal").is_none(), "Esc closes it");
 
+    click(&mut rt, &format!("plan-chip-{id}"));
+    assert_eq!(rt.state.palette.mode, Mode::AssignQuest(id), "the chip picks a quest");
+    assert_eq!(rt.state.drag, DragState::Idle);
+    press(&mut rt, Key::Escape, Mods::default());
+
     // A press on the check that wanders a little stays a press on the check.
-    let (x, y) = rt.find(&format!("home-check-{id}")).unwrap();
+    let (x, y) = rt.find(&format!("plan-check-{id}")).unwrap();
     rt.pointer_down(x, y);
     rt.frame(0.0);
     rt.pointer_move(x + 2.0, y + 2.0);
@@ -107,17 +107,14 @@ fn a_click_on_a_card_opens_its_dialog_and_its_buttons_do_not_drag() {
     rt.pointer_up(x + 2.0, y + 2.0);
     rt.frame(0.0);
     assert!(rt.state.snap.task(id).unwrap().is_done());
-
-    click(&mut rt, &format!("home-chip-{id}"));
-    assert_eq!(rt.state.palette.mode, Mode::AssignQuest(id), "the chip picks a quest");
-    assert_eq!(rt.state.drag, DragState::Idle);
 }
 
 #[test]
 fn a_press_on_a_card_drags_only_past_the_threshold() {
     let (mut rt, _dir) = app();
+    command(&mut rt, '3');
     let id = rt.state.snap.tasks_on(rt.state.today()).find(|t| !t.is_done()).map(|t| t.id).unwrap();
-    let (x, y) = rt.find(&format!("home-title-{id}")).unwrap();
+    let (x, y) = rt.find(&format!("plan-title-{id}")).unwrap();
     rt.pointer_down(x, y);
     rt.frame(0.0);
     rt.pointer_move(x + 2.0, y + 2.0);

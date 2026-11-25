@@ -9,11 +9,6 @@ macro_rules! icon {
 }
 
 icon!(
-    LOGO,
-    // The app icon's ring and check (assets/icon.svg), scaled onto the 16-point grid.
-    r#"<path d="M13.11 7.64A5.75 5.75 0 1 1 11.88 4.42" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M5.63 8.5L8 10.88L14.38 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>"#
-);
-icon!(
     SEARCH,
     r#"<circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M10.4 10.4L14 14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>"#
 );
@@ -104,3 +99,34 @@ icon!(
     CHEVRON_DOWN,
     r#"<path d="M4.5 6.5L8 10L11.5 6.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>"#
 );
+
+/// The redesign's line icons, on a 24-point grid with 1.8-point strokes.
+macro_rules! line_icon {
+    ($name:ident, $paths:expr) => {
+        pub static $name: Icon = Icon {
+            name: concat!("quest-", stringify!($name)),
+            view: 24.0,
+            body: concat!(
+                r#"<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">"#,
+                $paths,
+                "</g>"
+            ),
+        };
+    };
+}
+
+line_icon!(INBOX, r#"<path d="M4 13h4l2 3h4l2-3h4"/><path d="M6 5h12l2 8v6H4v-6z"/>"#);
+line_icon!(
+    TODAY,
+    r#"<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M2.5 12h2M19.5 12h2M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>"#
+);
+line_icon!(PLAN, r#"<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>"#);
+line_icon!(REVIEW, r#"<path d="M5 20V11M12 20V4M19 20v-6"/>"#);
+line_icon!(LOGBOOK, r#"<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 11.5l2 2 4-4"/>"#);
+line_icon!(ADD, r#"<path d="M12 5v14M5 12h14"/>"#);
+line_icon!(STOP, r#"<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>"#);
+line_icon!(RESUME, r#"<path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/>"#);
+line_icon!(BACK_TO, r#"<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>"#);
+line_icon!(FOCUS, r#"<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>"#);
+line_icon!(PANEL, r#"<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M15 4.5v15"/>"#);
+line_icon!(COMPLETED, r#"<circle cx="12" cy="12" r="8"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/>"#);

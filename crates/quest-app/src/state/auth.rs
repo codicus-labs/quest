@@ -289,7 +289,7 @@ impl State {
         self.capture.step = super::CaptureStep::Compose { error: None };
         self.focus_task = None;
         self.quest_filter = None;
-        self.home_quest_pick = None;
+        self.quick_add_quest = None;
         self.snap = self.store.snapshot();
         self.sync = self.store.status();
         self.account = self.store.account();

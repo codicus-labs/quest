@@ -5,7 +5,7 @@ use quest_domain::{Command, EntityId};
 use rune::{Key, Mods, Runtime};
 
 use super::log_work_tests::{fill, text_of};
-use super::tests::{click, command, demo_app, press, type_text};
+use super::tests::{click, command, demo_app, go, press, type_text};
 use crate::state::{Overlay, State, View};
 use crate::undo::Deletable;
 
@@ -160,7 +160,7 @@ fn the_focus_timer_runs_on_across_a_switch_and_starting_elsewhere_stops_it() {
     let running = rt.state.snap.running_entry().map(|e| e.id).expect("the demo runs a session");
     let side = create(&mut rt, "Side");
     assert!(shown(&rt, "timer-elsewhere"), "the timer stays visible");
-    command(&mut rt, '3');
+    go(&mut rt, View::Focus);
     assert!(shown(&rt, "timer-elsewhere"), "also on Focus");
 
     click(&mut rt, "timer-elsewhere");

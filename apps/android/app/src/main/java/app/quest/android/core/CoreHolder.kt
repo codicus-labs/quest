@@ -23,7 +23,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.quest_mobile.Account
 import uniffi.quest_mobile.ArchiveData
-import uniffi.quest_mobile.QuestDetail
 import uniffi.quest_mobile.QuestsData
 import uniffi.quest_mobile.ReviewData
 import uniffi.quest_mobile.HomeData
@@ -36,6 +35,11 @@ import uniffi.quest_mobile.SettingsData
 import uniffi.quest_mobile.SyncOutcome
 import uniffi.quest_mobile.SyncState
 import uniffi.quest_mobile.WorkspacesData
+import uniffi.quest_mobile.ListKind
+import uniffi.quest_mobile.PlayerCard
+import uniffi.quest_mobile.QuestNav
+import uniffi.quest_mobile.TaskList
+import uniffi.quest_mobile.TrackedData
 
 /** What the screens render, re-read from the core after every change. */
 sealed interface CoreState {
@@ -52,26 +56,32 @@ sealed interface CoreState {
         val plan: PlanData? = null,
         /** The Quests tab; null while it is not shown. */
         val quests: QuestsData? = null,
-        /** The open quest page; null while none is open. */
-        val questPage: QuestPage? = null,
         /** The review of the asked week; null while the review is not shown. */
         val review: ReviewData? = null,
         /** The archive; null while it is not shown. */
         val archive: ArchiveData? = null,
+        /** The mini player above the tabs. */
+        val player: PlayerCard = PlayerCard.Empty,
+        /** The shown list; null while none is shown. */
+        val list: ListPage? = null,
+        /** The Quests tab; null while it is not shown. */
+        val questNav: QuestNav? = null,
+        /** The Tracked tab; null while it is not shown. */
+        val tracked: TrackedData? = null,
     ) : CoreState
 
     data class Failed(val message: String) : CoreState
 }
 
-/** The open quest page as read: the quest, or gone (deleted here or elsewhere). */
-sealed interface QuestPage {
-    val questId: String
+/** The shown list as read: the list, or gone (its quest was deleted here or elsewhere). */
+sealed interface ListPage {
+    val kind: ListKind
 
-    data class Shown(val detail: QuestDetail) : QuestPage {
-        override val questId get() = detail.id
+    data class Shown(val list: TaskList) : ListPage {
+        override val kind get() = list.kind
     }
 
-    data class Gone(override val questId: String) : QuestPage
+    data class Gone(override val kind: ListKind) : ListPage
 }
 
 /** The review's week: any ISO day in it, null for this week. */
@@ -155,20 +165,20 @@ class CoreHolder(
     private val opened = CompletableDeferred<QuestCoreApi?>()
     private var ticker: Job? = null
 
-    /** Home's filter and quest pick: UI state the core reads to build [CoreState.Ready.home]. */
-    @Volatile private var homeQuery = HomeQuery(questFilter = null, questPick = null)
-
     /** The plan's query while the plan is on screen; null skips reading it. */
     @Volatile private var planQuery: PlanQuery? = null
 
     @Volatile private var questsShown = false
 
-    /** The quest page's quest while it is open. */
-    @Volatile private var questPageId: String? = null
-
     @Volatile private var reviewQuery: ReviewQuery? = null
 
     @Volatile private var archiveShown = false
+
+    @Volatile private var listShown: ListKind? = null
+
+    @Volatile private var questNavShown = false
+
+    @Volatile private var trackedShown = false
 
     /** Whether the last read built the plan; only the reader coroutine touches it. */
     private var planRead = false
@@ -326,13 +336,6 @@ class CoreHolder(
         }
     }
 
-    /** Home asks for [query] from now on (filter or quest pick changed); [state] follows shortly. */
-    fun setHomeQuery(query: HomeQuery) {
-        if (query == homeQuery) return
-        homeQuery = query
-        markStale()
-    }
-
     /** The plan asks for [query] from now on (null: the plan is not shown); [state] follows shortly. */
     fun setPlanQuery(query: PlanQuery?) {
         if (query == planQuery) return
@@ -347,13 +350,6 @@ class CoreHolder(
         markStale()
     }
 
-    /** The quest page shows [questId] (null: closed); [state] follows shortly. */
-    fun setQuestPage(questId: String?) {
-        if (questId == questPageId) return
-        questPageId = questId
-        markStale()
-    }
-
     /** The review asks for [query] (null: not shown); [state] follows shortly. */
     fun setReviewQuery(query: ReviewQuery?) {
         if (query == reviewQuery) return
@@ -365,6 +361,27 @@ class CoreHolder(
     fun setArchiveShown(shown: Boolean) {
         if (shown == archiveShown) return
         archiveShown = shown
+        markStale()
+    }
+
+    /** A list is shown ([kind]) or none (null); [state] follows shortly. */
+    fun setListShown(kind: ListKind?) {
+        if (kind == listShown) return
+        listShown = kind
+        markStale()
+    }
+
+    /** The Quests tab is shown or not; [state] follows shortly. */
+    fun setQuestNavShown(shown: Boolean) {
+        if (shown == questNavShown) return
+        questNavShown = shown
+        markStale()
+    }
+
+    /** The Tracked tab is shown or not; [state] follows shortly. */
+    fun setTrackedShown(shown: Boolean) {
+        if (shown == trackedShown) return
+        trackedShown = shown
         markStale()
     }
 
@@ -396,19 +413,13 @@ class CoreHolder(
     private fun publish(core: QuestCoreApi) {
         val now = clock.now()
         _state.value = try {
-            val home = core.home(now, homeQuery)
+            // Focus's quests and task choices; the redesigned lists replaced Home's filter and pick.
+            val home = core.home(now, HomeQuery(questFilter = null, questPick = null))
             val query = planQuery
             // Leaving on the reader, so no plan read can come after it and remember the window again.
             if (query == null && planRead) core.leavePlan()
             planRead = query != null
             val plan = query?.let { core.plan(it.window, it.questFilter, now) }
-            val questPage = questPageId?.let { id ->
-                try {
-                    QuestPage.Shown(core.questDetail(id, now))
-                } catch (_: MobileException.UnknownQuest) {
-                    QuestPage.Gone(id)
-                }
-            }
             CoreState.Ready(
                 home = home,
                 sync = core.syncState(),
@@ -417,9 +428,18 @@ class CoreHolder(
                 workspaces = core.workspaces(now),
                 plan = plan,
                 quests = if (questsShown) core.quests(now) else null,
-                questPage = questPage,
                 review = reviewQuery?.let { core.review(it.week, now) },
                 archive = if (archiveShown) core.archive(now) else null,
+                player = core.player(now),
+                list = listShown?.let { kind ->
+                    try {
+                        ListPage.Shown(core.taskList(kind, now))
+                    } catch (_: MobileException.UnknownQuest) {
+                        ListPage.Gone(kind)
+                    }
+                },
+                questNav = if (questNavShown) core.questNav(now) else null,
+                tracked = if (trackedShown) core.tracked(now) else null,
             )
         } catch (e: Exception) {
             _notices.tryEmit(e.userMessage("Could not read today's tasks."))

@@ -203,7 +203,7 @@ fn bounds_key(target: &PickFor) -> &'static str {
         PickFor::TaskModal => "task-modal",
         PickFor::LogWork => "log-work-dialog",
         PickFor::CaptureTask(_) => "capture-dialog",
-        PickFor::HomeAdd | PickFor::Focus(_) => "app",
+        PickFor::QuickAdd | PickFor::Focus(_) => "app",
     }
 }
 
@@ -213,7 +213,7 @@ fn hosted(s: &State, target: &PickFor) -> bool {
         PickFor::TaskModal => s.overlay == Overlay::Task,
         PickFor::LogWork => s.overlay == Overlay::LogWork && s.log_work.task.is_none(),
         PickFor::CaptureTask(_) => s.overlay == Overlay::Capture && matches!(s.capture.step, CaptureStep::Review(_)),
-        PickFor::HomeAdd => s.view == View::Home && s.overlay == Overlay::None,
+        PickFor::QuickAdd => s.view == View::Today && s.overlay == Overlay::None,
         // A session started elsewhere may change the task the chip belongs to.
         PickFor::Focus(task) => {
             s.view == View::Focus

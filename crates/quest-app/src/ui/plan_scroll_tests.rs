@@ -14,7 +14,7 @@ const MOVING: &str = "Polish the details that matter";
 fn plan() -> (Runtime<State>, TempDir) {
     let (mut rt, dir) = demo_app();
     settle(&mut rt);
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     (rt, dir)
 }
@@ -55,7 +55,7 @@ fn month(rt: &Runtime<State>) -> String {
 fn the_plan_opens_on_the_day_before_yesterday_in_its_first_frame() {
     let (mut rt, _dir) = demo_app();
     settle(&mut rt);
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     let first = rt.state.today() - Days::new(2);
     let board = rect(&rt, "plan-board");
     assert!((column_x(&rt, first) - board[0]).abs() < 0.5, "it starts the board in the first frame");
@@ -198,7 +198,7 @@ fn a_drop_after_an_edge_scroll_lands_on_the_day_under_the_pointer() {
     let (mut rt, _dir) = plan();
     let today = rt.state.today();
     let target = today + Days::new(9);
-    assert!(rt.presented(&format!("plan-col-{target}")).is_none_or(|p| p.0[0] > 1100.0), "not on screen at first");
+    assert!(rt.presented(&format!("plan-col-{target}")).is_none_or(|p| p.0[0] > 1440.0), "not on screen at first");
     let [x, y, w, h] = rect(&rt, "plan-board");
     lift(&mut rt, MOVING, (x + w - 8.0, y + h / 2.0));
     // Scroll on until the target day is on screen, then rest over it.

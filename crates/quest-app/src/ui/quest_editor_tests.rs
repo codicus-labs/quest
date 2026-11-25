@@ -7,12 +7,12 @@ use quest_domain::{Command, EntityId, QuestColor, QuestStatus};
 use rune::{ElementInfo, Key, Mods, Runtime};
 
 use super::dnd_tests::rect;
-use super::tests::{TempDir, click, command, demo_app, press, type_text};
+use super::tests::{TempDir, click, demo_app, go, press, type_text};
 use crate::state::{Overlay, QuestsTab, State, View};
 
 fn quests_page() -> (Runtime<State>, TempDir) {
     let (mut rt, dir) = demo_app();
-    command(&mut rt, '4');
+    go(&mut rt, View::Quests);
     settle(&mut rt);
     (rt, dir)
 }
@@ -203,8 +203,8 @@ fn archive_quest_page_and_delete_undo_stay_reachable_and_old_archives_are_not_co
     click(&mut rt, &format!("quest-{quest}"));
     click(&mut rt, "quest-editor-page");
     assert_eq!((rt.state.view, rt.state.overlay), (View::Quest(quest), Overlay::None), "the full quest page");
-    assert!(rt.find("quest-add-task").is_some(), "with its tasks");
-    click(&mut rt, "quest-back");
+    assert!(rt.find("quick-add").is_some(), "with its tasks");
+    go(&mut rt, View::Quests);
 
     click(&mut rt, &format!("quest-{quest}"));
     click(&mut rt, "quest-editor-delete");

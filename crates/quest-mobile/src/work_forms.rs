@@ -206,7 +206,7 @@ fn end_day(draft: &EntryDraft) -> &str {
     if draft.ends_other_day { &draft.end_day } else { &draft.start_day }
 }
 
-fn entry<'a>(snapshot: &'a Snapshot, entry_id: &str) -> Result<&'a TimeEntry, MobileError> {
+pub(crate) fn entry<'a>(snapshot: &'a Snapshot, entry_id: &str) -> Result<&'a TimeEntry, MobileError> {
     let id = parse_id(entry_id)?;
     snapshot
         .time_entries

@@ -1,74 +1,43 @@
-//! A quest's page: rename it inline, change its colour, complete, reopen or delete it; its hours this
-//! week and in total; and its tasks (open ones by plan date, then the unplanned ones, then
-//! what's done) with a field to add one.
+//! A quest's page: its colour, name (click to rename) and hours this week; colour swatches,
+//! complete or reopen, delete; a quick-add that files tasks under it; its open tasks, then what's
+//! done.
 
-use quest_domain::{Command, EntityId, Position, Quest, QuestColor, QuestStatus};
-use rune::{
-    ClipboardContent, Color, Cursor, El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, el, row, spacer, text,
-    text_input,
-};
+use quest_domain::{Command, EntityId, Quest, QuestColor, QuestStatus};
+use rune::{ClipboardContent, Cursor, El, Key, KeyEvent, TextStyle, Tx, col, el, row, spacer, text, text_input};
 
 use crate::format;
 use crate::icons;
-use crate::state::{AddAt, QuestEdit, State, View};
+use crate::state::{QuestEdit, State};
 use crate::theme::{Pal, color_name, quest_color, ty};
-use crate::ui::parts::{self, CardOptions};
-use crate::ui::quests::{total_ms, week_ms};
+use crate::ui::lists;
+use crate::ui::parts;
+use crate::ui::quests::week_ms;
+use crate::ui::task_row::Shows;
 use crate::undo::Deletable;
 
 pub fn view(s: &State, id: EntityId, p: &Pal) -> El {
-    let back = parts::button("quest-back", "Quests", Some(&icons::ARROW_LEFT), p, |s: &mut State, _: &mut Tx| {
-        s.go(View::Quests)
-    })
-    .h(32.0);
-    let page = col().key("quest-detail").w_full().h_full().px(30.0).pt(28.0).pb(16.0).gap(22.0);
     let Some(quest) = s.snap.quest(id) else {
-        return page
-            .child(row().child(back))
-            .child(parts::empty_note("This quest is gone. It may be in the archive.", p));
+        let gone = text("This quest is gone. It may be in the archive.").font(ty::BODY).color(p.faint);
+        return lists::page("quest-detail", gone, None, el());
     };
-    let (status_label, next) = match quest.status {
-        QuestStatus::Active => ("Complete quest", QuestStatus::Completed),
-        QuestStatus::Completed => ("Reopen quest", QuestStatus::Active),
-        QuestStatus::Archived => ("Unarchive", QuestStatus::Active),
-    };
-    let top = row()
-        .w_full()
-        .center_y()
-        .gap(10.0)
-        .child(back)
-        .child(spacer())
-        .child(
-            parts::button("quest-status", status_label, Some(&icons::CHECK), p, move |s: &mut State, _: &mut Tx| {
-                s.set_quest_status(id, next);
-            })
-            .h(32.0),
-        )
-        .child(
-            parts::button("quest-delete", "Delete", Some(&icons::TRASH), p, move |s: &mut State, tx: &mut Tx| {
-                tx.blur();
-                s.delete(Deletable::Quest(id));
-            })
-            .h(32.0),
-        );
-    let body = row().w_full().grow(1.0).min_h(0.0).gap(28.0).child(tasks(s, quest, p).grow(1.3).min_w(0.0));
-    page.child(top).child(heading(s, quest, p)).child(body)
+    let add = lists::quick_add(s, p, &format!("Add to {}", quest.title), None);
+    let shows = Shows { quest: false, plan_ahead: true };
+    lists::page("quest-detail", heading(s, quest, p), Some(add), lists::rows(s, shows, "No tasks yet", p))
 }
 
-/// Colour dot, name (click to rename), a Completed or Archived badge, swatches, and the hours.
+/// Colour dot, name (click to rename), a Completed or Archived badge, complete and delete; under
+/// it the hours this week and the colour swatches.
 fn heading(s: &State, quest: &Quest, p: &Pal) -> El {
     let id = quest.id;
     let title: El = match s.quest_edit {
-        QuestEdit::Rename(editing) if editing == id => {
-            rename_field("quest-rename", ty::HEADING, s, p, move |s, title| {
-                s.dispatch(Command::RenameQuest { id, title });
-            })
-        }
+        QuestEdit::Rename(editing) if editing == id => rename_field("quest-rename", ty::H1, s, p, move |s, title| {
+            s.dispatch(Command::RenameQuest { id, title });
+        }),
         _ => text(quest.title.clone())
             .key("quest-title")
             .role("button")
             .label("Rename quest")
-            .font(ty::HEADING)
+            .font(ty::H1)
             .color(p.text)
             .cursor(Cursor::Text)
             .single_line()
@@ -84,8 +53,8 @@ fn heading(s: &State, quest: &Quest, p: &Pal) -> El {
     let mut name = row()
         .w_full()
         .center_y()
-        .gap(14.0)
-        .child(parts::dot(quest_color(quest.color), 14.0))
+        .gap(12.0)
+        .child(el().size(26.0, 26.0).center().child(parts::dot(quest_color(quest.color), 14.0)))
         .child(title.grow(1.0).min_w(0.0));
     let badge = match quest.status {
         QuestStatus::Active => None,
@@ -95,26 +64,40 @@ fn heading(s: &State, quest: &Quest, p: &Pal) -> El {
     if let Some(badge) = badge {
         name = name.child(parts::caps(badge, p).px(10.0).py(4.0).radius(6.0).border(1.0, p.border_strong));
     }
-    let open = s.snap.tasks.iter().filter(|t| t.quest_id == Some(id) && !t.is_done()).count();
-    let done = s.snap.tasks.iter().filter(|t| t.quest_id == Some(id) && t.is_done()).count();
-    let stat = |key: &str, value: String, label: &str, color: Color| {
-        row()
-            .gap(8.0)
-            .items_end()
-            .child(text(value).key(key.to_owned()).font(ty::STAT).color(color))
-            .child(text(label.to_owned()).font(ty::SMALL.lh(22.0)).color(p.muted))
+    let (status_label, next) = match quest.status {
+        QuestStatus::Active => ("Complete quest", QuestStatus::Completed),
+        QuestStatus::Completed => ("Reopen quest", QuestStatus::Active),
+        QuestStatus::Archived => ("Unarchive", QuestStatus::Active),
     };
-    let stats = row()
+    name = name
+        .child(
+            parts::icon_button("quest-status", status_label, &icons::COMPLETED, p.muted, p, move |s: &mut State, _| {
+                s.set_quest_status(id, next);
+            })
+            .size(32.0, 32.0)
+            .help(status_label),
+        )
+        .child(
+            parts::icon_button("quest-delete", "Delete quest", &icons::TRASH, p.muted, p, move |s: &mut State, tx| {
+                tx.blur();
+                s.delete(Deletable::Quest(id));
+            })
+            .size(32.0, 32.0)
+            .help("Delete quest"),
+        );
+    let sub = row()
         .w_full()
         .center_y()
-        .gap(28.0)
-        .child(stat("quest-week", format::hours(week_ms(s, id)), "this week", p.accent))
-        .child(stat("quest-total", format::hours(total_ms(s, id)), "total", p.text))
-        .child(stat("quest-open", open.to_string(), "open", p.text))
-        .child(stat("quest-done", done.to_string(), "done", p.text))
+        .pl(38.0)
+        .child(
+            text(format!("{} this week", format::hours(week_ms(s, id))))
+                .key("quest-week")
+                .font(ty::BODY)
+                .color(p.muted),
+        )
         .child(spacer())
         .child(swatches(id, quest.color, p));
-    col().w_full().gap(16.0).child(name).child(stats)
+    col().w_full().gap(4.0).child(name).child(sub)
 }
 
 fn swatches(id: EntityId, current: QuestColor, p: &Pal) -> El {
@@ -170,89 +153,4 @@ fn rename_field(key: &str, style: TextStyle, s: &State, p: &Pal, save: impl Fn(&
             s.quest_text.insert(&quest_view::home::one_line(content.text()));
             true
         })
-}
-
-fn tasks(s: &State, quest: &Quest, p: &Pal) -> El {
-    let id = quest.id;
-    let add = parts::add_box_with(
-        "quest-add-task",
-        &s.quest_add,
-        "Add a task to this quest…",
-        s,
-        |s: &mut State| &mut s.quest_add,
-        move |s: &mut State, _: &mut Tx| add_task(s, id),
-        false,
-        Some(destination(s, p)),
-    );
-    let options = CardOptions { show_time: true, key_prefix: "quest", wrap_title: false, list: None };
-    let mut list = col().key("quest-tasks").w_full().gap(10.0).pb(24.0);
-    let groups = quest_view::quests::task_groups(&s.snap, id, s.today());
-    if groups.is_empty() {
-        list = list.child(parts::empty_note("No tasks yet. Add the next step above.", p));
-    }
-    for (label, tasks) in groups {
-        list = list.child(parts::caps(label, p).mt(8.0));
-        for task in tasks {
-            list = list.child(parts::task_card(s, task, p, options));
-        }
-    }
-    col()
-        .h_full()
-        .min_h(0.0)
-        .gap(14.0)
-        .child(parts::caps("Tasks", p))
-        .child(add)
-        .child(list.scroll(ScrollSpec { stick_bottom: false }).grow(1.0).min_h(0.0).scroll_edge_fade(12.0))
-}
-
-/// Where a task added here goes: Today (the default, so it shows on Home) or the Backlog.
-fn destination(s: &State, p: &Pal) -> El {
-    let choice = |key: &str, label: &str, backlog: bool| {
-        let on = s.quest_add_backlog == backlog;
-        row()
-            .key(key.to_owned())
-            .role("radio")
-            .label(label)
-            .checked(on)
-            .focusable(true)
-            .h(30.0)
-            .px(10.0)
-            .center_y()
-            .radius(6.0)
-            .cursor(Cursor::Pointer)
-            .fill(if on { p.selected } else { Color::TRANSPARENT })
-            .border(1.0, if on { p.border_strong } else { Color::TRANSPARENT })
-            .child(text(label).font(ty::BODY).color(if on { p.text } else { p.muted }))
-            .on_press(move |s: &mut State| s.quest_add_backlog = backlog)
-    };
-    row()
-        .gap(2.0)
-        .padding(2.0)
-        .radius(8.0)
-        .fill(p.bar)
-        .border(1.0, p.border)
-        .child(choice("quest-add-today", "Today", false))
-        .child(choice("quest-add-backlog", "Backlog", true))
-}
-
-/// New tasks from here go on this quest, today or to the backlog.
-fn add_task(s: &mut State, quest: EntityId) {
-    let title = s.quest_add.text.trim().to_owned();
-    if title.is_empty() {
-        return;
-    }
-    let position = match s.add_at {
-        AddAt::Top => Position::Top,
-        AddAt::Bottom => Position::Bottom,
-    };
-    let planned_on = (!s.quest_add_backlog).then(|| s.today());
-    s.dispatch(Command::CreateTask {
-        id: EntityId::new(),
-        title,
-        quest_id: Some(quest),
-        planned_on,
-        due_on: None,
-        position,
-    });
-    s.quest_add.clear();
 }

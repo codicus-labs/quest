@@ -57,7 +57,7 @@ fn drag_to_column(rt: &mut Runtime<State>, title: &str, index: usize) {
 #[test]
 fn plan_drops_land_on_the_day_shown_after_moving_later() {
     let (mut rt, _dir) = app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     click(&mut rt, "plan-next");
     hold(&mut rt, 1.0);
@@ -80,7 +80,7 @@ fn plan_drops_land_on_the_day_shown_after_moving_later() {
 #[test]
 fn plan_drops_land_on_the_day_shown_after_moving_earlier() {
     let (mut rt, _dir) = app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     click(&mut rt, "plan-prev");
     hold(&mut rt, 1.0);
@@ -95,7 +95,7 @@ fn plan_drops_land_on_the_day_shown_after_moving_earlier() {
 #[test]
 fn a_scrolled_plan_column_drops_before_the_card_under_the_pointer() {
     let (mut rt, _dir) = app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     let today = rt.state.today();
     let titles: Vec<String> = rt.state.snap.tasks_on(today).map(|t| t.title.clone()).collect();

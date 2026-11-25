@@ -1,5 +1,5 @@
-//! A task's dialog, from Home and Plan, for open and done tasks: a click on the card (its title
-//! too), "Open" in its menu or ↵ over it opens it; title and description save as they change
+//! A task's dialog, from Today and Plan, for open and done tasks: a double click on a row, a click
+//! on a planner card (its title too), "Open" in its menu or ↵ opens it; title and description save as they change
 //! and show on the card; closing keeps them and leaves the planner where it was scrolled.
 
 use quest_domain::EntityId;
@@ -8,7 +8,7 @@ use rune::{Key, Mods, Runtime};
 use super::dnd_tests::{rect, settle, task};
 use super::plan_scroll_tests::drawn_offset;
 use super::shortcut_tests::hover;
-use super::tests::{TempDir, click, click_beside_title, command, demo_app, press, type_text};
+use super::tests::{TempDir, click, command, demo_app, double_click, press, type_text};
 use super::title_click_tests::scroll_into_view;
 use crate::state::{Overlay, State};
 
@@ -23,12 +23,17 @@ fn app(view: char) -> (Runtime<State>, TempDir) {
     (rt, dir)
 }
 
-/// Clicks the card away from its title and buttons: beside the title on Home, left of the "…"
-/// button on a narrow planner card.
+/// A list row ("row") or a planner card ("plan").
+fn card_key(prefix: &str, id: EntityId) -> String {
+    if prefix == "row" { format!("row-{id}") } else { format!("{prefix}-task-{id}") }
+}
+
+/// Opens the card's dialog: a double click on a row, a click left of the "…" button on a narrow
+/// planner card.
 fn click_card(rt: &mut Runtime<State>, prefix: &str, id: EntityId) {
-    scroll_into_view(rt, &format!("{prefix}-task-{id}"));
-    if prefix == "home" {
-        return click_beside_title(rt, prefix, id);
+    scroll_into_view(rt, &card_key(prefix, id));
+    if prefix == "row" {
+        return double_click(rt, &card_key(prefix, id));
     }
     let [x, y, _, h] = rect(rt, &format!("{prefix}-menu-{id}"));
     rt.pointer_down(x - 30.0, y + h / 2.0);
@@ -67,7 +72,7 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
         rt.wheel_xy(x + w / 2.0, y + h / 2.0, -60.0, 0.0);
         settle(&mut rt);
     }
-    scroll_into_view(&mut rt, &format!("{prefix}-task-{id}"));
+    scroll_into_view(&mut rt, &card_key(prefix, id));
     let place = (prefix == "plan").then(|| drawn_offset(&rt));
 
     click_card(&mut rt, prefix, id);
@@ -112,53 +117,56 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
 }
 
 #[test]
-fn home_edits_an_open_task() {
-    edits_in_the_dialog('1', "home", OPEN, false);
+fn today_edits_an_open_task() {
+    edits_in_the_dialog('2', "row", OPEN, false);
 }
 
 #[test]
-fn home_edits_a_done_task() {
-    edits_in_the_dialog('1', "home", DONE, true);
+fn today_edits_a_done_task() {
+    edits_in_the_dialog('2', "row", DONE, true);
 }
 
 #[test]
 fn plan_edits_an_open_task() {
-    edits_in_the_dialog('2', "plan", OPEN, true);
+    edits_in_the_dialog('3', "plan", OPEN, true);
 }
 
 #[test]
 fn plan_edits_a_done_task() {
-    edits_in_the_dialog('2', "plan", DONE, false);
+    edits_in_the_dialog('3', "plan", DONE, false);
 }
 
 #[test]
-fn the_title_menu_and_return_open_it_and_the_check_doesnt() {
-    let (mut rt, _dir) = app('1');
+fn a_click_selects_a_row_and_return_or_a_double_click_open_it_the_check_doesnt() {
+    let (mut rt, _dir) = app('2');
     let id = task(&rt, OPEN).id;
-    click(&mut rt, &format!("home-title-{id}"));
-    assert_eq!(modal_task(&rt), Some(id), "the title opens it");
+    click(&mut rt, &format!("row-title-{id}"));
+    assert_eq!((rt.state.selected_task, modal_task(&rt)), (Some(id), None), "a click only selects");
+    press(&mut rt, Key::Enter, Mods::default());
+    assert_eq!(modal_task(&rt), Some(id), "↵ on the selected row");
     press(&mut rt, Key::Escape, Mods::default());
     settle(&mut rt);
-    click(&mut rt, &format!("home-check-{id}"));
+    click(&mut rt, &format!("row-check-{id}"));
     assert!(modal_task(&rt).is_none(), "the check only checks");
-    click(&mut rt, &format!("home-check-{id}"));
+    assert!(task(&rt, OPEN).is_done());
+    click(&mut rt, &format!("row-check-{id}"));
 
-    click(&mut rt, &format!("home-menu-{id}"));
-    click(&mut rt, "card-menu-item0");
-    assert_eq!(modal_task(&rt), Some(id), "Open, first in the menu");
-    click(&mut rt, "task-modal-close");
-
+    rt.state.selected_task = None;
     settle(&mut rt);
     hover(&mut rt, id);
     press(&mut rt, Key::Enter, Mods::default());
-    assert_eq!(modal_task(&rt), Some(id), "↵ over the card");
+    assert_eq!(modal_task(&rt), Some(id), "↵ over the row");
+    press(&mut rt, Key::Escape, Mods::default());
+    settle(&mut rt);
+    double_click(&mut rt, &format!("row-title-{id}"));
+    assert_eq!(modal_task(&rt), Some(id), "a double click on the title");
 }
 
 #[test]
 fn an_empty_title_is_never_saved() {
-    let (mut rt, _dir) = app('1');
+    let (mut rt, _dir) = app('2');
     let id = task(&rt, OPEN).id;
-    click_card(&mut rt, "home", id);
+    click_card(&mut rt, "row", id);
     rt.update(|s, _| {
         let title = &mut s.task_modal_fields().title;
         title.focused = true;
@@ -175,10 +183,10 @@ fn an_empty_title_is_never_saved() {
 
 #[test]
 fn date_quest_and_delete_act_on_the_task() {
-    let (mut rt, _dir) = app('1');
+    let (mut rt, _dir) = app('2');
     let id = task(&rt, OPEN).id;
     let today = rt.state.today();
-    click_card(&mut rt, "home", id);
+    click_card(&mut rt, "row", id);
 
     rt.update(|s, _| {
         let date = &mut s.task_modal_fields().date;
@@ -214,7 +222,7 @@ fn date_quest_and_delete_act_on_the_task() {
 
 #[test]
 fn notes_keep_markdown_when_editing_and_hide_markers_when_viewing() {
-    let (mut rt, _dir) = app('1');
+    let (mut rt, _dir) = app('2');
     let id = task(&rt, OPEN).id;
     rt.update(move |s, _| s.open_task_modal(id));
     settle(&mut rt);

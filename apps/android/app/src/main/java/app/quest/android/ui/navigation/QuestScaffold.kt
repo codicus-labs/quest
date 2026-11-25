@@ -5,6 +5,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import app.quest.android.ui.shell.Avatar
+import app.quest.android.ui.theme.QuestSpacing
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -13,10 +22,6 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,55 +51,61 @@ import app.quest.android.R
 import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
-import app.quest.android.ui.workspaces.SwitcherActions
-import app.quest.android.ui.workspaces.TimerElsewhereBar
-import app.quest.android.ui.workspaces.WorkspaceSwitcher
-import uniffi.quest_mobile.WorkspacesData
 
-/** Four labels share the bar; beyond this text size they would break mid-word. */
+/** Five labels share the bar; beyond this text size they would break mid-word. */
 private const val NAV_LABEL_MAX_FONT_SCALE = 1.3f
 
-/** The four places in the bottom bar (phones) or navigation rail (tablets). */
-enum class TopDestination(@StringRes val label: Int, val icon: ImageVector) {
-    Home(R.string.nav_home, Icons.Filled.Home),
-    Plan(R.string.nav_plan, Icons.AutoMirrored.Filled.List),
+/** The four places in the bottom bar (phones) or navigation rail (tablets); Account opens a drawer. */
+enum class Tab(@StringRes val label: Int, val icon: ImageVector) {
+    Today(R.string.nav_today, QuestIcons.Today),
+    Inbox(R.string.nav_inbox, QuestIcons.Inbox),
     Quests(R.string.nav_quests, Icons.Filled.Star),
-    Review(R.string.nav_review, Icons.Filled.CheckCircle),
+    Tracked(R.string.nav_tracked, QuestIcons.Focus),
 }
 
 /**
- * The app frame: bottom bar or navigation rail chosen from the window size class (compact →
- * bar, medium/expanded → rail), and a top bar with the workspace switcher on the left, Focus, Search
- * and Account on the right, and below it a note while the focus timer runs in another workspace.
+ * The app frame: bottom bar or navigation rail chosen from the window size class (compact → bar,
+ * medium/expanded → rail) with the four tabs and Account (the workspace's avatar and name). Above
+ * the content a slim row with [leading] (Today's segment, a quest's way back) and Search; below it
+ * the note while the timer runs in another workspace. The [player] sits above the tabs.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuestScaffold(
-    destination: TopDestination,
-    onNavigate: (TopDestination) -> Unit,
+    tab: Tab,
+    onTab: (Tab) -> Unit,
     onSearch: () -> Unit,
     onAccount: () -> Unit,
-    onFocus: () -> Unit = {},
+    /** The shown workspace; empty while it is still opening. */
+    workspaceName: String,
+    leading: @Composable () -> Unit = {},
+    timerNote: @Composable () -> Unit = {},
+    player: @Composable () -> Unit = {},
     snackbarHost: @Composable () -> Unit = {},
-    /** The switcher's workspaces; null (still opening) shows the destination's title instead. */
-    workspaces: WorkspacesData? = null,
-    switcher: SwitcherActions = SwitcherActions.None,
     content: @Composable () -> Unit,
 ) {
     val colors = QuestTheme.colors
     val itemColors = itemColors()
+    val label = @Composable { text: String -> CappedFontScale(NAV_LABEL_MAX_FONT_SCALE) { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
     NavigationSuiteScaffold(
         navigationSuiteItems = {
-            TopDestination.entries.forEach { entry ->
+            Tab.entries.forEach { entry ->
                 item(
-                    selected = entry == destination,
-                    onClick = { onNavigate(entry) },
+                    selected = entry == tab,
+                    onClick = { onTab(entry) },
                     icon = { Icon(entry.icon, contentDescription = null) },
-                    label = { CappedFontScale(NAV_LABEL_MAX_FONT_SCALE) { Text(stringResource(entry.label), maxLines = 1) } },
+                    label = { label(stringResource(entry.label)) },
                     modifier = Modifier.testTag("tab-${entry.name.lowercase()}"),
                     colors = itemColors,
                 )
             }
+            item(
+                selected = false,
+                onClick = onAccount,
+                icon = { Avatar(workspaceName, 24.dp) },
+                label = { label(workspaceName.ifEmpty { stringResource(R.string.account) }) },
+                modifier = Modifier.testTag("tab-account"),
+                colors = itemColors,
+            )
         },
         navigationSuiteColors = NavigationSuiteDefaults.colors(
             navigationBarContainerColor = colors.bar,
@@ -106,34 +117,17 @@ fun QuestScaffold(
             containerColor = colors.bg,
             snackbarHost = snackbarHost,
             topBar = {
-                Column {
-                    TopAppBar(
-                        title = {
-                            when {
-                                workspaces != null -> WorkspaceSwitcher(workspaces, switcher)
-                                destination != TopDestination.Home -> Text(stringResource(destination.label), style = QuestType.stat, modifier = Modifier.semantics { heading() })
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = onFocus, modifier = Modifier.testTag("open-focus")) {
-                                Icon(QuestIcons.Focus, contentDescription = stringResource(R.string.focus))
-                            }
-                            IconButton(onClick = onSearch, modifier = Modifier.testTag("open-search")) {
-                                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search))
-                            }
-                            IconButton(onClick = onAccount, modifier = Modifier.testTag("open-account")) {
-                                Icon(Icons.Filled.AccountCircle, contentDescription = stringResource(R.string.account))
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = colors.bg,
-                            actionIconContentColor = colors.textMuted,
-                            titleContentColor = colors.text,
-                        ),
-                    )
-                    TimerElsewhereBar(workspaces, switcher.showTimer)
+                Column(Modifier.statusBarsPadding()) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = QuestSpacing.medium, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { leading() }
+                        IconButton(onClick = onSearch, modifier = Modifier.testTag("open-search")) {
+                            Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search), tint = colors.textMuted)
+                        }
+                    }
+                    timerNote()
                 }
             },
+            bottomBar = player,
         ) { padding ->
             KeyboardAwareBox(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { content() }
         }

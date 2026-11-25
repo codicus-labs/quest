@@ -1,0 +1,28 @@
+//! The macOS menu bar's View menu: the sidebar's views (⌘1–5), the tracked-time column (⌥⌘I),
+//! the command bar (⌘K) and the shortcuts overview. The window's own key handling sees each
+//! chord first (`keys_first`), so `keys::on_key` stays the one place that decides.
+
+use rune::{App, MenuItem, Tx};
+
+use crate::keys;
+use crate::state::{Overlay, State, View};
+use crate::ui::chrome::open_palette;
+
+pub fn install(app: App<State>) -> App<State> {
+    let item = |title: &str, action: fn(&mut State, &mut Tx), chord: Option<&str>| {
+        let mut item = MenuItem::new(title, action).menu("View").keys_first();
+        if let Some(chord) = chord.and_then(|c| c.parse().ok()) {
+            item = item.key_equivalent(chord);
+        }
+        item
+    };
+    app.menu_item(item("Inbox", |s, tx| s.go_with(View::Inbox, tx), Some("cmd+1")))
+        .menu_item(item("Today", |s, tx| s.go_with(View::Today, tx), Some("cmd+2")))
+        .menu_item(item("Plan", |s, tx| s.go_with(View::Plan, tx), Some("cmd+3")))
+        .menu_item(item("Review", |s, tx| s.go_with(View::Review, tx), Some("cmd+4")))
+        .menu_item(item("Logbook", |s, tx| s.go_with(View::Logbook, tx), Some("cmd+5")))
+        .menu_item(MenuItem::separator().menu("View"))
+        .menu_item(item("Tracked Time", |s, _| keys::toggle_tracked(s), Some("alt+cmd+i")))
+        .menu_item(item("Command Bar", open_palette, Some("cmd+k")))
+        .menu_item(item("Keyboard Shortcuts", |s, _| s.overlay = Overlay::Shortcuts, None))
+}

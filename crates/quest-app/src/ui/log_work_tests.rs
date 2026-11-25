@@ -47,7 +47,7 @@ fn open_log_work(rt: &mut Runtime<State>) {
 }
 
 #[test]
-fn fifteen_minutes_on_a_done_quest_task_show_in_home_and_review() {
+fn fifteen_minutes_on_a_done_quest_task_show_on_today_in_the_week_and_in_review() {
     let (mut rt, _dir) = demo_app();
     let reading = task(&rt, "Read a chapter, take a few notes");
     assert!(reading.is_done() && reading.quest_id.is_some());
@@ -68,15 +68,13 @@ fn fifteen_minutes_on_a_done_quest_task_show_in_home_and_review() {
     assert_eq!(logged.quest_id, reading.quest_id, "counts towards the task's quest");
     assert_eq!(sums(&rt), (week + QUARTER_HOUR_MS, today + QUARTER_HOUR_MS));
 
-    command(&mut rt, '1');
-    assert_eq!(text_of(&rt, "week-hours"), format!("{} this week", format::hours(week + QUARTER_HOUR_MS)));
-    let quest_today = {
-        let s = &rt.state;
-        s.snap.work_between(clock::midnight(s.today()), clock::midnight(s.today() + Days::new(1)), s.now).quest_ms
-    };
-    assert_eq!(text_of(&rt, "today-hours"), format::hours(quest_today));
+    command(&mut rt, '2');
+    let week_total = text_of(&rt, "week-total");
+    assert!(week_total.starts_with(&format!("{} / ", format::hours(week + QUARTER_HOUR_MS))), "{week_total}");
+    let tracked_today = text_of(&rt, "page-sub");
+    assert!(tracked_today.ends_with(&format!("{} tracked", format::hours(today + QUARTER_HOUR_MS))), "{tracked_today}");
 
-    command(&mut rt, '5');
+    command(&mut rt, '4');
     assert_eq!(text_of(&rt, "review-quest-hours"), format::hours(week + QUARTER_HOUR_MS));
 }
 

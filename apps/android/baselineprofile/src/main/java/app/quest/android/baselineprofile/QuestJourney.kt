@@ -12,12 +12,12 @@ private const val WAIT_MS = 5_000L
 private fun MacrobenchmarkScope.waitFor(tag: String) =
     device.wait(Until.findObject(By.res(tag)), WAIT_MS) ?: error("\"$tag\" did not show within $WAIT_MS ms.")
 
-/** Waits until Home shows its first content. */
+/** Waits until Today shows its first content. */
 fun MacrobenchmarkScope.awaitHome() {
-    waitFor("tab-home")
+    waitFor("tab-today")
 }
 
-/** What a user does most: scroll Home, and open the plan and scroll it. */
+/** What a user does most: scroll Today, and open the plan and scroll it. */
 fun MacrobenchmarkScope.everydayJourney() {
     awaitHome()
     device.findObject(By.scrollable(true))?.apply {
@@ -25,13 +25,13 @@ fun MacrobenchmarkScope.everydayJourney() {
         fling(Direction.DOWN)
         fling(Direction.UP)
     }
-    waitFor("tab-plan").click()
+    waitFor("segment-plan").click()
     device.waitForIdle()
     device.findObject(By.scrollable(true))?.apply {
         setGestureMargin(device.displayWidth / 5)
         fling(Direction.DOWN)
         fling(Direction.UP)
     }
-    waitFor("tab-home").click()
+    waitFor("segment-today").click()
     device.waitForIdle()
 }

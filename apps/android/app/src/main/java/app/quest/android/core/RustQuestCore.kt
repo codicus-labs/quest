@@ -45,6 +45,13 @@ import uniffi.quest_mobile.TaskChoices
 import uniffi.quest_mobile.TaskDetail
 import uniffi.quest_mobile.TaskSection
 import uniffi.quest_mobile.WorkspacesData
+import uniffi.quest_mobile.EntryCheck
+import uniffi.quest_mobile.EntryDraft
+import uniffi.quest_mobile.ListKind
+import uniffi.quest_mobile.PlayerCard
+import uniffi.quest_mobile.QuestNav
+import uniffi.quest_mobile.TaskList
+import uniffi.quest_mobile.TrackedData
 import uniffi.quest_mobile.checkRepeat
 import uniffi.quest_mobile.checkServerUrl
 import uniffi.quest_mobile.pickedDay
@@ -56,6 +63,26 @@ import uniffi.quest_mobile.toggleRepeatWeekday
 /** [QuestCoreApi] over the UniFFI bindings of `crates/quest-mobile`. */
 class RustQuestCore private constructor(private val core: QuestCore) : QuestCoreApi {
     override fun home(now: Moment, query: HomeQuery): HomeData = core.home(now, query)
+
+    override fun taskList(kind: ListKind, now: Moment): TaskList = core.taskList(kind, now)
+
+    override fun addToList(kind: ListKind, title: String, now: Moment): String = core.addToList(kind, title, now)
+
+    override fun questNav(now: Moment): QuestNav = core.questNav(now)
+
+    override fun tracked(now: Moment): TrackedData = core.tracked(now)
+
+    override fun player(now: Moment): PlayerCard = core.player(now)
+
+    override fun entryDraft(entryId: String, now: Moment): EntryDraft = core.entryDraft(entryId, now)
+
+    override fun checkEntry(draft: EntryDraft, now: Moment): EntryCheck = core.checkEntry(draft, now)
+
+    override fun saveEntry(draft: EntryDraft, now: Moment) = core.saveEntry(draft, now)
+
+    override fun deleteEntry(entryId: String, now: Moment) = core.deleteEntry(entryId, now)
+
+    override fun bookEntryAsOrganizing(entryId: String) = core.bookEntryAsOrganizing(entryId)
 
     override fun addTask(title: String, section: TaskSection, position: AddPosition, query: HomeQuery, now: Moment): String =
         core.addTask(title, section, position, query, now)

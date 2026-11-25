@@ -78,3 +78,15 @@ fn giving_an_organizing_session_a_task_makes_it_task_work() {
     let edited = &r.snapshot.time_entries[0];
     assert_eq!((edited.kind, edited.task_id, edited.quest_id), (EntryKind::Task, Some(task), Some(quest)));
 }
+
+#[test]
+fn booking_a_task_session_as_organizing_keeps_its_times_and_remembers_the_task() {
+    let (mut r, _, task) = setup();
+    let entry = EntityId::new();
+    r.run(Command::LogTime { entry_id: entry, task_id: Some(task), started_at: at(9, 0), ended_at: at(9, 30) });
+    r.run(Command::BookEntryAsOrganizing { id: entry });
+    let booked = &r.snapshot.time_entries[0];
+    assert_eq!((booked.kind, booked.task_id, booked.quest_id), (EntryKind::Organizing, None, None));
+    assert_eq!((booked.origin_task_id, booked.started_at, booked.ended_at), (Some(task), at(9, 0), Some(at(9, 30))));
+    assert_eq!(plan(&Command::BookEntryAsOrganizing { id: entry }, &r.snapshot), Ok(Vec::new()));
+}

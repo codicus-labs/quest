@@ -103,7 +103,7 @@ class QuestEditorViewModelTest {
         assertEquals(card, core.quests.active.last())
         assertEquals("Active · 2" to "Completed · 1", core.quests.activeLabel to core.quests.completedLabel)
 
-        QuestsViewModel(holder, SavedStateHandle()).undo()
+        holder.perform { c, now -> c.undo(now) }
         assertEquals(card, core.quests.completed.first())
         assertEquals(listOf("toggle-quest q1", "toggle-quest q1", "undo"), core.calls)
     }

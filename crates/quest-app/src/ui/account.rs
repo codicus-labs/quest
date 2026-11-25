@@ -10,8 +10,8 @@ use crate::state::ai_connections::{ConnectionsView, connection_detail, connectio
 use crate::state::auth::session_expired;
 use crate::state::{AuthStep, Overlay, State};
 use crate::theme::{Pal, ty};
+use crate::ui::chrome::{sync_badge, tone_color};
 use crate::ui::parts;
-use crate::ui::topbar::{sync_badge, tone_color};
 use crate::{clock, icons};
 
 pub fn layer(s: &State, p: &Pal, layer: &mut Vec<El>) {

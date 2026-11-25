@@ -68,9 +68,21 @@ const MAX_SEARCH_HITS: usize = 8;
 /// Entries for `query` in `mode`; `now` is the local time (for "today" and upcoming times), `at`
 /// the same moment in UTC (for which quests were used last).
 pub fn entries(mode: Mode, query: &str, snapshot: &Snapshot, now: NaiveDateTime, at: DateTime<Utc>) -> Vec<Entry> {
+    entries_for(&View::ALL, mode, query, snapshot, now, at)
+}
+
+/// `entries` with "Go to" jumps to `views` (⌘1… in that order): the desktop passes its sidebar.
+pub fn entries_for(
+    views: &[View],
+    mode: Mode,
+    query: &str,
+    snapshot: &Snapshot,
+    now: NaiveDateTime,
+    at: DateTime<Utc>,
+) -> Vec<Entry> {
     let query = query.trim();
     match mode {
-        Mode::Commands => commands(query, snapshot),
+        Mode::Commands => commands(views, query, snapshot),
         Mode::MoveTo(task) => move_to(task, query, now.date()),
         Mode::AssignQuest(task) => assign_quest(task, query, snapshot, at),
         Mode::FilterQuest => filter_quest(query, snapshot),
@@ -91,9 +103,9 @@ pub fn placeholder(mode: Mode) -> &'static str {
 
 /// Create actions first when there is text, then jumps, open tasks to focus on (and to move,
 /// when searching), and quests.
-fn commands(query: &str, snapshot: &Snapshot) -> Vec<Entry> {
+fn commands(views: &[View], query: &str, snapshot: &Snapshot) -> Vec<Entry> {
     let mut out = Vec::new();
-    for (i, view) in View::ALL.iter().enumerate() {
+    for (i, view) in views.iter().enumerate() {
         let title = format!("Go to {}", view.title());
         if matches(&title, query) {
             out.push(Entry { title, hint: format!("⌘{}", i + 1), action: Action::Go(*view) });

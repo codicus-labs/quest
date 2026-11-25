@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests;
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, TimeZone};
 use quest_domain::{DateField, EntityId, Snapshot, Task, is_inbox, is_today, today_rank};
 
 /// Open tasks planned or due today or earlier: overdue first, then carried over, then due today,
@@ -25,6 +25,59 @@ pub fn logbook(snapshot: &Snapshot) -> Vec<&Task> {
     let mut done: Vec<&Task> = snapshot.tasks.iter().filter(|t| t.is_done()).collect();
     done.sort_by_key(|t| std::cmp::Reverse(t.completed_at));
     done
+}
+
+/// Tasks completed on the local day `today` (the "n done" under Today), the most recent first.
+pub fn done_today<'a, Tz: TimeZone>(snapshot: &'a Snapshot, today: NaiveDate, tz: &Tz) -> Vec<&'a Task> {
+    logbook(snapshot).into_iter().filter(|t| completed_on(t, tz) == Some(today)).collect()
+}
+
+/// A quest's open tasks, in list order.
+pub fn quest_open(snapshot: &Snapshot, quest: EntityId) -> Vec<&Task> {
+    snapshot.tasks.iter().filter(|t| t.quest_id == Some(quest) && !t.is_done()).collect()
+}
+
+/// A quest's done tasks, the most recently completed first.
+pub fn quest_done(snapshot: &Snapshot, quest: EntityId) -> Vec<&Task> {
+    logbook(snapshot).into_iter().filter(|t| t.quest_id == Some(quest)).collect()
+}
+
+/// The Logbook grouped by the local day each task was completed, the newest day first.
+pub fn logbook_days<'a, Tz: TimeZone>(snapshot: &'a Snapshot, tz: &Tz) -> Vec<(NaiveDate, Vec<&'a Task>)> {
+    let mut days: Vec<(NaiveDate, Vec<&Task>)> = Vec::new();
+    for task in logbook(snapshot) {
+        let Some(day) = completed_on(task, tz) else { continue };
+        match days.last_mut() {
+            Some((last, tasks)) if *last == day => tasks.push(task),
+            _ => days.push((day, vec![task])),
+        }
+    }
+    days
+}
+
+/// Open tasks planned after today: the Plan count.
+pub fn planned_ahead(snapshot: &Snapshot, today: NaiveDate) -> Vec<&Task> {
+    snapshot.tasks.iter().filter(|t| !t.is_done() && t.planned_on.is_some_and(|d| d > today)).collect()
+}
+
+/// The sidebar's counts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NavCounts {
+    pub inbox: usize,
+    pub today: usize,
+    pub plan: usize,
+}
+
+pub fn nav_counts(snapshot: &Snapshot, today: NaiveDate) -> NavCounts {
+    NavCounts {
+        inbox: inbox(snapshot).len(),
+        today: self::today(snapshot, today).len(),
+        plan: planned_ahead(snapshot, today).len(),
+    }
+}
+
+fn completed_on<Tz: TimeZone>(task: &Task, tz: &Tz) -> Option<NaiveDate> {
+    task.completed_at.map(|at| at.with_timezone(tz).date_naive())
 }
 
 /// How often a task's dates were postponed.

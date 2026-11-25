@@ -1,5 +1,5 @@
-//! A card's title is no field of its own: a click on it opens the task's dialog (Home and Plan,
-//! open and done tasks), where the title is edited, and a drag that starts on it moves the card.
+//! A planner card's title is no field of its own: a click on it opens the task's dialog (open and
+//! done tasks), where the title is edited, and a drag that starts on it moves the card.
 
 use chrono::Days;
 use quest_domain::EntityId;
@@ -21,7 +21,7 @@ fn app() -> (Runtime<State>, TempDir) {
 }
 
 /// `demo_app`'s window height.
-const WINDOW_H: f32 = 750.0;
+const WINDOW_H: f32 = 900.0;
 
 /// Wheels the list under a card until all of it is above the window's bottom (Plan's done cards
 /// sit below the fold).
@@ -63,29 +63,19 @@ fn title_click_opens_the_dialog(view: char, prefix: &str, title: &str) {
 }
 
 #[test]
-fn home_title_of_an_open_task_opens_its_dialog() {
-    title_click_opens_the_dialog('1', "home", OPEN);
-}
-
-#[test]
-fn home_title_of_a_done_task_opens_its_dialog() {
-    title_click_opens_the_dialog('1', "home", DONE);
-}
-
-#[test]
 fn plan_title_of_an_open_task_opens_its_dialog() {
-    title_click_opens_the_dialog('2', "plan", OPEN);
+    title_click_opens_the_dialog('3', "plan", OPEN);
 }
 
 #[test]
 fn plan_title_of_a_done_task_opens_its_dialog() {
-    title_click_opens_the_dialog('2', "plan", DONE);
+    title_click_opens_the_dialog('3', "plan", DONE);
 }
 
 #[test]
 fn a_drag_from_the_title_moves_the_card_and_opens_nothing() {
     let (mut rt, _dir) = app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     let id: EntityId = task(&rt, OPEN).id;
     let today = rt.state.today();

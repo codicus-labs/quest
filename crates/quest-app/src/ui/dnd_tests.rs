@@ -9,8 +9,10 @@ use super::tests::{TempDir, click, command, demo_app, plan_key, press};
 use crate::dnd::DragState;
 use crate::state::State;
 
+/// The planner, whose today column the drags here use.
 fn app() -> (Runtime<State>, TempDir) {
     let (mut rt, dir) = demo_app();
+    command(&mut rt, '3');
     settle(&mut rt);
     (rt, dir)
 }
@@ -57,16 +59,16 @@ fn open_titles(rt: &Runtime<State>) -> Vec<String> {
 }
 
 #[test]
-fn reorder_in_the_home_list_by_the_handle() {
+fn reorder_in_a_plan_column_by_the_handle() {
     let (mut rt, _dir) = app();
     let easy = task(&rt, "Easy 5 km. Leave the headphones at home.").id;
     let design = task(&rt, "Design the next chapter").id;
-    let [_, top, _, _] = rect(&rt, &format!("home-task-{design}"));
-    let from = center(&rt, &format!("home-title-{easy}"));
+    let [_, top, _, _] = rect(&rt, &format!("plan-task-{design}"));
+    let from = center(&rt, &format!("plan-title-{easy}"));
     drag_to(&mut rt, from, (from.0, top + 10.0));
     rt.settle_all();
     rt.frame(0.0);
-    assert_eq!(rect(&rt, &format!("home-task-{easy}"))[1], top, "its room opened where it lands");
+    assert_eq!(rect(&rt, &format!("plan-task-{easy}"))[1], top, "its room opened where it lands");
     assert!(rt.find("drag-lift").is_some(), "the lifted card follows the pointer");
     rt.pointer_up(from.0, top + 10.0);
     rt.frame(0.0);
@@ -78,7 +80,7 @@ fn reorder_in_the_home_list_by_the_handle() {
 #[test]
 fn plan_cards_move_between_day_columns_and_to_the_backlog() {
     let (mut rt, _dir) = app();
-    command(&mut rt, '2');
+    command(&mut rt, '3');
     settle(&mut rt);
     let polish = task(&rt, "Polish the details that matter");
     let today = rt.state.today();
@@ -103,7 +105,7 @@ fn escape_cancels_a_drag_and_nothing_changes() {
     let (mut rt, _dir) = app();
     let order = open_titles(&rt);
     let easy = task(&rt, "Easy 5 km. Leave the headphones at home.").id;
-    let from = center(&rt, &format!("home-title-{easy}"));
+    let from = center(&rt, &format!("plan-title-{easy}"));
     drag_to(&mut rt, from, (from.0, from.1 - 300.0));
     assert!(rt.state.drag.dragging().is_some());
     press(&mut rt, Key::Escape, Mods::default());
@@ -119,7 +121,7 @@ fn a_dropped_card_outside_any_list_snaps_back() {
     let (mut rt, _dir) = app();
     let order = open_titles(&rt);
     let easy = task(&rt, "Easy 5 km. Leave the headphones at home.");
-    let from = center(&rt, &format!("home-title-{}", easy.id));
+    let from = center(&rt, &format!("plan-title-{}", easy.id));
     drag(&mut rt, from, (from.0, 20.0));
     assert_eq!(open_titles(&rt), order);
     assert_eq!(task(&rt, "Easy 5 km. Leave the headphones at home."), easy, "unchanged");
@@ -129,7 +131,7 @@ fn a_dropped_card_outside_any_list_snaps_back() {
 fn option_arrows_move_a_focused_card() {
     let (mut rt, _dir) = app();
     let make = task(&rt, "Make the first impression feel effortless").id;
-    rt.update(|_, tx| tx.focus_when_shown(format!("home-task-{make}"), true));
+    rt.update(|_, tx| tx.focus_when_shown(format!("plan-task-{make}"), true));
     rt.frame(0.0);
     let alt = Mods { alt: true, ..Mods::default() };
     press(&mut rt, Key::Up, alt);

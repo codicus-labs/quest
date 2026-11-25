@@ -9,8 +9,8 @@ use crate::icons;
 use crate::menu::{self, Step, TaskAction};
 use crate::state::{State, TaskMenu, View};
 use crate::theme::Pal;
+use crate::ui::chrome::open_palette_in;
 use crate::ui::parts;
-use crate::ui::topbar::open_palette_in;
 
 const MENU_KEY: &str = "card-menu";
 /// rune-kit anchors a menu to `{key}-trigger`: the open menu's button takes that key.

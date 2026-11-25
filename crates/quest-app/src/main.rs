@@ -11,6 +11,7 @@ mod dnd;
 mod icons;
 mod keys;
 mod loopback;
+mod menu_bar;
 mod settings;
 mod state;
 mod theme;
@@ -42,7 +43,7 @@ type Scene = (&'static str, fn(&mut State));
 
 /// Named starting states for headless snapshots (`--scene plan`).
 const SCENES: &[Scene] = &[
-    ("home", |s| s.go(View::Home)),
+    ("home", |s| s.go(View::Today)),
     ("plan", |s| s.go(View::Plan)),
     ("workspace-menu", |s| {
         workspaces_scene(s);
@@ -100,7 +101,10 @@ const SCENES: &[Scene] = &[
             s.delete(undo::Deletable::Task(task));
         }
     }),
-    ("card-menu", |s| s.menu = first_open_task(s).map(|task| state::TaskMenu { task, prefix: "home" })),
+    ("card-menu", |s| {
+        s.go(View::Plan);
+        s.menu = first_open_task(s).map(|task| state::TaskMenu { task, prefix: "plan" });
+    }),
     ("task-modal", |s| {
         if let Some(task) = first_open_task(s) {
             s.open_task_modal(task);
@@ -157,15 +161,68 @@ const SCENES: &[Scene] = &[
     }),
     ("home-quests", |s| {
         more_quests(s);
-        s.toggle_quest_picker(state::quest_picker::PickFor::HomeAdd);
+        s.toggle_quest_picker(state::quest_picker::PickFor::QuickAdd);
     }),
     ("quest-picker-empty", |s| task_modal_quests(s, "zzz")),
+    ("today", today_selected),
+    ("today-light", |s| light(s, today_selected)),
+    ("inbox", |s| s.go(View::Inbox)),
+    ("inbox-light", |s| light(s, |s| s.go(View::Inbox))),
+    ("logbook", |s| s.go(View::Logbook)),
+    ("logbook-light", |s| light(s, |s| s.go(View::Logbook))),
+    ("quest-detail-light", |s| {
+        light(s, |s| {
+            let quest = s.snap.active_quests().next().map(|q| q.id);
+            if let Some(quest) = quest {
+                s.go(View::Quest(quest));
+            }
+        })
+    }),
+    ("tracked-closed", |s| s.right_column = false),
+    ("tracked-closed-light", |s| light(s, |s| s.right_column = false)),
+    ("entry-editor", entry_editor),
+    ("entry-editor-light", |s| light(s, entry_editor)),
+    ("shortcuts-light", |s| light(s, |s| s.overlay = Overlay::Shortcuts)),
+    ("organizing", organizing),
+    ("organizing-light", |s| light(s, organizing)),
     ("light", |s| s.dark = false),
     ("light-plan", |s| {
         s.dark = false;
         s.go(View::Plan);
     }),
 ];
+
+/// `scene` in the light appearance.
+fn light(s: &mut State, scene: fn(&mut State)) {
+    s.dark = false;
+    scene(s);
+}
+
+/// Today with its second row selected, as J leaves it.
+fn today_selected(s: &mut State) {
+    s.go(View::Today);
+    s.select_next_row(true);
+    s.select_next_row(true);
+}
+
+/// The entry editor on the timeline's first session today, as a click on its block opens it.
+fn entry_editor(s: &mut State) {
+    let day = quest_view::tracked::day_timeline(&s.snap, s.today(), &chrono::Local, s.now);
+    if let Some(block) = day.blocks.first() {
+        s.open_entry_editor(block.entry);
+    }
+}
+
+/// The running session booked as Organizing for its last twelve minutes: the player offers to go
+/// back to the task.
+fn organizing(s: &mut State) {
+    let now = s.clock.now();
+    s.dispatch(quest_domain::Command::RebookAsOrganizing {
+        entry_id: quest_domain::EntityId::new(),
+        since: now - chrono::Duration::minutes(12),
+        now,
+    });
+}
 
 /// Today's first open task's dialog, with the quest picker open on `search`.
 fn task_modal_quests(s: &mut State, search: &str) {
@@ -284,15 +341,18 @@ fn main() {
     let repeat_zone = iana_time_zone::get_timezone().ok().and_then(|zone| zone.parse().ok()).unwrap_or(chrono_tz::UTC);
     let spec = AppSpec {
         scenes: SCENES,
-        min_size: Some((900.0, 600.0)),
+        min_size: Some((1000.0, 640.0)),
         poll: Some(|s: &mut State, clock, tx| s.refresh(clock, tx)),
         on_key: Some(keys::on_key),
-        ..AppSpec::new("Quest", (1100.0, 750.0), || unreachable!("state comes from App::init"), ui::view)
+        ..AppSpec::new("Quest", (1440.0, 900.0), || unreachable!("state comes from App::init"), ui::view)
     };
-    // Quest draws its own top bar; the traffic lights sit in it, and the bar keeps clear of them.
-    let app = App::new(spec)
-        .titlebar(Titlebar::new(ui::topbar::HEIGHT))
-        .on_close(|s: &mut State, _: &mut rune::Tx| s.cancel_capture());
+    // Quest draws its own title band; the traffic lights sit in the sidebar's, above the
+    // workspace switcher.
+    let app = menu_bar::install(
+        App::new(spec)
+            .titlebar(Titlebar::new(ui::sidebar::TITLEBAR))
+            .on_close(|s: &mut State, _: &mut rune::Tx| s.cancel_capture()),
+    );
     let handle = app.handle();
     // Opening the database happens once at launch, before the event loop draws anything;
     // afterwards all disk and network work is on the store's worker thread and the account

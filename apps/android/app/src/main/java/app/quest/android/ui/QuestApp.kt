@@ -6,19 +6,9 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
-import app.quest.android.settings.FocusPreferences
-import app.quest.android.settings.FocusPrefs
-import app.quest.android.ui.focus.FocusActions
-import app.quest.android.ui.focus.FocusScreen
-import app.quest.android.ui.focus.FocusUiState
-import app.quest.android.ui.focus.FocusViewModel
-import kotlinx.coroutines.launch
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -26,77 +16,116 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.quest.android.R
 import app.quest.android.core.RustPlanRules
+import app.quest.android.settings.FocusPreferences
+import app.quest.android.settings.FocusPrefs
 import app.quest.android.ui.account.AccountActions
 import app.quest.android.ui.account.AccountDialogActions
+import app.quest.android.ui.account.AccountDialogs
 import app.quest.android.ui.account.AccountScreen
 import app.quest.android.ui.account.AccountViewModel
+import app.quest.android.ui.archive.ArchiveViewModel
 import app.quest.android.ui.components.QuestSnackbarHost
-import app.quest.android.ui.home.HomeActions
-import app.quest.android.ui.home.HomeScreen
-import app.quest.android.ui.home.HomeViewModel
-import app.quest.android.ui.navigation.DetailScaffold
-import app.quest.android.ui.navigation.QuestScaffold
-import app.quest.android.ui.navigation.TopDestination
+import app.quest.android.ui.focus.FocusActions
+import app.quest.android.ui.focus.FocusScreen
+import app.quest.android.ui.focus.FocusUiState
+import app.quest.android.ui.focus.FocusViewModel
+import app.quest.android.ui.lists.ListViewModel
 import app.quest.android.ui.logwork.LogWorkActions
 import app.quest.android.ui.logwork.LogWorkSheet
 import app.quest.android.ui.logwork.LogWorkViewModel
+import app.quest.android.ui.logwork.TaskPickerActions
+import app.quest.android.ui.navigation.DetailScaffold
+import app.quest.android.ui.navigation.QuestScaffold
+import app.quest.android.ui.navigation.Tab
 import app.quest.android.ui.plan.PlanActions
 import app.quest.android.ui.plan.PlanScreen
 import app.quest.android.ui.plan.PlanViewModel
+import app.quest.android.ui.quests.QuestEditorViewModel
+import app.quest.android.ui.quests.QuestNavViewModel
+import app.quest.android.ui.review.ReviewViewModel
+import app.quest.android.ui.search.SearchViewModel
 import app.quest.android.ui.settings.AiConnectionsActions
 import app.quest.android.ui.settings.AiFeaturesActions
 import app.quest.android.ui.settings.SettingsActions
 import app.quest.android.ui.settings.SettingsScreen
 import app.quest.android.ui.settings.SettingsViewModel
-import androidx.compose.foundation.layout.Box
+import app.quest.android.ui.shell.AccountDrawer
+import app.quest.android.ui.shell.DrawerActions
+import app.quest.android.ui.shell.DrawerData
+import app.quest.android.ui.shell.MiniPlayer
+import app.quest.android.ui.shell.PlayerActions
+import app.quest.android.ui.shell.PlayerViewModel
+import app.quest.android.ui.shell.TodaySegment
 import app.quest.android.ui.task.TaskSheet
 import app.quest.android.ui.task.TaskSheetActions
 import app.quest.android.ui.task.TaskSheetViewModel
-import app.quest.android.ui.archive.ArchiveViewModel
-import app.quest.android.ui.quests.QuestDetailUiState
-import app.quest.android.ui.quests.QuestDetailViewModel
-import app.quest.android.ui.quests.QuestEditorViewModel
-import app.quest.android.ui.quests.QuestsViewModel
-import app.quest.android.ui.review.ReviewViewModel
-import app.quest.android.ui.search.SearchViewModel
 import app.quest.android.ui.theme.QuestTheme
+import app.quest.android.ui.tracked.EntryActions
+import app.quest.android.ui.tracked.EntrySheet
+import app.quest.android.ui.tracked.EntryViewModel
+import app.quest.android.ui.tracked.TrackedViewModel
 import app.quest.android.ui.workspaces.ManageActions
 import app.quest.android.ui.workspaces.ManageWorkspacesSheet
-import app.quest.android.ui.workspaces.SwitcherActions
+import app.quest.android.ui.workspaces.TimerElsewhereBar
 import app.quest.android.ui.workspaces.TimerElsewhereNote
 import app.quest.android.ui.workspaces.WorkspacesUiState
 import app.quest.android.ui.workspaces.WorkspacesViewModel
+import java.io.Serializable
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import uniffi.quest_mobile.AppView
+import uniffi.quest_mobile.ListKind
 
-/** Screens opened from the top bar, on top of the current destination. */
-enum class Detail(@StringRes val title: Int) { Search(R.string.search), Account(R.string.account), Settings(R.string.settings), Archive(R.string.archive) }
+/** Pages opened on top of the tabs. */
+enum class Detail(@StringRes val title: Int) {
+    Search(R.string.search),
+    Account(R.string.account),
+    Settings(R.string.settings),
+    Archive(R.string.archive),
+    Review(R.string.nav_review),
+}
+
+/** Where the Quests tab is: the quests, one quest's list, or the Logbook. */
+sealed interface QuestsPage : Serializable {
+    data object Nav : QuestsPage
+
+    data class Quest(val questId: String) : QuestsPage
+
+    data object Logbook : QuestsPage
+}
 
 class AppViewModels(
-    val home: HomeViewModel,
+    val list: ListViewModel,
     val taskSheet: TaskSheetViewModel,
     val account: AccountViewModel,
     val settings: SettingsViewModel,
     val focus: FocusViewModel,
     val plan: PlanViewModel,
     val logWork: LogWorkViewModel,
-    val quests: QuestsViewModel,
+    val questNav: QuestNavViewModel,
     val questEditor: QuestEditorViewModel,
-    val questDetail: QuestDetailViewModel,
+    val tracked: TrackedViewModel,
+    val entry: EntryViewModel,
+    val player: PlayerViewModel,
     val review: ReviewViewModel,
     val archive: ArchiveViewModel,
     val search: SearchViewModel,
@@ -115,7 +144,10 @@ fun QuestApp(
     /** Whether AI capture's entries show (the search's action). */
     captureShown: Flow<Boolean> = flowOf(false),
 ) {
-    var destination by rememberSaveable { mutableStateOf(TopDestination.Home) }
+    var tab by rememberSaveable { mutableStateOf(Tab.Today) }
+    var showPlan by rememberSaveable { mutableStateOf(false) }
+    var questsPage by rememberSaveable { mutableStateOf<QuestsPage>(QuestsPage.Nav) }
+    var drawerOpen by rememberSaveable { mutableStateOf(false) }
     var details by rememberSaveable { mutableStateOf(listOf<Detail>()) }
     val snackbar = remember { SnackbarHostState() }
     val captureEntries by captureShown.collectAsStateWithLifecycle(false)
@@ -128,96 +160,213 @@ fun QuestApp(
     val logWork = viewModels.logWork
     val logWorkState by logWork.state.collectAsStateWithLifecycle()
     ShowMessages(logWork.message, logWork::dismissMessage, snackbar)
+    val entry = viewModels.entry
+    val entryState by entry.state.collectAsStateWithLifecycle()
+    ShowMessages(entry.message, entry::dismissMessage, snackbar)
+    val player = viewModels.player
+    val playerCard by player.state.collectAsStateWithLifecycle()
+    ShowMessages(player.message, player::dismissMessage, snackbar)
+    val sheet = viewModels.taskSheet
+    val sheetState by sheet.state.collectAsStateWithLifecycle()
+    ShowMessages(sheet.message, sheet::dismissMessage, snackbar)
 
     val open = { detail: Detail -> details = details + detail }
+    val openQuest = { questId: String ->
+        details = emptyList()
+        tab = Tab.Quests
+        questsPage = QuestsPage.Quest(questId)
+    }
     val openSearch = {
         viewModels.search.reset()
         open(Detail.Search)
     }
+    BackHandler(enabled = details.isEmpty() && tab == Tab.Quests && questsPage != QuestsPage.Nav) { questsPage = QuestsPage.Nav }
     BackHandler(enabled = details.isNotEmpty()) { details = details.dropLast(1) }
     LaunchedEffect(requests) {
         requests.collect { request ->
             // Whatever covers the tabs steps aside, so the asked sheet is on screen.
             details = emptyList()
+            drawerOpen = false
             if (focus.state.value != FocusUiState.Hidden) focus.close()
             when (request) {
-                is AppRequest.OpenTask -> viewModels.taskSheet.open(request.taskId)
-                AppRequest.LogWork -> viewModels.logWork.open()
+                is AppRequest.OpenTask -> sheet.open(request.taskId)
+                AppRequest.LogWork -> logWork.open()
             }
         }
     }
-    val questPageState by viewModels.questDetail.state.collectAsStateWithLifecycle()
     val workspaces = viewModels.workspaces
     val workspacesState by workspaces.state.collectAsStateWithLifecycle()
+    val workspacesData = (workspacesState as? WorkspacesUiState.Ready)?.data
     ShowMessages(workspaces.message, workspaces::dismissMessage, snackbar)
     LaunchedEffect(workspaces) {
-        workspaces.switched.collect { if (viewModels.leaveWorkspace()) destination = TopDestination.Quests }
+        workspaces.switched.collect {
+            viewModels.leaveWorkspace()
+            if (questsPage is QuestsPage.Quest) questsPage = QuestsPage.Nav
+        }
     }
-    val switcher = switcherActions(viewModels, showQuests = { destination = TopDestination.Quests })
+    val switchTo = { id: String ->
+        val isLive = workspacesData?.live?.any { it.id == id } == true
+        if (isLive) {
+            viewModels.leaveWorkspace()
+            if (questsPage is QuestsPage.Quest) questsPage = QuestsPage.Nav
+        }
+        workspaces.switchTo(id)
+    }
+    val showTimer = {
+        val timer = workspacesData?.timerElsewhere
+        if (timer != null && switchTo(timer.workspaceId)) focus.open()
+    }
+    val accountVm = viewModels.account
+    val accountState by accountVm.state.collectAsStateWithLifecycle()
     val dark = QuestTheme.isDark
     val searchNavigation = SearchNavigation(
         close = { details = details.filter { it != Detail.Search } },
-        goTo = { destination = it },
-        openArchive = { open(Detail.Archive) },
+        show = { view ->
+            when (view) {
+                AppView.HOME, AppView.PLAN -> {
+                    tab = Tab.Today
+                    showPlan = view == AppView.PLAN
+                }
+                AppView.QUESTS -> {
+                    tab = Tab.Quests
+                    questsPage = QuestsPage.Nav
+                }
+                AppView.REVIEW -> open(Detail.Review)
+                AppView.FOCUS -> focus.open()
+                AppView.ARCHIVE -> open(Detail.Archive)
+            }
+        },
+        openQuest = openQuest,
         openAccount = { open(Detail.Account) },
         toggleTheme = { viewModels.settings.setAppearance(toggledAppearance(dark)) },
         openWorkspaces = workspaces::openManage,
     )
+    val drawerAction = { action: () -> Unit ->
+        {
+            drawerOpen = false
+            action()
+        }
+    }
 
     // Keeps the app's saved UI state (scroll positions, open menus) while Focus replaces it.
     val saveableStates = rememberSaveableStateHolder()
     Box(Modifier.semantics { testTagsAsResourceId = true }) {
         if (focusState != FocusUiState.Hidden) {
-            // Home is not composed under Focus, so neither touch nor TalkBack can reach it.
+            // The tabs are not composed under Focus, so neither touch nor TalkBack can reach them.
             FocusScreen(focusState, focusActions(focus, timerStarted), keepScreenOn = focusPrefs?.keepScreenOn ?: true) {
-                (workspacesState as? WorkspacesUiState.Ready)?.data?.timerElsewhere?.let { TimerElsewhereNote(it, switcher.showTimer) }
+                workspacesData?.timerElsewhere?.let { TimerElsewhereNote(it, showTimer) }
             }
             QuestSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
-        } else if (questPageState != QuestDetailUiState.Hidden) {
-            QuestDetailPage(viewModels, snackbar, timerStarted)
         } else {
             saveableStates.SaveableStateProvider("app") {
                 when (val detail = details.lastOrNull()) {
                     null -> QuestScaffold(
-                        destination = destination,
-                        onNavigate = { destination = it },
+                        tab = tab,
+                        onTab = { picked ->
+                            // Tapping Quests again goes back to the quests.
+                            if (picked == Tab.Quests && tab == Tab.Quests) questsPage = QuestsPage.Nav
+                            tab = picked
+                        },
                         onSearch = openSearch,
-                        onAccount = { open(Detail.Account) },
-                        onFocus = { focus.open() },
-                        workspaces = (workspacesState as? WorkspacesUiState.Ready)?.data,
-                        switcher = switcher,
+                        onAccount = { drawerOpen = true },
+                        workspaceName = workspacesData?.active?.name.orEmpty(),
+                        leading = {
+                            when {
+                                tab == Tab.Today -> TodaySegment(showPlan, onChange = { showPlan = it })
+                                tab == Tab.Quests && questsPage != QuestsPage.Nav -> BackToQuests { questsPage = QuestsPage.Nav }
+                            }
+                        },
+                        timerNote = { TimerElsewhereBar(workspacesData, showTimer) },
+                        player = { MiniPlayer(playerCard, playerActions(viewModels, timerStarted)) },
                         snackbarHost = { QuestSnackbarHost(snackbar) },
-                    ) { DestinationContent(destination, viewModels, snackbar, timerStarted, openArchive = { open(Detail.Archive) }) }
-                    else -> DetailPage(detail, viewModels, snackbar, DetailNavigation(open, back = { details = details.dropLast(1) }, searchNavigation, timerStarted, captureEntries))
+                    ) {
+                        TabContent(tab, showPlan, questsPage, viewModels, snackbar, timerStarted, openQuest, openPage = { questsPage = it }, openReview = { open(Detail.Review) })
+                    }
+                    else -> DetailPage(detail, viewModels, snackbar, DetailNavigation(open, back = { details = details.dropLast(1) }, searchNavigation, timerStarted, captureEntries, openQuest))
                 }
             }
+            if (drawerOpen && workspacesData != null) {
+                AccountDrawer(
+                    DrawerData(workspacesData, accountState.account, accountState.sync),
+                    DrawerActions(
+                        close = { drawerOpen = false },
+                        switchTo = { id -> drawerAction { switchTo(id) }() },
+                        manageWorkspaces = drawerAction(workspaces::openManage),
+                        openAccount = drawerAction { open(Detail.Account) },
+                        signOut = accountVm::askSignOut,
+                        openSettings = drawerAction { open(Detail.Settings) },
+                        openArchive = drawerAction { open(Detail.Archive) },
+                    ),
+                )
+            }
+            // On the Account page its own screen shows them.
+            if (Detail.Account !in details) {
+                accountState.dialog?.let { AccountDialogs(it, AccountDialogActions(accountVm::answerImport, accountVm::signOut, accountVm::cancelSignOut)) }
+            }
             ManageWorkspacesSheet(workspacesState, manageActions(workspaces))
+            TaskSheet(sheetState, taskSheetActions(sheet))
+            EntrySheet(entryState, entryActions(entry))
         }
         LogWorkSheet(logWorkState, logWorkActions(logWork))
     }
 }
 
-/**
- * The switcher's actions. Sheets save into their own workspace before the switch; a quest's page
- * gives way to Quests (the same happens once the core shows the other workspace, see `switched`).
- * A workspace no longer live is left to the core to refuse, without leaving the shown one first.
- */
-private fun switcherActions(viewModels: AppViewModels, showQuests: () -> Unit): SwitcherActions {
-    val switchTo = { id: String ->
-        val data = (viewModels.workspaces.state.value as? WorkspacesUiState.Ready)?.data
-        val isLive = data?.live?.any { it.id == id } == true
-        if (isLive && viewModels.leaveWorkspace()) showQuests()
-        viewModels.workspaces.switchTo(id)
+/** What the open tab shows; each destination asks the core only for what it shows. */
+@Composable
+private fun TabContent(
+    tab: Tab,
+    showPlan: Boolean,
+    questsPage: QuestsPage,
+    viewModels: AppViewModels,
+    snackbar: SnackbarHostState,
+    timerStarted: () -> Unit,
+    openQuest: (String) -> Unit,
+    openPage: (QuestsPage) -> Unit,
+    openReview: () -> Unit,
+) {
+    when (tab) {
+        Tab.Today -> if (showPlan) PlanDestination(viewModels, snackbar, timerStarted) else ListDestination(ListKind.Today, viewModels, snackbar, timerStarted)
+        Tab.Inbox -> ListDestination(ListKind.Inbox, viewModels, snackbar, timerStarted)
+        Tab.Quests -> {
+            when (questsPage) {
+                QuestsPage.Nav -> QuestNavDestination(viewModels, openQuest, openLogbook = { openPage(QuestsPage.Logbook) })
+                QuestsPage.Logbook -> ListDestination(ListKind.Logbook, viewModels, snackbar, timerStarted)
+                is QuestsPage.Quest -> ListDestination(
+                    ListKind.Quest(questsPage.questId),
+                    viewModels,
+                    snackbar,
+                    timerStarted,
+                    onGone = { openPage(QuestsPage.Nav) },
+                    headerActions = { EditQuestButton { viewModels.questEditor.open(questsPage.questId) } },
+                )
+            }
+            QuestEditor(viewModels, snackbar, openQuest)
+        }
+        Tab.Tracked -> TrackedDestination(viewModels, openReview)
     }
-    return SwitcherActions(
-        switchTo = { switchTo(it) },
-        manage = viewModels.workspaces::openManage,
-        showTimer = {
-            val timer = (viewModels.workspaces.state.value as? WorkspacesUiState.Ready)?.data?.timerElsewhere
-            if (timer != null && switchTo(timer.workspaceId)) viewModels.focus.open()
-        },
-    )
 }
+
+/** The player's actions; as on a row, a started timer makes its task Focus's task. */
+private fun playerActions(viewModels: AppViewModels, timerStarted: () -> Unit) = PlayerActions(
+    openFocus = { viewModels.focus.open() },
+    stop = viewModels.player::stop,
+    start = { taskId ->
+        if (viewModels.player.start(taskId)) {
+            viewModels.focus.rememberTask(taskId)
+            timerStarted()
+        }
+    },
+)
+
+private fun entryActions(vm: EntryViewModel) = EntryActions(
+    close = vm::close,
+    edit = vm::edit,
+    save = vm::save,
+    delete = vm::delete,
+    bookAsOrganizing = vm::bookAsOrganizing,
+    openTaskPicker = vm::openTaskPicker,
+    picker = TaskPickerActions(back = vm::closeTaskPicker, editQuery = vm::editTaskQuery, pick = vm::pickTask, create = null),
+)
 
 private fun manageActions(vm: WorkspacesViewModel) = ManageActions(
     close = vm::closeManage,
@@ -266,25 +415,6 @@ private fun focusActions(vm: FocusViewModel, timerStarted: () -> Unit) = FocusAc
     commitDescription = vm::commitDescription,
     saveDrafts = vm::commitDrafts,
 )
-
-@Composable
-private fun DestinationContent(destination: TopDestination, viewModels: AppViewModels, snackbar: SnackbarHostState, timerStarted: () -> Unit, openArchive: () -> Unit) {
-    val sheet = viewModels.taskSheet
-    val sheetState by sheet.state.collectAsStateWithLifecycle()
-    ShowMessages(sheet.message, sheet::dismissMessage, snackbar)
-    when (destination) {
-        TopDestination.Plan -> PlanDestination(viewModels, snackbar, timerStarted)
-        TopDestination.Quests -> QuestsDestination(viewModels, snackbar, openArchive)
-        TopDestination.Review -> ReviewDestination(viewModels)
-        TopDestination.Home -> {
-            val home = viewModels.home
-            val state by home.state.collectAsStateWithLifecycle()
-            ShowMessages(home.message, home::dismissMessage, snackbar)
-            HomeScreen(state, homeActions(home, sheet, viewModels.focus, timerStarted))
-        }
-    }
-    TaskSheet(sheetState, taskSheetActions(sheet))
-}
 
 /** The plan; the core builds its days only while it is composed (the task sheet over it keeps it). */
 @Composable
@@ -355,30 +485,6 @@ internal fun ShowMessages(message: StateFlow<String?>, dismiss: () -> Unit, snac
     }
 }
 
-/** Home's actions; starting a timer also makes its task Focus's task and asks for notifications once. */
-internal fun homeActions(vm: HomeViewModel, sheet: TaskSheetViewModel, focus: FocusViewModel, timerStarted: () -> Unit = {}) = HomeActions(
-    toggleTask = vm::toggleTask,
-    openTask = sheet::open,
-    startTimer = { taskId ->
-        if (vm.startTimer(taskId)) {
-            focus.rememberTask(taskId)
-            timerStarted()
-        }
-    },
-    stopTimer = vm::stopTimer,
-    deleteTask = vm::deleteTask,
-    undo = vm::undo,
-    dismissToast = vm::dismissToast,
-    editDraft = vm::editDraft,
-    addTask = vm::addTask,
-    setQuestFilter = vm::setQuestFilter,
-    pickQuest = vm::pickQuest,
-    setShowOther = vm::setShowOther,
-    setAddPosition = vm::setAddPosition,
-    openFocus = focus::open,
-    assignQuest = vm::assignQuest,
-)
-
 internal fun taskSheetActions(vm: TaskSheetViewModel) = TaskSheetActions(
     close = vm::close,
     editTitle = vm::editTitle,
@@ -397,13 +503,14 @@ internal fun taskSheetActions(vm: TaskSheetViewModel) = TaskSheetActions(
     closeRepeat = vm::closeRepeat,
 )
 
-/** Where a detail page can go: another detail, back, and what search's results do. */
+/** Where a detail page can go: another detail, back, a quest's list, and what search's results do. */
 private class DetailNavigation(
     val open: (Detail) -> Unit,
     val back: () -> Unit,
     val search: SearchNavigation,
     val timerStarted: () -> Unit,
     val captureShown: Boolean,
+    val openQuest: (String) -> Unit,
 )
 
 @Composable
@@ -435,7 +542,8 @@ private fun DetailPage(detail: Detail, viewModels: AppViewModels, snackbar: Snac
         DetailScaffold(stringResource(detail.title), onBack = navigation.back, snackbarHost = { QuestSnackbarHost(snackbar) }, content = content)
     when (detail) {
         Detail.Search -> SearchPage(viewModels, snackbar, navigation.timerStarted, navigation.search, navigation.captureShown)
-        Detail.Archive -> scaffolded { ArchiveDetail(viewModels, snackbar) }
+        Detail.Archive -> scaffolded { ArchiveDetail(viewModels, snackbar, navigation.openQuest) }
+        Detail.Review -> scaffolded { ReviewDestination(viewModels) }
         Detail.Account -> scaffolded { AccountPage(viewModels.account, navigation) }
         Detail.Settings -> scaffolded {
             val vm = viewModels.settings

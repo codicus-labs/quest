@@ -1,67 +1,123 @@
 package app.quest.android.ui
 
 import app.quest.android.capture.CaptureActivity
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.quest.android.R
 import app.quest.android.settings.Appearance
 import app.quest.android.ui.archive.ArchiveActions
 import app.quest.android.ui.archive.ArchiveScreen
 import app.quest.android.ui.components.QuestSnackbarHost
-import app.quest.android.ui.focus.FocusViewModel
-import app.quest.android.ui.navigation.TopDestination
+import app.quest.android.ui.lists.ListActions
+import app.quest.android.ui.lists.ListScreen
+import app.quest.android.ui.lists.ListUiState
+import app.quest.android.ui.lists.RowActions
 import app.quest.android.ui.quests.QuestEditorActions
 import app.quest.android.ui.quests.QuestEditorSheet
 import app.quest.android.ui.quests.QuestEditorViewModel
-import app.quest.android.ui.quests.QuestDetailActions
-import app.quest.android.ui.quests.QuestDetailScreen
-import app.quest.android.ui.quests.QuestDetailViewModel
-import app.quest.android.ui.quests.QuestTaskActions
-import app.quest.android.ui.quests.QuestsActions
-import app.quest.android.ui.quests.QuestsScreen
+import app.quest.android.ui.quests.QuestNavActions
+import app.quest.android.ui.quests.QuestNavScreen
 import app.quest.android.ui.review.ReviewActions
 import app.quest.android.ui.review.ReviewScreen
 import app.quest.android.ui.search.SearchActions
 import app.quest.android.ui.search.SearchScreen
-import app.quest.android.ui.task.TaskSheet
+import app.quest.android.ui.theme.QuestTheme
+import app.quest.android.ui.tracked.TrackedActions
+import app.quest.android.ui.tracked.TrackedScreen
 import uniffi.quest_mobile.AppView
+import uniffi.quest_mobile.ListKind
 import uniffi.quest_mobile.SearchOutcome
 
-/** The Quests tab; the core builds its cards only while it is composed. */
+/** One list (Today, Inbox, the Logbook, a quest's); the core reads it only while it is composed. */
 @Composable
-internal fun QuestsDestination(viewModels: AppViewModels, snackbar: SnackbarHostState, openArchive: () -> Unit) {
-    val vm = viewModels.quests
+internal fun ListDestination(
+    kind: ListKind,
+    viewModels: AppViewModels,
+    snackbar: SnackbarHostState,
+    timerStarted: () -> Unit,
+    onGone: () -> Unit = {},
+    headerActions: @Composable () -> Unit = {},
+) {
+    val vm = viewModels.list
+    DisposableEffect(vm, kind) {
+        vm.show(kind)
+        onDispose { vm.show(null) }
+    }
+    val state by vm.state.collectAsStateWithLifecycle()
+    ShowMessages(vm.message, vm::dismissMessage, snackbar)
+    LaunchedEffect(state) { if (state == ListUiState.Gone) onGone() }
+    val focus = viewModels.focus
+    val rows = RowActions(
+        toggle = vm::toggleTask,
+        open = viewModels.taskSheet::open,
+        startTimer = { taskId ->
+            if (vm.startTimer(taskId)) {
+                focus.rememberTask(taskId)
+                timerStarted()
+            }
+        },
+        stopTimer = vm::stopTimer,
+    )
+    ListScreen(state, ListActions(rows, vm::editDraft, vm::add, vm::undo, vm::dismissToast), headerActions = headerActions)
+}
+
+/** "‹ Quests" above a quest's list or the Logbook. */
+@Composable
+internal fun BackToQuests(onBack: () -> Unit) {
+    TextButton(onClick = onBack, modifier = Modifier.testTag("quests-back")) {
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, tint = QuestTheme.colors.textMuted)
+        Text(stringResource(R.string.nav_quests), color = QuestTheme.colors.textMuted)
+    }
+}
+
+/** The edit button on a quest's list: the quest editor (rename, colour, complete, delete). */
+@Composable
+internal fun EditQuestButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.testTag("quest-edit")) {
+        Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.quest_edit), tint = QuestTheme.colors.textMuted)
+    }
+}
+
+/** The Quests tab; the core reads it only while it is composed. */
+@Composable
+internal fun QuestNavDestination(viewModels: AppViewModels, openQuest: (String) -> Unit, openLogbook: () -> Unit) {
+    val vm = viewModels.questNav
     DisposableEffect(vm) {
         vm.setShown(true)
         onDispose { vm.setShown(false) }
     }
     val state by vm.state.collectAsStateWithLifecycle()
-    ShowMessages(vm.message, vm::dismissMessage, snackbar)
+    QuestNavScreen(state, QuestNavActions(openQuest = openQuest, newQuest = viewModels.questEditor::openNew, openLogbook = openLogbook))
+}
+
+/** The quest editor over the Quests tab. */
+@Composable
+internal fun QuestEditor(viewModels: AppViewModels, snackbar: SnackbarHostState, openQuest: (String) -> Unit) {
     val editor = viewModels.questEditor
     val editorState by editor.state.collectAsStateWithLifecycle()
     ShowMessages(editor.message, editor::dismissMessage, snackbar)
-    QuestsScreen(
-        state,
-        QuestsActions(
-            selectTab = vm::selectTab,
-            openQuest = editor::open,
-            openNewQuest = editor::openNew,
-            openArchive = openArchive,
-            undo = vm::undo,
-            dismissToast = vm::dismissToast,
-        ),
-    )
-    QuestEditorSheet(editorState, questEditorActions(editor, viewModels.questDetail))
+    QuestEditorSheet(editorState, questEditorActions(editor, openQuest))
 }
 
-internal fun questEditorActions(editor: QuestEditorViewModel, page: QuestDetailViewModel) = QuestEditorActions(
+internal fun questEditorActions(editor: QuestEditorViewModel, openQuest: (String) -> Unit) = QuestEditorActions(
     close = editor::close,
     editTitle = editor::editTitle,
     titleDone = editor::titleDone,
@@ -69,11 +125,23 @@ internal fun questEditorActions(editor: QuestEditorViewModel, page: QuestDetailV
     setHue = editor::setHue,
     create = editor::create,
     toggleStatus = editor::toggleStatus,
-    openPage = { editor.openPage()?.let(page::open) },
+    openPage = { editor.openPage()?.let(openQuest) },
     delete = editor::delete,
 )
 
-/** The weekly review; the core builds it only while it is composed. */
+/** The Tracked tab; the core reads it only while it is composed. */
+@Composable
+internal fun TrackedDestination(viewModels: AppViewModels, openReview: () -> Unit) {
+    val vm = viewModels.tracked
+    DisposableEffect(vm) {
+        vm.setShown(true)
+        onDispose { vm.setShown(false) }
+    }
+    val state by vm.state.collectAsStateWithLifecycle()
+    TrackedScreen(state, TrackedActions(openEntry = viewModels.entry::open, openReview = openReview, logWork = viewModels.logWork::open))
+}
+
+/** The weekly review (from Tracked or Search); the core builds it only while it is composed. */
 @Composable
 internal fun ReviewDestination(viewModels: AppViewModels) {
     val vm = viewModels.review
@@ -85,9 +153,9 @@ internal fun ReviewDestination(viewModels: AppViewModels) {
     ReviewScreen(state, ReviewActions(previous = { vm.previous() }, next = { vm.next() }, thisWeek = vm::thisWeek, selectWeek = vm::selectWeek))
 }
 
-/** The archive (from the Quests tab, Account or Search); read only while composed. */
+/** The archive (from the drawer or Search); read only while composed. */
 @Composable
-internal fun ArchiveDetail(viewModels: AppViewModels, snackbar: SnackbarHostState) {
+internal fun ArchiveDetail(viewModels: AppViewModels, snackbar: SnackbarHostState, openQuest: (String) -> Unit) {
     val vm = viewModels.archive
     DisposableEffect(vm) {
         vm.setShown(true)
@@ -95,61 +163,15 @@ internal fun ArchiveDetail(viewModels: AppViewModels, snackbar: SnackbarHostStat
     }
     val state by vm.state.collectAsStateWithLifecycle()
     ShowMessages(vm.message, vm::dismissMessage, snackbar)
-    ArchiveScreen(state, ArchiveActions(restore = vm::restore, unarchive = vm::unarchive, openQuest = viewModels.questDetail::open))
-}
-
-/** A quest's page over everything but Focus, with the task sheet for its tasks. */
-@Composable
-internal fun QuestDetailPage(viewModels: AppViewModels, snackbar: SnackbarHostState, timerStarted: () -> Unit) {
-    val vm = viewModels.questDetail
-    val state by vm.state.collectAsStateWithLifecycle()
-    ShowMessages(vm.message, vm::dismissMessage, snackbar)
-    val sheet = viewModels.taskSheet
-    val sheetState by sheet.state.collectAsStateWithLifecycle()
-    ShowMessages(sheet.message, sheet::dismissMessage, snackbar)
-    Box {
-        QuestDetailScreen(state, questDetailActions(vm, viewModels, timerStarted))
-        QuestSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
-    }
-    TaskSheet(sheetState, taskSheetActions(sheet))
-}
-
-internal fun questDetailActions(vm: QuestDetailViewModel, viewModels: AppViewModels, timerStarted: () -> Unit) = QuestDetailActions(
-    close = { vm.close() },
-    beginRename = vm::beginRename,
-    editTitle = vm::editTitle,
-    commitTitle = vm::commitTitle,
-    saveDrafts = vm::commitDrafts,
-    setHue = { vm.setHue(it) },
-    toggleStatus = { vm.toggleStatus() },
-    delete = vm::delete,
-    undo = { vm.undo() },
-    dismissToast = { vm.dismissToast() },
-    tasks = QuestTaskActions(
-        toggle = { vm.toggleTask(it) },
-        open = viewModels.taskSheet::open,
-        startTimer = { taskId -> startTimer(vm, viewModels.focus, taskId, timerStarted) },
-        stopTimer = { vm.stopTimer() },
-        delete = { vm.deleteTask(it) },
-        openFocus = { viewModels.focus.open(it) },
-        editDraft = vm::editTaskDraft,
-        setToBacklog = vm::setToBacklog,
-        add = vm::addTask,
-    ),
-)
-
-/** As on Home: a started timer makes its task Focus's task. */
-private fun startTimer(vm: QuestDetailViewModel, focus: FocusViewModel, taskId: String, timerStarted: () -> Unit) {
-    if (!vm.startTimer(taskId)) return
-    focus.rememberTask(taskId)
-    timerStarted()
+    ArchiveScreen(state, ArchiveActions(restore = vm::restore, unarchive = vm::unarchive, openQuest = openQuest))
 }
 
 /** Where a search result leads; [QuestApp] supplies the navigation. */
 internal class SearchNavigation(
     val close: () -> Unit,
-    val goTo: (TopDestination) -> Unit,
-    val openArchive: () -> Unit,
+    /** A place of the app: a tab, the plan, the review, Focus or the archive. */
+    val show: (AppView) -> Unit,
+    val openQuest: (String) -> Unit,
     val openAccount: () -> Unit,
     val toggleTheme: () -> Unit,
     val openWorkspaces: () -> Unit,
@@ -190,19 +212,12 @@ internal fun SearchPage(
     }
 }
 
-/** Search closes, then the outcome happens: a tab, a quest's page, Focus, Log work, theme, Account, Manage workspaces. */
+/** Search closes, then the outcome happens: a place, a quest's list, Focus, Log work, theme, Account, Manage workspaces. */
 private fun carryOutSearch(outcome: SearchOutcome, viewModels: AppViewModels, timerStarted: () -> Unit, navigation: SearchNavigation) {
     navigation.close()
     when (outcome) {
-        is SearchOutcome.Show -> when (outcome.view) {
-            AppView.HOME -> navigation.goTo(TopDestination.Home)
-            AppView.PLAN -> navigation.goTo(TopDestination.Plan)
-            AppView.QUESTS -> navigation.goTo(TopDestination.Quests)
-            AppView.REVIEW -> navigation.goTo(TopDestination.Review)
-            AppView.FOCUS -> viewModels.focus.open()
-            AppView.ARCHIVE -> navigation.openArchive()
-        }
-        is SearchOutcome.ShowQuest -> viewModels.questDetail.open(outcome.questId)
+        is SearchOutcome.Show -> navigation.show(outcome.view)
+        is SearchOutcome.ShowQuest -> navigation.openQuest(outcome.questId)
         is SearchOutcome.Focus -> {
             viewModels.focus.rememberTask(outcome.taskId)
             viewModels.focus.open()

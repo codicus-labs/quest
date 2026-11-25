@@ -116,3 +116,14 @@ fn rebooking_splits_the_running_task_session() {
     assert_eq!((running.kind, running.origin_task_id), (SessionKind::Organizing, Some(task.clone())));
     assert_eq!(core.task_detail(task, now()).unwrap().logged[0].when, "Nov 25 · 09:00–09:40");
 }
+
+#[test]
+fn an_entry_booked_as_organizing_keeps_its_times_and_goes_back_to_its_task() {
+    let (_dir, core) = open();
+    let (_task, entry) = logged(&core);
+    core.book_entry_as_organizing(entry.clone()).unwrap();
+    let draft = core.entry_draft(entry.clone(), now()).unwrap();
+    let check = core.check_entry(draft.clone(), now()).unwrap();
+    assert_eq!((check.kind, draft.task_id, draft.start_minute), (SessionKind::Organizing, None, 480));
+    assert!(matches!(core.book_entry_as_organizing("nope".into()), Err(MobileError::InvalidId { .. })));
+}

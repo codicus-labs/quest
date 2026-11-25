@@ -7,8 +7,8 @@ use rune::{Color, Edge, El, Transition, Tx, row, text};
 use crate::icons;
 use crate::state::State;
 use crate::theme::{Pal, ty};
+use crate::ui::chrome::keycap;
 use crate::ui::parts;
-use crate::ui::topbar::keycap;
 use crate::undo::{Toast, UndoEvent};
 
 pub fn layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
