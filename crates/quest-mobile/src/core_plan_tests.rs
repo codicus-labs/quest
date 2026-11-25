@@ -60,6 +60,32 @@ fn daily(core: &QuestCore) -> String {
 }
 
 #[test]
+fn sections_and_positioned_moves_share_today_and_undo() {
+    use crate::PlanTaskList;
+    let (_dir, core) = open();
+    let a = add(&core, "2026-11-25", "A");
+    let b = add(&core, "2026-11-25", "B");
+    let c = add(&core, "2026-11-26", "C");
+
+    core.place_task(b.clone(), PlanTaskList::Today, Some(a), now()).unwrap();
+    let plan = core.plan_sections(now()).unwrap();
+    assert_eq!(plan.days.len(), 14);
+    assert_eq!(titles(&plan.days[0].tasks), ["B", "A"]);
+    assert!(plan.weeks[0].days[2].has_tasks);
+    assert!(!plan.weeks[0].days[0].jump_enabled);
+
+    core.place_task(b, PlanTaskList::Day { date: "2026-11-26".into() }, Some(c), now()).unwrap();
+    let plan = core.plan_sections(now()).unwrap();
+    assert_eq!(titles(&plan.days[0].tasks), ["A"]);
+    assert_eq!(titles(&plan.days[1].tasks), ["B", "C"]);
+
+    core.undo(now()).unwrap();
+    let plan = core.plan_sections(now()).unwrap();
+    assert_eq!(titles(&plan.days[0].tasks), ["B", "A"]);
+    assert_eq!(titles(&plan.days[1].tasks), ["C"]);
+}
+
+#[test]
 fn the_window_and_edge_speed_are_exported() {
     let window = plan_window(None, 5, None, now()).unwrap();
     assert_eq!(window, PlanWindow { first_day: "2026-11-09".into(), count: 35 });

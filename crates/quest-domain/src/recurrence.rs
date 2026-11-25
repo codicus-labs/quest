@@ -208,6 +208,7 @@ impl Occurrence {
             planned_on: Some(self.planned_on),
             due_on: None,
             sort_key: self.sort_key.clone(),
+            day_order: self.sort_key.clone(),
             completed_at: None,
             description: self.description.clone(),
             repeat: None,
@@ -276,11 +277,18 @@ pub(crate) fn edit_plan(
             writes.extend(initial.writes(snapshot, id));
         }
     }
-    if let Command::MoveTask { planned_on: Some(day), .. } = edit {
+    let destination = match edit {
+        Command::MoveTask { planned_on, .. } => *planned_on,
+        Command::PlaceTask { placement: crate::Placement::InList { list: crate::TaskList::Day(day), .. }, .. } => {
+            Some(*day)
+        }
+        _ => None,
+    };
+    if let Some(day) = destination {
         // A drop can use a preview as a sorting anchor without saving that preview.
         tasks.extend(
             snapshot
-                .planned_occurrences(*day, now)
+                .planned_occurrences(day, now)
                 .filter(|task| occurrence.is_none_or(|(series, date)| task.id != occurrence_id(series, date))),
         );
     }
@@ -318,7 +326,8 @@ pub(crate) fn set_rule(
                 let before = task.dates();
                 let after: TaskDates = set_planned(before, Some(day));
                 writes.extend(crate::command::date_writes(snapshot, id, before, after, now));
-                writes.push(task_write(id, fields::SORT_KEY, json!(key)));
+                writes.retain(|write| write.field != fields::TASK_DAY_ORDER);
+                writes.push(task_write(id, fields::TASK_DAY_ORDER, json!(key)));
             }
             first
         }
@@ -338,10 +347,8 @@ struct DayOrder {
 
 impl DayOrder {
     fn from_tasks(snapshot: &Snapshot, day: NaiveDate) -> Self {
-        let mut tasks = snapshot.tasks_on(day);
-        let first = tasks.next().map(|task| task.sort_key.clone());
-        let last = tasks.last().map(|task| task.sort_key.clone()).or_else(|| first.clone());
-        Self { first, last }
+        let orders = || snapshot.tasks_on(day).filter(|task| !task.is_done()).map(|task| &task.day_order);
+        Self { first: orders().min().cloned(), last: orders().max().cloned() }
     }
 
     fn insert(&mut self, pin: RepeatPin) -> String {

@@ -22,6 +22,7 @@ fn task(n: u128, done: bool) -> Task {
         completed_at: done.then(|| at(0)),
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     }
 }

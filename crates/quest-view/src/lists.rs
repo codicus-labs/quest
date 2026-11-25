@@ -5,13 +5,12 @@
 mod tests;
 
 use chrono::{NaiveDate, TimeZone};
-use quest_domain::{DateField, EntityId, Snapshot, Task, is_inbox, is_today, today_rank};
+use quest_domain::{DateField, EntityId, Snapshot, Task, is_inbox, is_today};
 
-/// Open tasks planned or due today or earlier: overdue first, then carried over, then due today,
-/// then the rest; by plan date within each group, then in list order.
+/// Open tasks planned or due today or earlier, in manual day order.
 pub fn today(snapshot: &Snapshot, today: NaiveDate) -> Vec<&Task> {
     let mut tasks: Vec<&Task> = snapshot.tasks.iter().filter(|t| is_today(t, today)).collect();
-    tasks.sort_by_key(|t| (today_rank(t, today), t.planned_on));
+    tasks.sort_by(|a, b| (&a.day_order, a.id).cmp(&(&b.day_order, b.id)));
     tasks
 }
 
@@ -25,7 +24,7 @@ pub fn today_with_linger<'a>(
         .iter()
         .filter_map(|task| {
             let before = lingering(task).unwrap_or(task);
-            is_today(before, today).then_some((task, (today_rank(before, today), before.planned_on)))
+            is_today(before, today).then_some((task, (&before.day_order, before.id)))
         })
         .collect();
     tasks.sort_by_key(|(_, order)| *order);

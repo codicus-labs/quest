@@ -3,15 +3,19 @@
 //! `quest_view::lists`.
 
 use chrono::Local;
-use quest_domain::{EntityId, Task};
+use quest_domain::{EntityId, Task, TaskList};
 use quest_view::{lists, row_meta, tracked};
 use rune::{Color, El, Icon, ScrollSpec, col, icon, row, text};
 
+use crate::dnd::ListId;
 use crate::format;
 use crate::icons;
 use crate::state::{State, View};
 use crate::theme::{Pal, ty};
-use crate::ui::task_row::{self, Shows};
+use crate::ui::{
+    drag::{self, Zone},
+    task_row::{self, Shows},
+};
 
 /// Rows under an optional head ("3 done", a Logbook day).
 pub struct Group<'a> {
@@ -24,10 +28,7 @@ pub fn groups(s: &State) -> Vec<Group<'_>> {
     let snap = &s.snap;
     let today = s.today();
     match s.view {
-        View::Today => open_then_done(
-            lists::today_with_linger(snap, today, |task| s.lingering(task)),
-            lists::done_today(snap, today, &Local).into_iter().filter(|t| s.lingering(t).is_none()).collect(),
-        ),
+        View::Today => today_groups(s),
         View::Inbox => vec![Group { head: None, tasks: lists::inbox_with_linger(snap, |task| s.lingering(task)) }],
         View::Logbook => lists::logbook_days(snap, &Local)
             .into_iter()
@@ -47,6 +48,24 @@ pub fn groups(s: &State) -> Vec<Group<'_>> {
     }
 }
 
+pub fn today_groups(s: &State) -> Vec<Group<'_>> {
+    let snap = &s.snap;
+    let today = s.today();
+    open_then_done(
+        lists::today_with_linger(snap, today, |task| s.lingering(task)),
+        lists::done_today(snap, today, &Local).into_iter().filter(|t| s.lingering(t).is_none()).collect(),
+    )
+}
+
+pub fn sort_list(view: View) -> Option<TaskList> {
+    match view {
+        View::Today => Some(TaskList::Today),
+        View::Inbox => Some(TaskList::Inbox),
+        View::Quest(id) => Some(TaskList::Quest(id)),
+        _ => None,
+    }
+}
+
 /// Open tasks, then "n done" with the done ones when there are any.
 fn open_then_done<'a>(open: Vec<&'a Task>, done: Vec<&'a Task>) -> Vec<Group<'a>> {
     let mut groups = vec![Group { head: None, tasks: open }];
@@ -58,6 +77,9 @@ fn open_then_done<'a>(open: Vec<&'a Task>, done: Vec<&'a Task>) -> Vec<Group<'a>
 
 /// The rows J/K step through, in order.
 pub fn shown_tasks(s: &State) -> Vec<EntityId> {
+    if s.view == View::Plan {
+        return super::plan::shown_tasks(s);
+    }
     groups(s).iter().flat_map(|g| g.tasks.iter().map(|t| t.id)).collect()
 }
 
@@ -78,8 +100,9 @@ pub fn view(s: &State, p: &Pal) -> El {
 /// The centred column: header, quick-add, then `body`, scrolling together.
 pub fn page(key: &str, header: El, add: Option<El>, body: El) -> El {
     let column = col().w_full().max_w(720.0).px(40.0).pt(4.0).pb(80.0).child(header).children(add).child(body);
-    col().key(key.to_owned()).w_full().h_full().child(
+    col().key(key.to_owned()).w_full().h_full().child(drag::zone(
         col()
+            .key(format!("{key}-scroll"))
             .w_full()
             .items_center()
             .child(column)
@@ -87,7 +110,8 @@ pub fn page(key: &str, header: El, add: Option<El>, body: El) -> El {
             .grow(1.0)
             .min_h(0.0)
             .scroll_edge_fade(12.0),
-    )
+        Zone::Viewport,
+    ))
 }
 
 /// The view's groups as rows; `empty` when there are none at all.
@@ -98,22 +122,30 @@ pub fn rows(s: &State, shows: Shows, empty: &str, p: &Pal) -> El {
         return list.child(text(empty.to_owned()).key("rows-empty").font(ty::BODY).color(p.faint).py(18.0));
     }
     for group in groups {
-        if let Some(head) = group.head {
-            list = list.child(
-                row()
-                    .w_full()
-                    .mt(22.0)
-                    .mb(4.0)
-                    .pb(6.0)
-                    .border_sides([0.0, 0.0, 1.0, 0.0], p.border)
-                    .child(text(head).font(ty::GROUP).color(p.text)),
-            );
-        }
-        for task in group.tasks {
-            list = list.child(task_row::task_row(s, task, shows, p));
+        if group.head.is_none()
+            && let Some(id) = sort_list(s.view)
+        {
+            list = list.child(drag::zone(drag::rows(s, p, id, &group.tasks, shows), Zone::List(ListId::Rows(id))));
+        } else {
+            list = list.child(group_rows(s, group, shows, p));
         }
     }
     list
+}
+
+pub fn group_rows(s: &State, group: Group<'_>, shows: Shows, p: &Pal) -> El {
+    col()
+        .w_full()
+        .children(group.head.map(|head| {
+            row()
+                .w_full()
+                .mt(16.0)
+                .mb(4.0)
+                .pb(6.0)
+                .border_sides([0.0, 0.0, 1.0, 0.0], p.border)
+                .child(text(head).font(ty::GROUP).color(p.muted))
+        }))
+        .children(group.tasks.into_iter().map(|task| task_row::task_row(s, task, shows, p)))
 }
 
 /// Icon and title, with an optional muted line under it.

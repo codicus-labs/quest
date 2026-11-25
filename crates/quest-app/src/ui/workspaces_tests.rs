@@ -117,7 +117,6 @@ fn a_switch_drops_dialogs_selection_and_undo_of_the_old_workspace() {
     let quest = rt.state.snap.quests[0].id;
     rt.state.delete(Deletable::Task(task_titled(&rt, "Answer emails")));
     assert!(rt.state.undo.expires().is_some(), "⌘Z could take the delete back");
-    rt.state.quest_filter = Some(quest);
     rt.state.go(View::Quest(quest));
     rt.state.open_task_modal(task);
     rt.frame(0.0);
@@ -127,7 +126,6 @@ fn a_switch_drops_dialogs_selection_and_undo_of_the_old_workspace() {
     assert_eq!(rt.state.snap.workspace, side);
     assert_eq!((rt.state.overlay, rt.state.task_modal.is_none()), (Overlay::None, true));
     assert_eq!(rt.state.view, View::Quests, "a quest's page goes back to Quests");
-    assert_eq!(rt.state.quest_filter, None);
     assert!(rt.state.undo.expires().is_none());
     command(&mut rt, 'z');
     assert!(rt.state.snap.tasks.is_empty(), "⌘Z brings nothing from the other workspace");

@@ -28,7 +28,7 @@ const LEFT: [Group; 2] = [
         &[
             (&["T"], "Tracked time"),
             (&["⌥", "⌘", "I"], "Tracked time"),
-            (&["V"], "Non-quest tasks in Plan"),
+            (&["G"], "Jump to Today in Plan"),
             (&["?"], "Shortcuts"),
             (&["Esc"], "Back"),
         ],
@@ -40,6 +40,7 @@ const RIGHT: [Group; 1] = [(
     &[
         (&["J", "K"], "Next / previous"),
         (&["↓", "↑"], "Next / previous"),
+        (&["⌥", "↑/↓"], "Reorder task"),
         (&["↵"], "Open"),
         (&["X"], "Done / open"),
         (&["Space"], "Start / stop timer"),

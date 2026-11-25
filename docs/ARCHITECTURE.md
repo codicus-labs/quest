@@ -12,13 +12,13 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
   Zeit auf Quest-Tasks = „Quest Hours“) oder `Organizing` (ohne Task, optional mit Herkunfts-Task).
   **Settings**: Wochenziel in Minuten. Begriffe: `GLOSSARY.md`.
 - Listen (Regeln pur in `quest-domain/src/dates.rs`, Abfragen in `quest-view/src/lists.rs`): **Today** (offen und
-  Plan oder Deadline ≤ heute; überfällig, liegengeblieben, heute fällig, Rest), **Inbox** (offen, ohne Quest und
+  Plan oder Deadline ≤ heute; manuelle Reihenfolge, Dringlichkeit als Zeilen-Meta), **Inbox** (offen, ohne Quest und
   ohne Plan-Datum), **Logbook** (erledigt, neueste zuerst). Nur der User verschiebt Daten.
 - Desktop-Shell ohne Top-Navigation: links die Sidebar (Workspace-Wechsler, **Inbox**, **Today**, **Plan**, **Review**,
   **Logbook** mit Zählern, aktive Quests mit Stundenring, abgeschlossene Quests, neue Quest, Player-Karte mit dem
   laufenden Timer oder Organizing), in der Mitte die Ansicht, rechts die Spalte „Tracked today“ (Timeline, ein Block
   öffnet den Entry-Editor) und „This week“ (ein-/ausblendbar mit `T` und ⌥⌘I). Dazu **Focus** (ein Task, großer
-  Timer), **Quests** und die Seite einer Quest. **Plan** zeigt Spalten pro Tag nach Plan-Datum, **Review** die Woche
+  Timer), **Quests** und die Seite einer Quest. **Plan** zeigt 14 Tagesabschnitte ab heute und spätere Monatsgruppen, **Review** die Woche
   (Stunden pro Quest, Organizing-Anteil; Verschiebungen, liegengebliebene und überfällige Tasks aus `WeekTasks`).
   Was Sidebar, Zeilen, Timeline und Player zeigen, rechnet `quest-view` (`nav`, `lists`, `row_meta`, `tracked`,
   `player`).
@@ -36,7 +36,7 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
 | `quest-oidc-fake` | OIDC-Provider für Tests und lokale Entwicklung (Discovery, JWKS, RS256-ID-Tokens, absichtliche Fehler) plus Test-Helfer für einen kompletten App-Login ohne Browser (`app_login`, `Browser`). Nie für Produktion. | axum, rsa, reqwest |
 | `quest-ai-eval` | Eval-Set der KI-Erfassung: synthetische Diktate mit erwarteten Vorschlägen, Bewertung (pur), Binary gegen ein echtes Modell (`mise run ai-eval --model <id>`, siehe `docs/ai-models.md`). | quest-capture, quest-server |
 | `quest-store` | Client-Persistenz (SQLite, rusqlite) + Sync-Engine (tokio-tungstenite), Profile (Gast + ein Store pro Konto), App-Login (OAuth 2.1, PKCE) und Token-Speicher. UI-agnostisch. | rusqlite, tokio, reqwest |
-| `quest-view` | Präsentationslogik ohne UI-Framework, geteilt von den Clients: `format`, `lists`, `log_work`, `entry_editor`, `undo`, `plan_strip`, `quests`, `palette`, `menu`, `nav` (`View`). Pur, kein IO, keine Uhr (Zeit wird übergeben). | quest-domain, chrono |
+| `quest-view` | Präsentationslogik ohne UI-Framework, geteilt von den Clients: `format`, `lists`, `log_work`, `entry_editor`, `undo`, `plan`, `quests`, `palette`, `menu`, `nav` (`View`). Pur, kein IO, keine Uhr (Zeit wird übergeben). | quest-domain, chrono |
 | `quest-app` | macOS-Client mit Rune + rune-kit. | rune, quest-store, quest-view |
 | `quest-mobile` | UniFFI-Schicht für native Mobile-UIs (Android-Prototyp in `apps/android`, siehe `docs/mobile.md`). | uniffi, quest-store |
 
@@ -45,7 +45,7 @@ Quest komplett in Rust; der macOS-Client nutzt das UI-Framework
 - Einheit ist `FieldChange { kind, id, field, value, hlc }`. Pro (Entity, Feld) gewinnt der höchste
   HLC. Merge ist kommutativ, assoziativ, idempotent → Replikate konvergieren unabhängig von
   Reihenfolge und Wiederholungen. Löschen = Soft-Delete über das Tombstone-Feld `deleted_at` (Zeitstempel); `Restore` setzt es zurück, gelöschte Entities erscheinen im Archiv.
-- Neue Aufgaben erhalten offline erzeugte UUIDv7. Sortierung per Fractional Index (`sort_key`).
+- Neue Aufgaben erhalten offline erzeugte UUIDv7. Inbox und Quest-Listen sortieren nach `sort_key`, Today und Plan-Tage nach dem separaten `day_order` (beides Fractional Index; Gleichstand nach ID). `day_order` ist ein additives LWW-Feld: keine Protokoll- oder Schemaänderung. Aufgaben ohne Feld lesen eine stabile ID-basierte Reihenfolge, wiederholte Termine ihren Anfangsschlüssel.
 - Die Wiederholungsregel liegt auf der ursprünglichen Aufgabe und verwendet Kalenderdaten in
   ihrer IANA-Zeitzone. Ein wiederholter Termin erhält eine UUIDv5 aus Aufgaben-ID und Datum.
   Geräte können denselben Termin offline erzeugen. Seine Anfangswerte liegen in einem

@@ -12,6 +12,7 @@ pub mod log_work;
 pub mod menu;
 pub mod nav;
 pub mod palette;
+pub mod plan;
 pub mod plan_strip;
 pub mod player;
 pub mod quest_picker;

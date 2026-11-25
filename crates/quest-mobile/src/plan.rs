@@ -127,7 +127,7 @@ pub(crate) fn day_tasks(
     };
     let mut tasks: Vec<Task> =
         snapshot.tasks_on(day).cloned().chain(snapshot.planned_occurrences(day, at)).filter(|t| shown(t)).collect();
-    tasks.sort_by(|a, b| a.sort_key.cmp(&b.sort_key).then(a.id.cmp(&b.id)));
+    tasks.sort_by(|a, b| (&a.day_order, a.id).cmp(&(&b.day_order, b.id)));
     let (open, done): (Vec<Task>, Vec<Task>) = tasks.into_iter().partition(|t| !t.is_done());
     open.into_iter().chain(done).collect()
 }
@@ -145,7 +145,9 @@ pub(crate) fn preview(snapshot: &Snapshot, memory: PlanMemory, id: EntityId) -> 
 pub(crate) fn plan_edit(snapshot: &Snapshot, memory: PlanMemory, command: Command) -> Command {
     let Some(id) = edited_task(&command) else { return command };
     let occurrence = preview(snapshot, memory, id).and_then(|task| task.series.zip(task.planned_on));
-    if occurrence.is_some() || matches!(command, Command::MoveTask { planned_on: Some(_), .. }) {
+    if occurrence.is_some()
+        || matches!(command, Command::MoveTask { planned_on: Some(_), .. } | Command::PlaceTask { .. })
+    {
         return Command::EditPlan { occurrence, now: memory.at, edit: Box::new(command) };
     }
     command
@@ -158,6 +160,7 @@ fn edited_task(command: &Command) -> Option<EntityId> {
         | Command::SetTaskDescription { id, .. }
         | Command::AssignTask { id, .. }
         | Command::MoveTask { id, .. }
+        | Command::PlaceTask { id, .. }
         | Command::SetTaskDue { id, .. }
         | Command::AddChecklistItem { task_id: id, .. }
         | Command::CompleteTaskFromPlan { id, .. }

@@ -21,6 +21,7 @@ fn task(n: u128, quest: Option<u128>) -> Task {
         completed_at: None,
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     }
 }

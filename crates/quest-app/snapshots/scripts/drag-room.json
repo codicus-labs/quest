@@ -1,0 +1,5 @@
+[
+  {"t": 0.2, "type": "down", "key": "row-title-__TASK_ID__"},
+  {"t": 0.4, "type": "move", "key": "__TARGET__"},
+  {"t": 0.9, "type": "mark", "name": "end"}
+]

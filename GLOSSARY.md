@@ -14,7 +14,10 @@ Der Arbeitsbereich, dessen Inhalte auf dem aktuellen Gerät angezeigt und bearbe
 Offene Aufgaben ohne Quest und ohne Plan-Datum. Eine Deadline allein hält eine Aufgabe in der Inbox.
 
 **Today**  
-Offene Aufgaben mit Plan-Datum oder Deadline heute oder früher. Reihenfolge: überfällig, liegengeblieben, heute fällig, Rest.
+Offene Aufgaben mit Plan-Datum oder Deadline heute oder früher, in manueller Tagesreihenfolge.
+
+**Tagesreihenfolge**:
+Die manuelle Reihenfolge der Aufgaben in Today und innerhalb eines Plan-Tags. Inbox und Quest-Listen haben eine eigene Reihenfolge.
 
 **Plan-Datum** (`planned_on`)  
 Der Tag, an dem man an einer Aufgabe arbeiten will. Liegt nie nach der Deadline. Eine Aufgabe mit vergangenem Plan-Datum ist *liegengeblieben*.

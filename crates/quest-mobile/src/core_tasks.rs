@@ -16,7 +16,7 @@ use crate::undo::UndoAction;
 use crate::{commands, repeat, task_detail};
 
 impl QuestCore {
-    fn change_task_dates(
+    pub(crate) fn change_task_dates(
         &self,
         task: &quest_domain::Task,
         command: Option<Command>,
@@ -24,9 +24,17 @@ impl QuestCore {
     ) -> Result<(), MobileError> {
         let Some(command) = command else { return Ok(()) };
         let before = self.store().snapshot();
+        let placement = match &command {
+            Command::PlaceTask { placement, today, .. } => Some((placement.list(), *today)),
+            _ => None,
+        };
         self.dispatch(command)?;
         let after = self.store().snapshot();
-        if let Some(edit) = after.task(task.id).and_then(|updated| TaskEdit::dates(task, updated, &before, &after)) {
+        let edit = after.task(task.id).and_then(|updated| match placement {
+            Some((list, today)) => TaskEdit::placement(task, updated, &before, &after, list, today),
+            None => TaskEdit::dates(task, updated, &before, &after),
+        });
+        if let Some(edit) = edit {
             self.undo_state().task_edited(edit, now.at);
         }
         Ok(())

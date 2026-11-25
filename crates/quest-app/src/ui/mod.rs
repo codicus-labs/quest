@@ -17,12 +17,12 @@ mod menu;
 mod notes;
 mod palette;
 pub mod parts;
-mod plan;
+pub(crate) mod plan;
 mod quest_detail;
 mod quest_editor;
 mod quest_picker;
 mod quests;
-mod recurrence;
+pub(crate) mod recurrence;
 mod review;
 mod shortcuts;
 pub mod sidebar;
@@ -43,10 +43,6 @@ mod capture_tests;
 #[cfg(test)]
 mod delete_tests;
 #[cfg(test)]
-mod dnd_room_tests;
-#[cfg(test)]
-mod dnd_scroll_tests;
-#[cfg(test)]
 mod dnd_tests;
 #[cfg(test)]
 mod idle_tests;
@@ -56,8 +52,6 @@ mod jump_tests;
 mod log_work_tests;
 #[cfg(test)]
 mod motion_tests;
-#[cfg(test)]
-mod plan_scroll_tests;
 #[cfg(test)]
 mod quest_editor_tests;
 #[cfg(test)]
@@ -78,8 +72,6 @@ mod task_fields_tests;
 mod task_modal_tests;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod title_click_tests;
 #[cfg(test)]
 mod workspaces_tests;
 
@@ -127,7 +119,7 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
 /// Sidebar, the main column (its top band, the view, a notice), and the tracked column when on.
 fn shell(s: &State, p: &Pal, cx: &mut Cx<State>) -> El {
     let page = match s.view {
-        View::Plan => plan::view(s, p, cx),
+        View::Plan => plan::view(s, p),
         View::Quests => quests::view(s, p),
         View::Review => review::view(s, p),
         View::Archive => archive::view(s, p),

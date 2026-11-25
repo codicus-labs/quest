@@ -38,6 +38,7 @@ fn task(n: u128, title: &str, quest: Option<u128>, day: &str, done: bool) -> Tas
         completed_at: done.then(|| at("2026-11-25T09:00:00+01:00")),
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     }
 }

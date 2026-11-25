@@ -209,7 +209,7 @@ pub fn day_tasks(snapshot: &Snapshot, day: NaiveDate, now: DateTime<Utc>) -> Vec
         .chain(snapshot.planned_occurrences(day, now).map(|task| (task, true)))
         .collect();
     tasks.sort_by(|(a, _), (b, _)| {
-        a.is_done().cmp(&b.is_done()).then(a.sort_key.cmp(&b.sort_key)).then(a.id.cmp(&b.id))
+        a.is_done().cmp(&b.is_done()).then(a.day_order.cmp(&b.day_order)).then(a.id.cmp(&b.id))
     });
     tasks
 }

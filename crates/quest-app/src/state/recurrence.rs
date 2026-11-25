@@ -89,9 +89,7 @@ impl State {
         if self.view != View::Plan {
             return None;
         }
-        self.plan
-            .built
-            .days()
+        quest_view::plan::daily_dates(self.today())
             .flat_map(|day| self.snap.planned_occurrences(day, self.now))
             .find(|task| task.id == id)
             .map(Cow::Owned)
@@ -106,6 +104,7 @@ impl State {
             | Command::SetTaskDescription { id, .. }
             | Command::AssignTask { id, .. }
             | Command::MoveTask { id, .. }
+            | Command::PlaceTask { id, .. }
             | Command::SetTaskDue { id, .. }
             | Command::CompleteTaskFromPlan { id, .. }
             | Command::DeleteTask { id, .. }
@@ -114,7 +113,9 @@ impl State {
         };
         let occurrence =
             if let Some(Cow::Owned(task)) = self.plan_task(id) { task.series.zip(task.planned_on) } else { None };
-        if occurrence.is_some() || matches!(command, Command::MoveTask { planned_on: Some(_), .. }) {
+        if occurrence.is_some()
+            || matches!(command, Command::MoveTask { planned_on: Some(_), .. } | Command::PlaceTask { .. })
+        {
             Command::EditPlan { occurrence, now: self.now, edit: Box::new(command) }
         } else {
             command

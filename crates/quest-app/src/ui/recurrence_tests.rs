@@ -2,9 +2,8 @@ use chrono::{Datelike, Days};
 use quest_domain::{Command, EntityId, Frequency, Position, RepeatPin, RepeatRule, Weekdays};
 use rune::{Key, Mods};
 
-use super::dnd_tests::{center, drag, rect, settle};
-use super::plan_scroll_tests::swipe;
-use super::tests::{click, click_beside_title, command, demo_app, press, test_app, type_text};
+use super::dnd_tests::{center, drag, rect, scroll_into_view, settle};
+use super::tests::{click, command, demo_app, press, test_app, type_text};
 use crate::clock;
 use crate::state::Overlay;
 
@@ -23,7 +22,7 @@ fn task_repeat_round_trips_through_the_plan_overview() {
     command(&mut rt, '2');
     rt.update(move |s, _| s.open_task_modal(id));
     settle(&mut rt);
-    super::title_click_tests::scroll_into_view(&mut rt, "task-modal-repeat");
+    scroll_into_view(&mut rt, "task-modal-repeat");
     click(&mut rt, "task-modal-repeat");
     assert_eq!(rt.state.overlay, Overlay::RepeatEditor);
     click(&mut rt, "repeat-frequency-trigger");
@@ -46,7 +45,8 @@ fn task_repeat_round_trips_through_the_plan_overview() {
     press(&mut rt, Key::Escape, Mods::default());
     command(&mut rt, '3');
 
-    click(&mut rt, "plan-recurring");
+    assert!(rt.find("plan-recurring").is_none());
+    rt.update(super::recurrence::open_overview);
     assert_eq!(rt.state.overlay, Overlay::RecurringTasks);
     click(&mut rt, &format!("recurring-{id}"));
     assert_eq!(rt.state.overlay, Overlay::RepeatEditor);
@@ -70,7 +70,7 @@ fn the_plan_shows_future_occurrences_and_saves_only_the_edited_one() {
     let (mut rt, _dir) = demo_app();
     let today = rt.state.today();
     let tomorrow = today + Days::new(1);
-    let later = today + Days::new(14);
+    let later = today + Days::new(12);
     let id = EntityId::new();
     let rule = RepeatRule {
         every: 1,
@@ -99,14 +99,14 @@ fn the_plan_shows_future_occurrences_and_saves_only_the_edited_one() {
     let distant = preview(&rt, later);
     rt.settle_all();
     rt.frame(0.0);
-    assert!(rt.find(&format!("plan-task-{first}")).is_some());
-    click_beside_title(&mut rt, "plan", first);
+    assert!(rt.find(&format!("row-{first}")).is_some());
+    click(&mut rt, &format!("row-title-{first}"));
     assert_eq!(rt.state.overlay, Overlay::None);
     assert_eq!(rt.state.task_modal.as_ref().unwrap().task, first);
     press(&mut rt, Key::Escape, Mods::default());
     assert!(rt.state.snap.task(first).is_none(), "viewing a preview does not save it");
 
-    click(&mut rt, &format!("plan-title-{first}"));
+    click(&mut rt, &format!("row-title-{first}"));
     assert_eq!(rt.state.task_modal.as_ref().map(|m| m.task), Some(first), "the title opens the dialog");
     rt.update(|s, _| {
         let title = &mut s.task_modal_fields().title;
@@ -119,8 +119,8 @@ fn the_plan_shows_future_occurrences_and_saves_only_the_edited_one() {
     assert_eq!(rt.state.snap.task(first).unwrap().title, "Dress rehearsal");
     assert_eq!(rt.state.snap.task(id).unwrap().title, "Rehearse");
 
-    swipe(&mut rt, 2, 40.0);
-    assert!(rt.find(&format!("plan-task-{distant}")).is_some());
+    scroll_into_view(&mut rt, &format!("row-{distant}"));
+    assert!(rt.find(&format!("row-{distant}")).is_some());
     assert!(rt.state.snap.task(distant).is_none(), "scrolling does not save the occurrence");
     assert_eq!(rt.state.snap.tasks.iter().filter(|task| task.series == Some(id)).count(), 1);
     rt.update(|s, _| {
@@ -129,7 +129,7 @@ fn the_plan_shows_future_occurrences_and_saves_only_the_edited_one() {
     assert_eq!(rt.state.snap.task(id).unwrap().repeat.unwrap().rule.ends, Some(tomorrow));
     rt.settle_all();
     rt.frame(0.0);
-    assert!(rt.find(&format!("plan-task-{distant}")).is_none());
+    assert!(rt.find(&format!("row-{distant}")).is_none());
     assert!(rt.state.snap.task(first).is_some());
     rt.state.clock = clock::Clock::Fixed(clock::at_local(tomorrow, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()));
     rt.frame(0.0);
@@ -170,20 +170,22 @@ fn moving_one_occurrence_leaves_the_series_alone_and_completing_another_brings_i
     let other = preview(following);
     command(&mut rt, '3');
     settle(&mut rt);
-    let from = center(&rt, &format!("plan-title-{moved}"));
-    let [x, y, w, h] = rect(&rt, &format!("plan-task-{finished}"));
-    drag(&mut rt, from, (x + w / 2.0, y + h + 12.0));
+    let from = center(&rt, &format!("row-title-{moved}"));
+    let [x, y, w, h] = rect(&rt, &format!("row-{finished}"));
+    drag(&mut rt, from, (x + w / 2.0, y + h - 3.0));
     settle(&mut rt);
     assert_eq!(rt.state.snap.task(moved).map(|task| task.planned_on), Some(Some(next)), "{:?}", rt.state.notice);
-    assert!(rt.find(&format!("plan-task-{finished}")).is_some());
+    assert!(rt.find(&format!("row-{finished}")).is_some());
 
-    click(&mut rt, &format!("plan-check-{finished}"));
+    click(&mut rt, &format!("row-check-{finished}"));
     assert!(rt.state.snap.task(finished).is_some_and(|task| task.planned_on == Some(today) && task.is_done()));
     assert!(rt.state.snap.task(moved).is_some_and(|task| task.planned_on == Some(next) && !task.is_done()));
     assert!(rt.state.snap.planned_occurrences(following, rt.state.now).any(|task| task.id == other));
     assert_eq!(rt.state.snap.task(source).unwrap().repeat.unwrap().rule, rule);
 
-    click(&mut rt, &format!("plan-check-{finished}"));
+    rt.state.clock = clock::Clock::Fixed(rt.state.now + chrono::Duration::seconds(5));
+    settle(&mut rt);
+    click(&mut rt, &format!("row-check-{finished}"));
     assert!(rt.state.snap.task(finished).is_some_and(|task| task.planned_on == Some(today) && !task.is_done()));
     rt.state.clock = clock::Clock::Fixed(clock::at_local(next, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()));
     rt.frame(0.0);

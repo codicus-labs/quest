@@ -1,11 +1,7 @@
-//! Motion: Later glides the planner's day columns with their cards as one board, and
-//! switching views flies nothing from one place to another.
-
-use chrono::Days;
 use quest_domain::EntityId;
 use rune::Runtime;
 
-use super::tests::{TempDir, click, command, demo_app};
+use super::tests::{TempDir, command, demo_app};
 use crate::state::State;
 
 fn app() -> (Runtime<State>, TempDir) {
@@ -18,43 +14,6 @@ fn settle(rt: &mut Runtime<State>) {
     rt.frame(0.0);
     rt.settle_all();
     rt.frame(0.0);
-}
-
-fn drawn(rt: &Runtime<State>, key: &str) -> [f32; 4] {
-    rt.presented(key).unwrap_or_else(|| panic!("`{key}` is drawn")).0
-}
-
-fn task_id(rt: &Runtime<State>, title: &str) -> EntityId {
-    rt.state.snap.tasks.iter().find(|t| t.title == title).map(|t| t.id).expect("demo task")
-}
-
-#[test]
-fn later_glides_the_columns_with_their_cards() {
-    let (mut rt, _dir) = app();
-    command(&mut rt, '3');
-    settle(&mut rt);
-    let tomorrow = rt.state.today() + Days::new(1);
-    let card = format!("plan-task-{}", task_id(&rt, "Polish the details that matter"));
-    let column = format!("plan-col-{tomorrow}");
-    let offset = |rt: &Runtime<State>| {
-        let (c, k) = (drawn(rt, &card), drawn(rt, &column));
-        (c[0] - k[0], c[1] - k[1])
-    };
-    let before = offset(&rt);
-    let column_x = drawn(&rt, &column)[0];
-
-    click(&mut rt, "plan-next");
-    let mut moved = false;
-    for _ in 0..12 {
-        rt.frame(1.0 / 60.0);
-        let (dx, dy) = offset(&rt);
-        assert!((dx - before.0).abs() < 0.5 && (dy - before.1).abs() < 0.5, "the card rides its column");
-        moved |= (drawn(&rt, &column)[0] - column_x).abs() > 1.0;
-    }
-    assert!(moved, "the column itself slides");
-    settle(&mut rt);
-    assert!(drawn(&rt, &column)[0] < column_x - 50.0, "tomorrow ends one place to the left");
-    assert_eq!(offset(&rt), before);
 }
 
 /// After a view switch, nothing is on its way from somewhere else: what shows on the first
@@ -74,8 +33,7 @@ fn switching_views_flies_no_card() {
     let (mut rt, _dir) = app();
     let today = rt.state.today();
     let ids: Vec<EntityId> = rt.state.snap.tasks_on(today).map(|t| t.id).collect();
-    let keys: Vec<String> =
-        ids.iter().flat_map(|id| [format!("row-{id}"), format!("plan-face-{id}"), format!("plan-task-{id}")]).collect();
+    let keys: Vec<String> = ids.iter().map(|id| format!("row-{id}")).collect();
     for from in '1'..='5' {
         for to in '1'..='5' {
             if from == to {
@@ -84,8 +42,9 @@ fn switching_views_flies_no_card() {
             command(&mut rt, from);
             settle(&mut rt);
             command(&mut rt, to);
-            let page_key =
-                |key: char| ["list-page", "list-page", "plan", "review", "list-page"][(key as usize) - ('1' as usize)];
+            let page_key = |key: char| {
+                ["list-page", "list-page", "plan-page", "review", "list-page"][(key as usize) - ('1' as usize)]
+            };
             assert_eq!(rt.presented(page_key(to)).map(|(_, opacity)| opacity), Some(1.0), "⌘{from} → ⌘{to}");
             if page_key(from) != page_key(to) {
                 assert!(rt.presented(page_key(from)).is_none());

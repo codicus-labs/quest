@@ -64,15 +64,15 @@ fn a_deadline_before_the_plan_date_takes_it_along_to_that_days_bottom() {
     let mut r = Replica::new();
     let other = task(&mut r, Some(d(26)), None);
     let id = task(&mut r, Some(d(28)), None);
-    r.run(Command::SetTaskDue { id, due_on: Some(d(26)), at: at(9) });
+    r.run(Command::SetTaskDue { id, due_on: Some(d(26)), today: d(25), at: at(9) });
     assert_eq!(dates(&r, id), (Some(d(26)), Some(d(26))));
     assert!(r.snapshot.postponements.is_empty(), "set for the first time, plan date moved earlier");
     let order: Vec<EntityId> = r.snapshot.tasks_on(d(26)).map(|t| t.id).collect();
     assert_eq!(order, [other, id]);
 
-    r.run(Command::SetTaskDue { id, due_on: Some(d(27)), at: at(10) });
+    r.run(Command::SetTaskDue { id, due_on: Some(d(27)), today: d(25), at: at(10) });
     assert_eq!(postponed(&r, id), [(DateField::Due, d(26), d(27))]);
-    r.run(Command::SetTaskDue { id, due_on: None, at: at(11) });
+    r.run(Command::SetTaskDue { id, due_on: None, today: d(25), at: at(11) });
     assert_eq!(dates(&r, id), (Some(d(26)), None));
 }
 

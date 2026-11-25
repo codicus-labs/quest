@@ -79,7 +79,6 @@ impl State {
         self.capture_undo = None;
         self.capture.step = CaptureStep::Compose { error: None };
         self.focus_task = None;
-        self.quest_filter = None;
         self.reset_quick_add();
         self.lingering_tasks.clear();
         self.date_picker = None;

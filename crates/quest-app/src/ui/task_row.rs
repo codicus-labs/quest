@@ -1,15 +1,11 @@
-//! A list row (Today, Inbox, Logbook, a quest's list): check and title, and on the right the
-//! muted marks (dates and the quest) and the timer control. A click selects it; a double click or ↵
-//! opens the task's dialog.
-
-use quest_domain::{EntityId, Task};
+use quest_domain::{EntityId, Task, TaskList};
 use quest_view::row_meta::{self, Tone};
 use rune::{Color, Cursor, El, Tx, col, el, icon, row, text};
 
 use crate::icons;
 use crate::state::State;
 use crate::theme::{self, Pal, quest_color, ty};
-use crate::ui::parts;
+use crate::ui::{drag, parts};
 
 /// What a row shows besides its dates.
 #[derive(Clone, Copy)]
@@ -20,11 +16,74 @@ pub struct Shows {
     pub plan_ahead: bool,
 }
 
+pub fn open(s: &mut State, id: EntityId, tx: &mut Tx) {
+    tx.blur();
+    s.selected_task = Some(id);
+    s.toggle_task_detail(id);
+    if s.task_modal.is_some() {
+        tx.scroll_into_view(format!("row-{id}"));
+    }
+}
+
 pub fn task_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
+    build(s, task, shows, p, None)
+}
+
+pub fn in_list(s: &State, task: &Task, shows: Shows, p: &Pal, list: TaskList) -> El {
+    build(s, task, shows, p, Some(list))
+}
+
+fn build(s: &State, task: &Task, shows: Shows, p: &Pal, list: Option<TaskList>) -> El {
+    let id = task.id;
+    let line = row()
+        .key(format!("row-{id}"))
+        .role("listitem")
+        .label(task.title.clone())
+        .w_full()
+        .child(drag::face(s, id, face(s, task, shows, p, "row")))
+        .children(super::menu::anchor(s, id))
+        .on_secondary_press(move |s: &mut State, _, _: &mut Tx| super::menu::toggle(s, id))
+        .on_hover_change(move |s: &mut State, inside: bool, tx: &mut Tx| {
+            if inside {
+                s.hovered_task = Some(id);
+            } else if s.hovered_task == Some(id) {
+                s.hovered_task = None;
+            }
+            tx.live_only();
+        });
+    let line = match list {
+        Some(list) if !task.is_done() => drag::source(line.cursor(Cursor::Grab), list, id),
+        _ => line.on_press_tx(move |s: &mut State, tx: &mut Tx| open(s, id, tx)),
+    };
+    let detail = (!s.drag.dragging().is_some_and(|payload| payload.task == id))
+        .then(|| super::task_modal::inline(s, task, p, false))
+        .flatten();
+    col().key(format!("task-item-{id}")).w_full().child(line).children(detail)
+}
+
+pub fn tray_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
+    let id = task.id;
+    let Some(quest) = task.quest_id else { return task_row(s, task, shows, p) };
+    let list = TaskList::Quest(quest);
+    let row = if quest_domain::is_today(task, s.today()) {
+        let alias = row()
+            .key(format!("not-planned-{id}"))
+            .role("listitem")
+            .label(task.title.clone())
+            .w_full()
+            .child(face(s, task, shows, p, "not-planned"));
+        drag::source(alias.cursor(Cursor::Grab), list, id)
+    } else {
+        in_list(s, task, shows, p, list)
+    };
+    if s.drag.dragging().is_some_and(|payload| payload.task == id) { row.absolute(0.0, 0.0).opacity(0.0) } else { row }
+}
+
+pub fn face(s: &State, task: &Task, shows: Shows, p: &Pal, prefix: &str) -> El {
     let id = task.id;
     let selected = s.selected_task == Some(id);
     let mut title = text(task.title.clone())
-        .key(format!("row-title-{id}"))
+        .key(format!("{prefix}-title-{id}"))
         .font(ty::BODY)
         .color(if task.is_done() { p.muted } else { p.text })
         .single_line()
@@ -35,9 +94,6 @@ pub fn task_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
         title = title.strike(0, task.title.len(), Some(p.muted));
     }
     let mut line = row()
-        .key(format!("row-{id}"))
-        .role("listitem")
-        .label(task.title.clone())
         .w_full()
         .min_h(38.0)
         .px(10.0)
@@ -46,50 +102,27 @@ pub fn task_row(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
         .radius(7.0)
         .hover(p.hover)
         .cursor(Cursor::Default)
-        .on_hover_change(move |s: &mut State, inside: bool, tx: &mut Tx| {
-            // The task shortcuts read this; nothing on screen does.
-            if inside {
-                s.hovered_task = Some(id);
-            } else if s.hovered_task == Some(id) {
-                s.hovered_task = None;
-            }
-            tx.live_only();
-        })
-        .on_press_tx(move |s: &mut State, tx: &mut Tx| {
-            tx.blur();
-            s.selected_task = Some(id);
-        })
-        .on_double_press_tx(move |s: &mut State, tx| {
-            s.toggle_task_detail(id);
-            if s.task_modal.is_some() {
-                tx.scroll_into_view("task-modal");
-            }
-        })
-        .child(check(id, task.is_done(), p))
+        .child(check(format!("{prefix}-check-{id}"), id, task.is_done(), p))
         .child(title)
         .child(marks(s, task, shows, p))
         .children((!task.is_done()).then(|| {
             let running = s.snap.running_entry().is_some_and(|e| e.task_id == Some(id));
-            parts::timer_button(format!("row-play-{id}"), id, running, p)
+            parts::timer_button(format!("{prefix}-play-{id}"), id, running, p)
         }));
     if selected {
         line = line.fill(p.selected).border_sides([0.0, 0.0, 0.0, 3.0], p.accent_line);
     }
-    if let Some(detail) = super::task_modal::inline(s, task, p, false) {
-        col().w_full().child(line).child(detail)
-    } else {
-        line
-    }
+    line
 }
 
 /// The round check: an empty ring, or the accent fill with a dark tick.
-fn check(id: EntityId, done: bool, p: &Pal) -> El {
+fn check(key: String, id: EntityId, done: bool, p: &Pal) -> El {
     let (fill, border, ink) = if done {
         (p.accent_fill, p.accent_fill, theme::on_accent_fill())
     } else {
         (Color::TRANSPARENT, p.border_strong, Color::TRANSPARENT)
     };
-    el().key(format!("row-check-{id}"))
+    el().key(key)
         .role("checkbox")
         .label("Complete")
         .checked(done)

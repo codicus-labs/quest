@@ -183,7 +183,9 @@ impl Snapshot {
 
     /// Tasks planned for `day`, in display order.
     pub fn tasks_on(&self, day: NaiveDate) -> impl Iterator<Item = &Task> {
-        self.tasks.iter().filter(move |t| t.planned_on == Some(day))
+        let mut tasks: Vec<_> = self.tasks.iter().filter(|t| t.planned_on == Some(day)).collect();
+        tasks.sort_by_key(|task| (&task.day_order, task.id));
+        tasks.into_iter()
     }
 
     /// A task's checklist, in display order.

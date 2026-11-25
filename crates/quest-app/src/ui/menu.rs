@@ -1,30 +1,21 @@
-//! A task card's "…" button and the menu it opens (rune-kit's `Menu`, drawn in the overlay layer
-//! and anchored to the button). `rows` lists them; `pick` carries one out.
-
 use quest_domain::{EntityId, Task};
-use rune::{El, Transition, Tx};
+use rune::{El, Tx, el};
 use rune_kit::{Menu, MenuItem};
 
-use crate::icons;
 use crate::menu::{self, Step, TaskAction};
 use crate::state::{State, TaskMenu, View};
 use crate::theme::Pal;
 use crate::ui::chrome::open_palette_in;
-use crate::ui::parts;
 
 const MENU_KEY: &str = "card-menu";
-/// rune-kit anchors a menu to `{key}-trigger`: the open menu's button takes that key.
-const TRIGGER_KEY: &str = "card-menu-trigger";
+pub fn anchor(s: &State, id: EntityId) -> Option<El> {
+    (s.menu == Some(TaskMenu { task: id }))
+        .then(|| el().key("card-menu-trigger").absolute(12.0, 0.0).size(1.0, 38.0).inert())
+}
 
-/// The "…" button on a task card.
-pub fn button(s: &State, prefix: &'static str, id: EntityId, p: &Pal) -> El {
-    let this = TaskMenu { task: id, prefix };
-    let open = s.menu == Some(this);
-    let key = if open { TRIGGER_KEY.to_owned() } else { format!("{prefix}-menu-{id}") };
-    parts::icon_button(key, "More actions", &icons::MORE, p.muted, p, move |s: &mut State, _: &mut Tx| {
-        s.menu = if s.menu == Some(this) { None } else { Some(this) };
-    })
-    .transition(Transition::none())
+pub fn toggle(s: &mut State, id: EntityId) {
+    let item = TaskMenu { task: id };
+    s.menu = (s.menu != Some(item)).then_some(item);
 }
 
 /// The menu's rows (`None` is a separator).
@@ -50,7 +41,7 @@ pub fn layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
         }
         menu = menu.item(item.on_select_tx(move |s: &mut State, tx: &mut Tx| pick(s, id, action, tx)));
     }
-    // The trigger it hands back is the button's stand-in; the real button is in the card.
+    // The row provides the trigger's anchor.
     let _ = menu.build(&p.kit, layer);
 }
 

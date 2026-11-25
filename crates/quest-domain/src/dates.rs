@@ -77,20 +77,6 @@ pub fn is_today(task: &Task, today: NaiveDate) -> bool {
     !task.is_done() && (task.planned_on.is_some_and(|d| d <= today) || task.due_on.is_some_and(|d| d <= today))
 }
 
-/// Where a task stands in Today: overdue first, then carried over, then due today, then the
-/// rest. Sorting by it keeps the order within each group.
-pub fn today_rank(task: &Task, today: NaiveDate) -> u8 {
-    if overdue(task, today) {
-        0
-    } else if carried_over(task, today) {
-        1
-    } else if task.due_on == Some(today) {
-        2
-    } else {
-        3
-    }
-}
-
 /// Open, without a quest and without a plan date. A deadline alone keeps it in the inbox.
 pub fn is_inbox(task: &Task) -> bool {
     !task.is_done() && task.quest_id.is_none() && task.planned_on.is_none()

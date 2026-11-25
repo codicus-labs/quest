@@ -1,0 +1,6 @@
+[
+  {"t":0.2,"type":"down","key":"row-title-__TASK_ID__"},
+  {"t":0.4,"type":"move","key":"nav-quest-__QUEST_ID__"},
+  {"t":0.8,"type":"up","key":"nav-quest-__QUEST_ID__"},
+  {"t":1.2,"type":"mark","name":"end"}
+]

@@ -151,7 +151,6 @@ pub fn run(s: &mut State, action: Action, tx: &mut Tx) {
             s.open_capture();
             tx.focus_when_shown("capture-text", false);
         }
-        Action::FilterQuest(quest) => s.quest_filter = quest,
         Action::SwitchWorkspace(workspace) => s.switch_workspace(workspace),
         Action::ManageWorkspaces => {
             s.open_workspaces();

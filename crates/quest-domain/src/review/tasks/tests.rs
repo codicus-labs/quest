@@ -35,7 +35,7 @@ fn a_week_counts_postponements_lingering_done_and_new_tasks() {
     let move_to = |id, day, at| Command::MoveTask { id, planned_on: Some(d(day)), position: Position::Bottom, at };
     r.run(move_to(often, 20, at(17, 9))); // the week before: earlier, nothing
     r.run(move_to(often, 25, at(24, 9))); // plan and deadline
-    r.run(Command::SetTaskDue { id: often, due_on: Some(d(27)), at: at(25, 9) });
+    r.run(Command::SetTaskDue { id: often, due_on: Some(d(27)), today: d(25), at: at(25, 9) });
     r.run(move_to(once, 25, at(23, 9)));
     r.run(Command::CompleteTask { id: done, at: at(24, 12) });
 

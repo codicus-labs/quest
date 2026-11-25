@@ -25,14 +25,20 @@ pub(super) fn create(
     }
     let dates = set_due(set_planned(TaskDates::default(), planned_on), due_on);
     use EntityKind::Task;
-    Ok(vec![
+    let mut writes = vec![
         write(Task, id, fields::TITLE, json!(title(raw_title)?)),
         write(Task, id, fields::QUEST_ID, json!(quest_id)),
         write(Task, id, fields::TASK_PLANNED_ON, json!(dates.planned_on)),
         write(Task, id, fields::TASK_DUE_ON, json!(dates.due_on)),
         write(Task, id, fields::SORT_KEY, json!(task_sort_key(snapshot, id, dates.planned_on, position))),
         in_workspace(Task, id, snapshot),
-    ])
+    ];
+    if let Some(day) = dates.planned_on.filter(|_| position != Position::Bottom) {
+        writes.extend(super::task_order::order_writes(snapshot, id, super::TaskList::Day(day), position, day));
+    } else {
+        writes.push(super::task_order::append_day(snapshot, id));
+    }
+    Ok(writes)
 }
 
 pub(super) fn move_task(
@@ -44,13 +50,18 @@ pub(super) fn move_task(
 ) -> Result<Vec<FieldWrite>, CommandError> {
     let task = snapshot.task(id).ok_or(CommandError::UnknownTask(id))?;
     let before = task.dates();
-    let mut writes = date_writes(snapshot, id, before, set_planned(before, planned_on), at);
-    writes.push(write(
-        EntityKind::Task,
-        id,
-        fields::SORT_KEY,
-        json!(task_sort_key(snapshot, id, planned_on, position)),
-    ));
+    let after = set_planned(before, planned_on);
+    let mut writes = date_writes(snapshot, id, before, after, at);
+    if position != Position::Bottom || before.planned_on == planned_on {
+        let list = match planned_on {
+            Some(day) => super::TaskList::Day(day),
+            None => task.quest_id.map_or(super::TaskList::Inbox, super::TaskList::Quest),
+        };
+        if planned_on.is_some() {
+            writes.retain(|write| write.field != fields::TASK_DAY_ORDER);
+        }
+        writes.extend(super::task_order::order_writes(snapshot, id, list, position, at.date_naive()));
+    }
     Ok(writes)
 }
 
@@ -58,18 +69,20 @@ pub(super) fn set_task_due(
     snapshot: &Snapshot,
     id: EntityId,
     due_on: Option<NaiveDate>,
+    today: NaiveDate,
     at: DateTime<Utc>,
 ) -> Result<Vec<FieldWrite>, CommandError> {
     let task = snapshot.task(id).ok_or(CommandError::UnknownTask(id))?;
     let before = task.dates();
     let after = set_due(before, due_on);
-    if after.planned_on == before.planned_on {
-        return Ok(date_writes(snapshot, id, before, after, at));
-    }
-    // The plan date taken along moves the task to the bottom of that day.
     let mut writes = date_writes(snapshot, id, before, after, at);
-    let key = task_sort_key(snapshot, id, after.planned_on, Position::Bottom);
-    writes.push(write(EntityKind::Task, id, fields::SORT_KEY, json!(key)));
+    if !crate::is_today(task, today)
+        && !task.is_done()
+        && after.planned_on == before.planned_on
+        && after.due_on.is_some_and(|due| due <= today)
+    {
+        writes.push(super::task_order::append_day(snapshot, id));
+    }
     Ok(writes)
 }
 
@@ -88,6 +101,9 @@ pub(crate) fn date_writes(
     }
     if after.due_on != before.due_on {
         writes.push(write(EntityKind::Task, task, fields::TASK_DUE_ON, json!(after.due_on)));
+    }
+    if before.planned_on != after.planned_on {
+        writes.push(super::task_order::append_day(snapshot, task));
     }
     for field in postponed_fields(before, after) {
         let (Some(from), Some(to)) = (before.get(field), after.get(field)) else { continue };

@@ -7,7 +7,6 @@ use rune::{Key, Mods, Runtime};
 use super::dnd_tests::rect;
 use super::tests::{TempDir, click, command, demo_app, go, press, type_text};
 use crate::dnd::DragState;
-use crate::palette::Mode;
 use crate::state::{Overlay, State, View};
 use crate::theme::color_name;
 
@@ -111,19 +110,14 @@ fn a_click_on_a_card_opens_its_dialog_and_its_buttons_do_not_drag() {
     let order = |rt: &Runtime<State>| rt.state.snap.tasks_on(today).map(|t| t.id).collect::<Vec<_>>();
     let before = order(&rt);
     let id = rt.state.snap.tasks_on(today).find(|t| !t.is_done()).map(|t| t.id).unwrap();
-    click(&mut rt, &format!("plan-title-{id}"));
+    click(&mut rt, &format!("row-title-{id}"));
     assert_eq!(rt.state.task_modal.as_ref().map(|m| m.task), Some(id), "a click without travel opens the dialog");
     assert_eq!(order(&rt), before, "and moves nothing");
     press(&mut rt, Key::Escape, Mods::default());
     assert!(rt.state.task_modal.is_none() && rt.find("task-modal").is_none(), "Esc closes it");
 
-    click(&mut rt, &format!("plan-chip-{id}"));
-    assert_eq!(rt.state.palette.mode, Mode::AssignQuest(id), "the chip picks a quest");
-    assert_eq!(rt.state.drag, DragState::Idle);
-    press(&mut rt, Key::Escape, Mods::default());
-
     // A press on the check that wanders a little stays a press on the check.
-    let (x, y) = rt.find(&format!("plan-check-{id}")).unwrap();
+    let (x, y) = rt.find(&format!("row-check-{id}")).unwrap();
     rt.pointer_down(x, y);
     rt.frame(0.0);
     rt.pointer_move(x + 2.0, y + 2.0);
@@ -139,7 +133,7 @@ fn a_press_on_a_card_drags_only_past_the_threshold() {
     let (mut rt, _dir) = app();
     command(&mut rt, '3');
     let id = rt.state.snap.tasks_on(rt.state.today()).find(|t| !t.is_done()).map(|t| t.id).unwrap();
-    let (x, y) = rt.find(&format!("plan-title-{id}")).unwrap();
+    let (x, y) = rt.find(&format!("row-title-{id}")).unwrap();
     rt.pointer_down(x, y);
     rt.frame(0.0);
     rt.pointer_move(x + 2.0, y + 2.0);

@@ -1,9 +1,6 @@
-//! QUEST WORK and OTHER on the planner: V hides other work and the filter shows one quest's work;
-//! the quick-add field's defaults on Today, the Inbox and a quest's page.
-
 use rune::{Key, Mods, Runtime};
 
-use super::dnd_tests::{settle, task};
+use super::dnd_tests::task;
 use super::tests::{click, command, demo_app, press, type_text};
 use crate::state::{State, View};
 
@@ -15,53 +12,14 @@ fn quest_id(rt: &Runtime<State>, title: &str) -> quest_domain::EntityId {
     rt.state.snap.quests.iter().find(|q| q.title == title).map(|q| q.id).unwrap_or_else(|| panic!("quest {title}"))
 }
 
-fn plan(rt: &mut Runtime<State>) {
-    command(rt, '3');
-    settle(rt);
-}
-
 #[test]
-fn v_hides_other_work_on_plan() {
+fn plan_today_has_the_same_rows_as_today() {
     let (mut rt, _dir) = demo_app();
-    plan(&mut rt);
-    let errand = task(&rt, "Pick up the dry cleaning").id;
-    let quest_work = task(&rt, "Design the next chapter").id;
-    assert!(shown(&rt, &format!("plan-task-{errand}")), "other work shows");
-    type_text(&mut rt, "v");
-    assert!(!shown(&rt, &format!("plan-task-{errand}")), "V hides it");
-    assert!(shown(&rt, &format!("plan-task-{quest_work}")), "quest work stays");
-    type_text(&mut rt, "v");
-    assert!(shown(&rt, &format!("plan-task-{errand}")), "V shows it again");
-}
-
-#[test]
-fn a_task_changes_section_with_its_quest() {
-    let (mut rt, _dir) = demo_app();
-    plan(&mut rt);
-    let errand = task(&rt, "Pick up the dry cleaning").id;
-    let quest = quest_id(&rt, "Launch my idea");
-    rt.state.dispatch(quest_domain::Command::AssignTask { id: errand, quest_id: Some(quest) });
-    type_text(&mut rt, "v");
-    assert!(shown(&rt, &format!("plan-task-{errand}")), "with a quest it is quest work, shown with OTHER hidden");
-}
-
-#[test]
-fn the_filter_shows_one_quests_work() {
-    let (mut rt, _dir) = demo_app();
-    plan(&mut rt);
-    let writing = quest_id(&rt, "Write every week");
-    let essay = task(&rt, "Draft this week’s essay").id;
-    let design = task(&rt, "Design the next chapter").id;
-    click(&mut rt, "plan-filter");
-    type_text(&mut rt, "Write every");
-    press(&mut rt, Key::Enter, Mods::default());
-    assert_eq!(rt.state.quest_filter, Some(writing));
-    assert!(shown(&rt, &format!("plan-task-{essay}")));
-    assert!(!shown(&rt, &format!("plan-task-{design}")), "other quests' work is filtered out");
-
-    click(&mut rt, "plan-filter-chip");
-    assert_eq!(rt.state.quest_filter, None, "the chip clears the filter");
-    assert!(shown(&rt, &format!("plan-task-{design}")));
+    command(&mut rt, '2');
+    let today = super::lists::shown_tasks(&rt.state);
+    command(&mut rt, '3');
+    let plan = super::lists::shown_tasks(&rt.state);
+    assert_eq!(&plan[..today.len()], today);
 }
 
 fn quick_add(rt: &mut Runtime<State>, title: &str) -> quest_domain::Task {

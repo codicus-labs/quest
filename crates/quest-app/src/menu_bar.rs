@@ -22,6 +22,7 @@ pub fn install(app: App<State>) -> App<State> {
         .menu_item(item("Review", |s, tx| s.go_with(View::Review, tx), Some("cmd+4")))
         .menu_item(item("Logbook", |s, tx| s.go_with(View::Logbook, tx), Some("cmd+5")))
         .menu_item(MenuItem::separator().menu("View"))
+        .menu_item(item("Recurring Tasks…", crate::ui::recurrence::open_overview, None))
         .menu_item(item("Tracked Time", |s, _| keys::toggle_tracked(s), Some("alt+cmd+i")))
         .menu_item(item("Command Bar", open_palette, Some("cmd+k")))
         .menu_item(item(
@@ -38,6 +39,29 @@ pub fn install(app: App<State>) -> App<State> {
             "Quick Add Deadline",
             |s, tx| keys::quick_picker(s, crate::ui::task_fields::Picker::Date(quest_domain::DateField::Due), tx),
             Some("cmd+shift+d"),
+        ))
+        .menu_item(item(
+            "Jump to Today in Plan",
+            |s, tx| {
+                if s.view == View::Plan {
+                    crate::ui::plan::jump_today(s, tx);
+                }
+            },
+            Some("g"),
+        ))
+        .menu_item(item(
+            "Move Task Up",
+            |s, tx| {
+                crate::ui::drag::nudge(s, true, tx);
+            },
+            Some("alt+up"),
+        ))
+        .menu_item(item(
+            "Move Task Down",
+            |s, tx| {
+                crate::ui::drag::nudge(s, false, tx);
+            },
+            Some("alt+down"),
         ))
         .menu_item(item("Undo Task Change", |s, _| s.undo_latest(), None))
         .menu_item(item("Keyboard Shortcuts", |s, _| s.overlay = Overlay::Shortcuts, None))

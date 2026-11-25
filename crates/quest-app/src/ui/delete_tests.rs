@@ -56,7 +56,10 @@ fn a_task_deleted_from_its_planner_menu_comes_back_with_command_z() {
     let (mut rt, _dir) = app();
     command(&mut rt, '3');
     let id = task_id(&rt, DRAFT);
-    click(&mut rt, &format!("plan-menu-{id}"));
+    let (x, y) = super::dnd_tests::center(&rt, &format!("row-title-{id}"));
+    rt.secondary_down(x, y);
+    rt.secondary_up(x, y);
+    super::dnd_tests::settle(&mut rt);
     assert!(rt.find("card-menu-menu").is_some(), "the menu opens");
     let delete = menu_row(&rt, id, TaskAction::Delete);
     click(&mut rt, &delete);

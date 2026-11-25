@@ -5,7 +5,7 @@
 use chrono::Duration;
 use rune::Runtime;
 
-use super::dnd_tests::{center, rect, settle, task};
+use super::dnd_tests::{settle, task};
 use super::tests::{command, demo_app};
 use crate::clock::Clock;
 use crate::state::State;
@@ -101,27 +101,4 @@ fn the_undo_toast_goes_once_and_the_window_rests_again() {
     assert!(rt.state.undo.shown.is_none(), "and goes by itself");
     assert!(ten.woken <= 6, "{} wakes in 10 s", ten.woken);
     assert!(ten.commits <= 2, "{} commits in 10 s", ten.commits);
-}
-
-#[test]
-fn a_drag_resting_where_the_edge_scroll_cannot_move_stops_ticking() {
-    let (mut rt, _dir) = demo_app();
-    stop_the_timer(&mut rt);
-    command(&mut rt, '3');
-    quiet(&mut rt);
-    let [x, y, w, h] = rect(&rt, "plan-board");
-    // Just inside the edge zone the speed is too small to move the strip a point.
-    let to = (x + w - crate::plan_strip::EDGE_ZONE + 0.01, y + h / 2.0);
-    let from = center(&rt, &format!("plan-title-{}", task(&rt, "Polish the details that matter").id));
-    rt.pointer_down(from.0, from.1);
-    rt.frame(0.0);
-    for i in 1..=4 {
-        let t = i as f32 / 4.0;
-        rt.pointer_move(from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t);
-        rt.frame(0.0);
-    }
-    let offset = rt.state.plan.offset();
-    let five = idle(&mut rt, 5.0);
-    assert_eq!(rt.state.plan.offset(), offset, "the strip stays");
-    assert!(five.woken <= 10, "{} wakes in 5 s", five.woken);
 }

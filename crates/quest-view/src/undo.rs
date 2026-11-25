@@ -5,8 +5,10 @@
 #[cfg(test)]
 mod tests;
 
-use chrono::{DateTime, Duration, Utc};
-use quest_domain::{Command, EntityId, EntityKind, QuestStatus, Snapshot, Task, TaskDates};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
+use quest_domain::{
+    Command, EntityId, EntityKind, PreviousTaskOrder, QuestStatus, Snapshot, Task, TaskDates, TaskList,
+};
 
 /// How long a toast shows.
 pub const TOAST_SECONDS: i64 = 6;
@@ -22,50 +24,107 @@ pub fn lingering(local_completion: DateTime<Utc>, task: &Task, now: DateTime<Utc
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TaskEdit {
-    Quest { id: EntityId, previous: Option<EntityId> },
-    Dates { id: EntityId, dates: TaskDates, sort_key: String, postponements: Vec<EntityId> },
-    Completion { id: EntityId, previous: Option<DateTime<Utc>>, previous_plan: Option<(TaskDates, String)> },
+    Quest {
+        id: EntityId,
+        previous: Option<EntityId>,
+    },
+    Dates {
+        id: EntityId,
+        dates: Option<TaskDates>,
+        sort_key: Option<String>,
+        day_order: Option<String>,
+        rekeyed: Vec<PreviousTaskOrder>,
+        quest_id: Option<Option<EntityId>>,
+        postponements: Vec<EntityId>,
+    },
+    Completion {
+        id: EntityId,
+        previous: Option<DateTime<Utc>>,
+        previous_plan: Option<(TaskDates, String)>,
+    },
 }
 
 impl TaskEdit {
     pub fn dates(before: &Task, after: &Task, old: &Snapshot, new: &Snapshot) -> Option<Self> {
-        (before.dates() != after.dates() || before.sort_key != after.sort_key).then(|| Self::Dates {
-            id: before.id,
-            dates: before.dates(),
-            sort_key: before.sort_key.clone(),
-            postponements: new
-                .postponements_of(before.id)
-                .filter(|p| !old.postponements_of(before.id).any(|old| old.id == p.id))
-                .map(|p| p.id)
-                .collect(),
-        })
+        (before.dates() != after.dates()
+            || before.sort_key != after.sort_key
+            || before.day_order != after.day_order
+            || before.quest_id != after.quest_id)
+            .then(|| Self::Dates {
+                id: before.id,
+                dates: (before.dates() != after.dates()).then(|| before.dates()),
+                sort_key: (before.sort_key != after.sort_key).then(|| before.sort_key.clone()),
+                day_order: (before.day_order != after.day_order).then(|| before.day_order.clone()),
+                rekeyed: Vec::new(),
+                quest_id: (before.quest_id != after.quest_id).then_some(before.quest_id),
+                postponements: new
+                    .postponements_of(before.id)
+                    .filter(|p| !old.postponements_of(before.id).any(|old| old.id == p.id))
+                    .map(|p| p.id)
+                    .collect(),
+            })
+    }
+
+    pub fn placement(
+        before: &Task,
+        after: &Task,
+        old: &Snapshot,
+        new: &Snapshot,
+        list: TaskList,
+        today: NaiveDate,
+    ) -> Option<Self> {
+        let mut edit = Self::dates(before, after, old, new)?;
+        if let Self::Dates { rekeyed, .. } = &mut edit {
+            let new_keys: std::collections::HashMap<_, _> = new
+                .tasks
+                .iter()
+                .filter(|task| list.contains(task, today))
+                .map(|task| (task.id, list.key(task)))
+                .collect();
+            rekeyed.extend(old.tasks.iter().filter_map(|task| {
+                let key = list.key(task);
+                (task.id != before.id
+                    && list.contains(task, today)
+                    && new_keys.get(&task.id).is_some_and(|updated| *updated != key))
+                .then(|| PreviousTaskOrder { id: task.id, list, key: key.to_owned() })
+            }));
+        }
+        Some(edit)
     }
 
     pub fn completion(before: &Task, after: &Task) -> Option<Self> {
         (before.completed_at != after.completed_at).then(|| Self::Completion {
             id: before.id,
             previous: before.completed_at,
-            previous_plan: (before.dates() != after.dates()).then(|| (before.dates(), before.sort_key.clone())),
+            previous_plan: (before.dates() != after.dates()).then(|| (before.dates(), before.day_order.clone())),
         })
     }
 
     pub fn command(self, at: DateTime<Utc>) -> Command {
         match self {
             Self::Quest { id, previous } => Command::AssignTask { id, quest_id: previous },
-            Self::Dates { id, dates, sort_key, postponements } => Command::RestoreTaskEdit {
-                id,
-                dates: Some(dates),
-                sort_key: Some(sort_key),
-                completed_at: None,
-                postponements,
-                at,
-            },
-            Self::Completion { id, previous, previous_plan } => {
-                let (dates, sort_key) = previous_plan.unzip();
+            Self::Dates { id, dates, sort_key, day_order, rekeyed, quest_id, postponements } => {
                 Command::RestoreTaskEdit {
                     id,
                     dates,
                     sort_key,
+                    day_order,
+                    rekeyed,
+                    quest_id,
+                    completed_at: None,
+                    postponements,
+                    at,
+                }
+            }
+            Self::Completion { id, previous, previous_plan } => {
+                let (dates, day_order) = previous_plan.unzip();
+                Command::RestoreTaskEdit {
+                    id,
+                    dates,
+                    sort_key: None,
+                    day_order,
+                    rekeyed: Vec::new(),
+                    quest_id: None,
                     completed_at: Some(previous),
                     postponements: Vec::new(),
                     at,
@@ -140,6 +199,8 @@ pub enum Undoable {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Toast {
     Done,
+    DateChanged,
+    QuestChanged,
     Deleted {
         item: Deletable,
         title: String,
@@ -169,6 +230,7 @@ pub struct UndoState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndoEvent {
     TaskEdited(TaskEdit),
+    TaskPlaced(TaskEdit),
     Deleted {
         item: Deletable,
         title: String,
@@ -205,6 +267,16 @@ impl UndoState {
             UndoEvent::TaskEdited(edit) => {
                 next.shown = matches!(edit, TaskEdit::Completion { previous: None, .. })
                     .then_some(Shown { toast: Toast::Done, until: now + Duration::seconds(5) });
+                next.last = Some(Undoable::Task(edit));
+                UndoEffect::None
+            }
+            UndoEvent::TaskPlaced(edit) => {
+                let toast = match &edit {
+                    TaskEdit::Dates { dates: Some(_), .. } => Some(Toast::DateChanged),
+                    TaskEdit::Dates { quest_id: Some(_), .. } => Some(Toast::QuestChanged),
+                    _ => None,
+                };
+                next.shown = toast.map(|toast| Shown { toast, until });
                 next.last = Some(Undoable::Task(edit));
                 UndoEffect::None
             }

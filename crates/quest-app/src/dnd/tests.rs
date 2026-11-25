@@ -28,7 +28,7 @@ fn a_press_without_travel_is_a_click() {
 #[test]
 fn travel_past_the_threshold_drags_and_a_release_over_a_target_drops() {
     let payload = task_payload(EntityId::new());
-    let target = Target { list: ListId::Home, before: None };
+    let target = Target { list: ListId::Rows(TaskList::Today), before: None };
     let (state, _) = step(DragState::Idle, DragEvent::Down { payload, at: Point::new(10.0, 10.0), lift: None });
     let (state, _) = step(state, DragEvent::Move { at: Point::new(10.0, 30.0), target: Some(target) });
     assert_eq!(state.dragging(), Some(&payload));
@@ -45,7 +45,7 @@ fn a_release_over_nothing_or_a_cancel_snaps_back() {
         let (s, _) = step(DragState::Idle, DragEvent::Down { payload, at: Point::default(), lift: None });
         step(s, DragEvent::Move { at: Point::new(50.0, 0.0), target }).0
     };
-    let target = Some(Target { list: ListId::Home, before: None });
+    let target = Some(Target { list: ListId::Rows(TaskList::Today), before: None });
     assert_eq!(
         step(dragging(None), DragEvent::Up { at: Point::new(50.0, 0.0), target: None }).1,
         Effect::SnapBack(payload)
@@ -68,7 +68,7 @@ fn the_lift_rect_rides_along() {
 fn geometry(a: EntityId, b: EntityId) -> Geometry {
     Geometry {
         lists: vec![ListGeom {
-            list: ListId::Home,
+            list: ListId::Rows(TaskList::Today),
             rect: Rect::new(0.0, 100.0, 400.0, 500.0),
             cards: vec![(a, Rect::new(0.0, 100.0, 400.0, 80.0)), (b, Rect::new(0.0, 190.0, 400.0, 80.0))],
             spacing: 10.0,
@@ -82,9 +82,18 @@ fn over_a_list_the_drop_goes_before_the_first_card_below_the_pointer() {
     let (a, b, dragged) = (EntityId::new(), EntityId::new(), EntityId::new());
     let geo = geometry(a, b);
     let p = task_payload(dragged);
-    assert_eq!(hit(&geo, &p, Point::new(10.0, 120.0), None), Some(Target { list: ListId::Home, before: Some(a) }));
-    assert_eq!(hit(&geo, &p, Point::new(10.0, 150.0), None), Some(Target { list: ListId::Home, before: Some(b) }));
-    assert_eq!(hit(&geo, &p, Point::new(10.0, 400.0), None), Some(Target { list: ListId::Home, before: None }));
+    assert_eq!(
+        hit(&geo, &p, Point::new(10.0, 120.0), None),
+        Some(Target { list: ListId::Rows(TaskList::Today), before: Some(a) })
+    );
+    assert_eq!(
+        hit(&geo, &p, Point::new(10.0, 150.0), None),
+        Some(Target { list: ListId::Rows(TaskList::Today), before: Some(b) })
+    );
+    assert_eq!(
+        hit(&geo, &p, Point::new(10.0, 400.0), None),
+        Some(Target { list: ListId::Rows(TaskList::Today), before: None })
+    );
 }
 
 #[test]
@@ -93,7 +102,7 @@ fn a_card_is_never_dropped_before_itself() {
     let geo = geometry(a, b);
     assert_eq!(
         hit(&geo, &task_payload(a), Point::new(10.0, 120.0), None),
-        Some(Target { list: ListId::Home, before: Some(b) })
+        Some(Target { list: ListId::Rows(TaskList::Today), before: Some(b) })
     );
 }
 
@@ -103,7 +112,7 @@ fn a_scrolled_list_measures_cards_where_they_show() {
     // The list shows from y 100 and has scrolled 150 pt: `a` is out of view above.
     let geo = Geometry {
         lists: vec![ListGeom {
-            list: ListId::Home,
+            list: ListId::Rows(TaskList::Today),
             rect: Rect::new(0.0, 100.0, 400.0, 300.0),
             cards: vec![
                 (a, Rect::new(0.0, -50.0, 400.0, 80.0)),
@@ -115,7 +124,10 @@ fn a_scrolled_list_measures_cards_where_they_show() {
         ..Geometry::default()
     };
     let p = task_payload(EntityId::new());
-    assert_eq!(hit(&geo, &p, Point::new(10.0, 110.0), None), Some(Target { list: ListId::Home, before: Some(c) }));
+    assert_eq!(
+        hit(&geo, &p, Point::new(10.0, 110.0), None),
+        Some(Target { list: ListId::Rows(TaskList::Today), before: Some(c) })
+    );
     assert_eq!(hit(&geo, &p, Point::new(10.0, 90.0), None), None, "above the list's viewport");
 }
 
@@ -133,8 +145,13 @@ fn list_with_room(order: &[EntityId], dragged: EntityId, room_before: Option<Opt
         y += 90.0;
     }
     Geometry {
-        lists: vec![ListGeom { list: ListId::Home, rect: Rect::new(0.0, 100.0, 400.0, 600.0), cards, spacing: 10.0 }],
-        room: room_before.map(|before| Room { list: ListId::Home, before }),
+        lists: vec![ListGeom {
+            list: ListId::Rows(TaskList::Today),
+            rect: Rect::new(0.0, 100.0, 400.0, 600.0),
+            cards,
+            spacing: 10.0,
+        }],
+        room: room_before.map(|before| Room { list: ListId::Rows(TaskList::Today), before }),
     }
 }
 
@@ -179,8 +196,13 @@ fn foreign_list(cards: &[EntityId], ghost: Option<usize>) -> Geometry {
     let top = |i: usize| 100.0 + 90.0 * i as f32 + if ghost.is_some_and(|g| i >= g) { 90.0 } else { 0.0 };
     let cards = cards.iter().enumerate().map(|(i, id)| (*id, Rect::new(0.0, top(i), 400.0, 80.0))).collect();
     Geometry {
-        lists: vec![ListGeom { list: ListId::Home, rect: Rect::new(0.0, 100.0, 400.0, 600.0), cards, spacing: 10.0 }],
-        room: ghost.map(|_| Room { list: ListId::Home, before: None }),
+        lists: vec![ListGeom {
+            list: ListId::Rows(TaskList::Today),
+            rect: Rect::new(0.0, 100.0, 400.0, 600.0),
+            cards,
+            spacing: 10.0,
+        }],
+        room: ghost.map(|_| Room { list: ListId::Rows(TaskList::Today), before: None }),
     }
 }
 
@@ -192,7 +214,7 @@ fn a_ghost_from_another_list_does_not_move_the_target() {
     assert_eq!(before_at(&rest, other, 150.0), Some(Some(cards[1])));
     for ghost in 0..cards.len() {
         let mut open = foreign_list(&cards, Some(ghost));
-        open.room = Some(Room { list: ListId::Home, before: Some(cards[ghost]) });
+        open.room = Some(Room { list: ListId::Rows(TaskList::Today), before: Some(cards[ghost]) });
         for y in (80..400).step_by(5) {
             let y = y as f32;
             assert_eq!(before_at(&open, other, y), before_at(&rest, other, y), "y {y}, ghost before card {ghost}");
@@ -234,12 +256,22 @@ fn a_drop_plans_the_task_for_the_lists_day() {
     let today = day(15);
     let at = "2026-10-15T10:00:00Z".parse().unwrap();
     assert_eq!(
-        drop_command(id, Target { list: ListId::Home, before: Some(other) }, today, at),
-        Command::MoveTask { id, planned_on: Some(today), position: Position::Before(other), at }
+        drop_command(id, Target { list: ListId::Rows(TaskList::Today), before: Some(other) }, today, at),
+        Command::PlaceTask {
+            id,
+            placement: Placement::InList { list: TaskList::Today, position: Position::Before(other) },
+            today,
+            at
+        }
     );
     assert_eq!(
-        drop_command(id, Target { list: ListId::Backlog, before: None }, today, at),
-        Command::MoveTask { id, planned_on: None, position: Position::Bottom, at }
+        drop_command(id, Target { list: ListId::Rows(TaskList::Inbox), before: None }, today, at),
+        Command::PlaceTask {
+            id,
+            placement: Placement::InList { list: TaskList::Inbox, position: Position::Bottom },
+            today,
+            at
+        }
     );
 }
 

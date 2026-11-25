@@ -22,18 +22,6 @@ icon!(
     r#"<path d="M3.5 8.4L6.5 11.2L12.5 4.8" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>"#
 );
 icon!(
-    FILTER,
-    r#"<path d="M2.5 3h11L9.2 8.2V13L6.8 11.8V8.2Z" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linejoin="round"/>"#
-);
-icon!(
-    TO_TOP,
-    r#"<path d="M3.5 2.5h9M8 13.5V5.5M4.8 8.5L8 5.3L11.2 8.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>"#
-);
-icon!(
-    TO_BOTTOM,
-    r#"<path d="M3.5 13.5h9M8 2.5v8M4.8 7.5L8 10.7L11.2 7.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>"#
-);
-icon!(
     ARROW_LEFT,
     r#"<path d="M13 8H3.5M7.5 4L3.5 8L7.5 12" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>"#
 );
@@ -52,24 +40,12 @@ icon!(
 icon!(CLOSE, r#"<path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>"#);
 icon!(PLUS, r#"<path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>"#);
 icon!(
-    EYE,
-    r#"<path d="M1.5 8C3 5 5.3 3.5 8 3.5S13 5 14.5 8C13 11 10.7 12.5 8 12.5S3 11 1.5 8Z" stroke="currentColor" stroke-width="1.1" fill="none"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.1" fill="none"/>"#
-);
-icon!(
-    EYE_OFF,
-    r#"<path d="M6.3 3.7A6.9 6.9 0 0 1 8 3.5C10.7 3.5 13 5 14.5 8a9.6 9.6 0 0 1-1.6 2.3M10.1 12.1A6.4 6.4 0 0 1 8 12.5C5.3 12.5 3 11 1.5 8a9.4 9.4 0 0 1 2.4-3M6.6 6.6a2 2 0 0 0 2.8 2.8M2.5 2.5l11 11" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linecap="round"/>"#
-);
-icon!(
     SUN,
     r#"<circle cx="8" cy="8" r="2.8" stroke="currentColor" stroke-width="1.1" fill="none"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>"#
 );
 icon!(
     MOON,
     r#"<path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5Z" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linejoin="round"/>"#
-);
-icon!(
-    MORE,
-    r#"<circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/>"#
 );
 icon!(
     ARCHIVE,

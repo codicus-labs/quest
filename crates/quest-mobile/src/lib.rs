@@ -22,6 +22,7 @@ mod core_connections;
 mod core_focus;
 mod core_lists;
 mod core_plan;
+mod core_plan_sections;
 mod core_platform;
 mod core_quests;
 mod core_search;
@@ -69,6 +70,9 @@ pub use crate::capture_types::{
 pub use crate::connections::AiConnectionRow;
 pub use crate::core::{ChangeListener, QuestCore};
 pub use crate::core_plan::{plan_edge_speed, plan_window};
+pub use crate::core_plan_sections::{
+    PlanDaySection, PlanDueMarker, PlanMonthSection, PlanSections, PlanTaskList, PlanWeek, PlanWeekDay,
+};
 pub use crate::core_platform::picked_day;
 pub use crate::core_tasks::{check_repeat, toggle_repeat_weekday};
 pub use crate::error::MobileError;

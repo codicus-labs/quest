@@ -116,7 +116,7 @@ pub fn update_task(
         edits.push(Command::SetTaskDescription { id, description: description.trim().to_owned() });
     }
     if let Some(due_on) = dates.due_on.filter(|due_on| *due_on != task.due_on) {
-        edits.push(Command::SetTaskDue { id, due_on, at: clock.now });
+        edits.push(Command::SetTaskDue { id, due_on, today: clock.today(), at: clock.now });
     }
     if let Some(planned_on) = dates.planned_on.filter(|planned_on| *planned_on != task.planned_on) {
         edits.push(Command::MoveTask { id, planned_on, position: Position::Bottom, at: clock.now });

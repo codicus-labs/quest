@@ -9,7 +9,7 @@ use quest_store::{Account, Profiles, Store, SyncStatus};
 use rune::{TextEdit, Tx};
 
 use crate::clock::{self, Clock};
-use crate::dnd::{DragState, ListId, Rect, Section};
+use crate::dnd::{DragState, Rect};
 use crate::palette::Mode;
 use crate::ui::drag::Zone;
 use crate::undo::{Deletable, UndoEffect, UndoEvent, UndoState};
@@ -23,7 +23,6 @@ mod capture_tests;
 pub mod entry_editor;
 mod focus;
 mod log_work;
-mod plan_scroll;
 pub mod quest_editor;
 pub mod quest_picker;
 pub mod recurrence;
@@ -36,18 +35,16 @@ pub use auth::{AuthState, AuthStep};
 pub use capture::{CaptureState, CaptureStep, CaptureUndo};
 pub use focus::{FocusDraft, FocusTarget};
 pub use log_work::LogWorkForm;
-pub use plan_scroll::{BOARD as PLAN_BOARD, PlanScroll};
 pub use quest_editor::QuestEditor;
 pub use quest_view::nav::View;
 pub use quest_view::quests::QuestsTab;
 pub use task_modal::TaskModal;
 pub use workspaces::WorkspacesForm;
 
-/// The "…" menu open on a task card; `prefix` names the card's view (its key prefix).
+/// The context menu open on a task row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TaskMenu {
     pub task: EntityId,
-    pub prefix: &'static str,
 }
 
 /// What floats above the view.
@@ -83,17 +80,6 @@ pub enum QuestEdit {
     Rename(EntityId),
     Color(EntityId),
 }
-
-/// Where a new task lands in its list.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AddAt {
-    Top,
-    Bottom,
-}
-
-/// The planner's board width before its first layout reports the real one (the default window
-/// less the sidebar, the tracked column and the view's padding).
-const PLAN_BOARD_GUESS_W: f32 = 866.0;
 
 pub struct PaletteState {
     pub mode: Mode,
@@ -134,16 +120,8 @@ pub struct State {
     pub right_column: bool,
     /// The list row the keyboard moved to (J/K, ↑/↓); the task keys act on it.
     pub selected_task: Option<EntityId>,
-    /// Quest work shows only this quest's tasks (Home and Plan).
-    pub quest_filter: Option<EntityId>,
-    /// Whether tasks without a quest (OTHER) show, on Home and Plan (V).
-    pub show_other: bool,
-    pub add_at: AddAt,
-    /// The "Add a task" field of each planner column (by day, or the backlog).
-    pub plan_add: HashMap<ListId, TextEdit>,
-    /// Where the planner's day strip is scrolled to.
-    pub plan: PlanScroll,
-    pub show_backlog: bool,
+    pub plan_quick_day: Option<NaiveDate>,
+    pub show_not_planned: bool,
     /// The task card under the pointer: the task shortcuts (Space, X, T, D, W, ⌘⌫, ⌫, ↵) act on
     /// it.
     pub hovered_task: Option<EntityId>,
@@ -153,7 +131,7 @@ pub struct State {
     /// Where drop zones were last laid out, as their elements reported it.
     pub zones: HashMap<Zone, Rect>,
     /// The card that last landed from a drag, with a count that changes on every landing.
-    pub landing: Option<(EntityId, u32)>,
+    pub landing: Option<(EntityId, u32, Option<quest_domain::TaskList>)>,
     pub review_week: NaiveDate,
     /// The task Focus is about when nothing runs: the one started or selected last.
     pub focus_task: Option<EntityId>,
@@ -220,12 +198,8 @@ impl State {
             show_task_time: false,
             right_column: true,
             selected_task: None,
-            quest_filter: None,
-            show_other: true,
-            add_at: AddAt::Top,
-            plan_add: HashMap::new(),
-            plan: PlanScroll::new(clock::local_day(now) - Days::new(2), PLAN_BOARD_GUESS_W),
-            show_backlog: false,
+            plan_quick_day: None,
+            show_not_planned: false,
             hovered_task: None,
             menu: None,
             undo: UndoState::default(),
@@ -307,9 +281,9 @@ impl State {
         if view != self.view {
             self.selected_task = None;
             self.reset_quick_add();
-        }
-        if view == View::Plan && self.view != View::Plan {
-            self.plan_mounts();
+            self.plan_quick_day = None;
+            self.drag = DragState::Idle;
+            self.landing = None;
         }
         self.view = view;
         self.close_repeat_editor();
@@ -324,9 +298,11 @@ impl State {
         self.sync_focus_draft();
     }
 
-    /// Whether a task shows under QUEST WORK (it has a quest) or OTHER.
-    pub fn section_of(&self, task: &Task) -> Section {
-        if self.snap.is_quest_work(task) { Section::Quest } else { Section::Other }
+    pub fn go_with(&mut self, view: View, tx: &mut Tx) {
+        if self.view != view {
+            tx.instant();
+        }
+        self.go(view);
     }
 
     /// The task the task shortcuts act on: the selected row, else the card under the pointer.
@@ -426,8 +402,8 @@ impl State {
     }
 
     /// Takes in what the store reported since the last frame; true when anything visible changed.
-    pub fn refresh(&mut self, clock: f64, tx: &mut Tx) -> bool {
-        let mut changed = self.plan_edge_scroll(clock, tx);
+    pub fn refresh(&mut self, tx: &mut Tx) -> bool {
+        let mut changed = false;
         let snapshot_changed = !Arc::ptr_eq(&self.store.snapshot(), &self.snap);
         if snapshot_changed {
             self.adopt_snapshot();

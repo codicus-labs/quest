@@ -18,7 +18,7 @@ mod theme;
 mod ui;
 
 // The pure presentation modules live in quest-view; mounted here so `crate::format` etc. resolve.
-use quest_view::{format, log_work, menu, palette, plan_strip, undo};
+use quest_view::{format, log_work, menu, palette, undo};
 
 use std::sync::Arc;
 
@@ -105,7 +105,7 @@ const SCENES: &[Scene] = &[
     }),
     ("card-menu", |s| {
         s.go(View::Plan);
-        s.menu = first_open_task(s).map(|task| state::TaskMenu { task, prefix: "plan" });
+        s.menu = first_open_task(s).map(|task| state::TaskMenu { task });
     }),
     ("task-detail", task_detail),
     ("task-detail-light", |s| light(s, task_detail)),
@@ -253,8 +253,8 @@ fn task_detail(s: &mut State) {
     let Some(id) = first_open_task(s) else { return };
     let today = s.today();
     s.dispatch(Command::SetTaskDescription { id, description: "Start with the opening spread.".into() });
-    s.dispatch(Command::SetTaskDue { id, due_on: Some(today), at: s.now });
-    s.dispatch(Command::SetTaskDue { id, due_on: today.checked_add_days(chrono::Days::new(3)), at: s.now });
+    s.dispatch(Command::SetTaskDue { id, due_on: Some(today), today, at: s.now });
+    s.dispatch(Command::SetTaskDue { id, due_on: today.checked_add_days(chrono::Days::new(3)), today, at: s.now });
     s.open_task_modal(id);
 }
 
@@ -403,7 +403,7 @@ fn main() {
     let spec = AppSpec {
         scenes: SCENES,
         min_size: Some((1000.0, 640.0)),
-        poll: Some(|s: &mut State, clock, tx| s.refresh(clock, tx)),
+        poll: Some(|s: &mut State, _, tx| s.refresh(tx)),
         on_key: Some(keys::on_key),
         ..AppSpec::new("Quest", (1440.0, 900.0), || unreachable!("state comes from App::init"), ui::view)
     };

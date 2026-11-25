@@ -1,15 +1,9 @@
-//! A task's dialog, from Today and Plan, for open and done tasks: a double click on a row, a click
-//! on a planner card (its title too), "Open" in its menu or ↵ opens it; title and description save as they change
-//! and show on the card; closing keeps them and leaves the planner where it was scrolled.
-
 use quest_domain::EntityId;
 use rune::{Key, Mods, Runtime};
 
-use super::dnd_tests::{rect, settle, task};
-use super::plan_scroll_tests::drawn_offset;
+use super::dnd_tests::{scroll_into_view, settle, task};
 use super::shortcut_tests::hover;
-use super::tests::{TempDir, click, command, demo_app, double_click, press, type_text};
-use super::title_click_tests::scroll_into_view;
+use super::tests::{TempDir, click, command, demo_app, press, type_text};
 use crate::state::{Overlay, State};
 
 const OPEN: &str = "Design the next chapter";
@@ -23,22 +17,9 @@ fn app(view: char) -> (Runtime<State>, TempDir) {
     (rt, dir)
 }
 
-/// A list row ("row") or a planner card ("plan").
-fn card_key(prefix: &str, id: EntityId) -> String {
-    if prefix == "row" { format!("row-{id}") } else { format!("{prefix}-task-{id}") }
-}
-
-/// Opens the card's dialog: a double click on a row, a click left of the "…" button on a narrow
-/// planner card.
-fn click_card(rt: &mut Runtime<State>, prefix: &str, id: EntityId) {
-    scroll_into_view(rt, &card_key(prefix, id));
-    if prefix == "row" {
-        return double_click(rt, &card_key(prefix, id));
-    }
-    let [x, y, _, h] = rect(rt, &format!("{prefix}-menu-{id}"));
-    rt.pointer_down(x - 30.0, y + h / 2.0);
-    rt.pointer_up(x - 30.0, y + h / 2.0);
-    rt.frame(0.0);
+fn click_card(rt: &mut Runtime<State>, _prefix: &str, id: EntityId) {
+    scroll_into_view(rt, &format!("row-{id}"));
+    click(rt, &format!("row-title-{id}"));
 }
 
 fn modal_task(rt: &Runtime<State>) -> Option<EntityId> {
@@ -66,14 +47,6 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
     let (mut rt, _dir) = app(view);
     let id = task(&rt, title).id;
     let done = task(&rt, title).is_done();
-    if prefix == "plan" {
-        // Somewhere other than where the planner opens.
-        let [x, y, w, h] = rect(&rt, "plan-board");
-        rt.wheel_xy(x + w / 2.0, y + h / 2.0, -60.0, 0.0);
-        settle(&mut rt);
-    }
-    scroll_into_view(&mut rt, &card_key(prefix, id));
-    let place = (prefix == "plan").then(|| drawn_offset(&rt));
 
     click_card(&mut rt, prefix, id);
     assert_eq!(modal_task(&rt), Some(id), "a click on the card opens its dialog");
@@ -87,7 +60,7 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
     type_text(&mut rt, " Notes.");
     let renamed = format!("{title} v2");
     assert_eq!(rt.state.snap.task(id).unwrap().title, renamed, "the title saves as it changes");
-    assert_eq!(text_of(&rt, &format!("{prefix}-title-{id}")), Some(renamed.clone()), "the card shows it at once");
+    assert_eq!(text_of(&rt, &format!("row-title-{id}")), Some(renamed.clone()), "the card shows it at once");
 
     if close_with_esc {
         press(&mut rt, Key::Escape, Mods::default());
@@ -101,18 +74,12 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
     assert_eq!(saved.title, renamed);
     assert!(saved.description.ends_with(" Notes."), "{:?}", saved.description);
     assert!(!saved.title.contains('\n') && saved.is_done() == done, "done stays done, open stays open");
-    if let Some(place) = place {
-        assert!((drawn_offset(&rt) - place).abs() < 0.5, "the planner stays where it was");
-    }
 
     click_card(&mut rt, prefix, id);
     assert_eq!(modal_task(&rt), Some(id));
     assert_eq!(text_of(&rt, "task-modal-title"), Some(renamed));
     assert_eq!(rt.state.task_modal.as_ref().unwrap().description.text, saved.description);
     assert!(rt.find("task-modal-description").is_some());
-    if let Some(place) = place {
-        assert!((drawn_offset(&rt) - place).abs() < 0.5, "opening doesn't scroll the planner either");
-    }
 }
 
 #[test]
@@ -131,22 +98,21 @@ fn plan_edits_an_open_task() {
 }
 
 #[test]
-fn plan_hides_completed_tasks() {
+fn plan_today_includes_completed_tasks() {
     let (rt, _dir) = app('3');
     let done = task(&rt, DONE);
     assert!(done.is_done());
-    assert!(rt.find(&card_key("plan", done.id)).is_none());
+    assert!(rt.find(&format!("row-{}", done.id)).is_some());
 }
 
 #[test]
-fn a_click_selects_a_row_and_return_or_a_double_click_open_it_the_check_doesnt() {
+fn a_click_opens_and_closes_a_row_but_the_check_doesnt() {
     let (mut rt, _dir) = app('2');
     let id = task(&rt, OPEN).id;
     click(&mut rt, &format!("row-title-{id}"));
-    assert_eq!((rt.state.selected_task, modal_task(&rt)), (Some(id), None), "a click only selects");
-    press(&mut rt, Key::Enter, Mods::default());
-    assert_eq!(modal_task(&rt), Some(id), "↵ on the selected row");
-    press(&mut rt, Key::Escape, Mods::default());
+    assert_eq!((rt.state.selected_task, modal_task(&rt)), (Some(id), Some(id)));
+    click(&mut rt, &format!("row-title-{id}"));
+    assert!(modal_task(&rt).is_none());
     settle(&mut rt);
     click(&mut rt, &format!("row-check-{id}"));
     assert!(modal_task(&rt).is_none(), "the check only checks");
@@ -160,8 +126,7 @@ fn a_click_selects_a_row_and_return_or_a_double_click_open_it_the_check_doesnt()
     assert_eq!(modal_task(&rt), Some(id), "↵ over the row");
     press(&mut rt, Key::Escape, Mods::default());
     settle(&mut rt);
-    double_click(&mut rt, &format!("row-title-{id}"));
-    assert_eq!(modal_task(&rt), Some(id), "a double click on the title");
+    assert!(modal_task(&rt).is_none());
 }
 
 #[test]

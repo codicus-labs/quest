@@ -1,21 +1,10 @@
-//! Drag-and-drop interaction tests: real pointer gestures (down, moves, up) on the demo in
-//! Rune's headless `Runtime`, plus Esc, clicks and the keyboard ways.
-
 use chrono::Days;
-use quest_domain::Task;
+use quest_domain::{Task, TaskList};
 use rune::{Key, Mods, Runtime};
 
-use super::tests::{TempDir, click, command, demo_app, plan_key, press};
-use crate::dnd::DragState;
+use super::tests::{click, command, demo_app, press, type_text};
+use crate::dnd::{DragState, ListId};
 use crate::state::State;
-
-/// The planner, whose today column the drags here use.
-fn app() -> (Runtime<State>, TempDir) {
-    let (mut rt, dir) = demo_app();
-    command(&mut rt, '3');
-    settle(&mut rt);
-    (rt, dir)
-}
 
 /// Lets springs land (frames at dt 0 never advance them) and drop zones report their rects.
 pub(super) fn settle(rt: &mut Runtime<State>) {
@@ -53,90 +42,131 @@ pub(super) fn task(rt: &Runtime<State>, title: &str) -> Task {
     rt.state.snap.tasks.iter().find(|t| t.title == title).cloned().unwrap_or_else(|| panic!("task {title}"))
 }
 
-fn open_titles(rt: &Runtime<State>) -> Vec<String> {
-    let today = rt.state.today();
-    rt.state.snap.tasks_on(today).filter(|t| !t.is_done()).map(|t| t.title.clone()).collect()
+pub(super) fn scroll_into_view(rt: &mut Runtime<State>, key: &str) {
+    let key = key.to_owned();
+    rt.update(move |_, tx| tx.scroll_into_view(key));
+    settle(rt);
 }
 
 #[test]
-fn reorder_in_a_plan_column_by_the_handle() {
-    let (mut rt, _dir) = app();
-    let easy = task(&rt, "Easy 5 km. Leave the headphones at home.").id;
-    let design = task(&rt, "Design the next chapter").id;
-    let [_, top, _, _] = rect(&rt, &format!("plan-task-{design}"));
-    let from = center(&rt, &format!("plan-title-{easy}"));
-    drag_to(&mut rt, from, (from.0, top + 10.0));
-    rt.settle_all();
-    rt.frame(0.0);
-    assert_eq!(rect(&rt, &format!("plan-task-{easy}"))[1], top, "its room opened where it lands");
-    assert!(rt.find("drag-lift").is_some(), "the lifted card follows the pointer");
-    rt.pointer_up(from.0, top + 10.0);
-    rt.frame(0.0);
-    assert_eq!(open_titles(&rt)[0], "Easy 5 km. Leave the headphones at home.");
+fn today_reorders_without_opening_a_detail_and_can_undo() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '2');
+    settle(&mut rt);
+    let before: Vec<_> = quest_view::lists::today(&rt.state.snap, rt.state.today()).iter().map(|t| t.id).collect();
+    let from = center(&rt, &format!("row-title-{}", before[1]));
+    let to = center(&rt, &format!("row-title-{}", before[0]));
+    drag_to(&mut rt, from, to);
+    settle(&mut rt);
+    assert!(rt.find("drag-lift").is_some());
+    assert_eq!(rt.state.drag.target().unwrap().before, Some(before[0]));
+    rt.pointer_up(to.0, to.1);
+    settle(&mut rt);
     assert_eq!(rt.state.drag, DragState::Idle);
-    assert!(rt.find("drag-lift").is_none());
+    assert!(rt.state.task_modal.is_none());
+    assert_eq!(quest_view::lists::today(&rt.state.snap, rt.state.today())[0].id, before[1]);
+    assert!(rt.state.undo.shown.is_none());
+    command(&mut rt, 'z');
+    assert_eq!(quest_view::lists::today(&rt.state.snap, rt.state.today())[0].id, before[0]);
 }
 
 #[test]
-fn plan_cards_move_between_day_columns_and_to_the_backlog() {
-    let (mut rt, _dir) = app();
+fn plan_drop_opens_a_ghost_in_an_empty_day_and_escape_restores_it() {
+    let (mut rt, _dir) = demo_app();
     command(&mut rt, '3');
     settle(&mut rt);
-    let polish = task(&rt, "Polish the details that matter");
-    let today = rt.state.today();
-    assert_eq!(polish.planned_on, Some(today + Days::new(1)));
-    // Before the first card, so the card stays in view for the next drag.
-    let [x, _, w, _] = rect(&rt, &plan_key(&rt, "col", 4));
-    let first = rect(&rt, &format!("{}-top", plan_key(&rt, "add", 4)));
-    let from = center(&rt, &format!("plan-title-{}", polish.id));
-    drag(&mut rt, from, (x + w / 2.0, first[1] + 60.0));
-    assert_eq!(task(&rt, "Polish the details that matter").planned_on, Some(today + Days::new(2)));
-
-    click(&mut rt, "plan-backlog");
+    let id = task(&rt, "Design the next chapter").id;
+    let day = rt.state.today() + Days::new(4);
+    let from = center(&rt, &format!("row-title-{id}"));
+    let to = center(&rt, &format!("plan-head-{day}"));
+    drag_to(&mut rt, from, to);
     settle(&mut rt);
-    let [x, y, w, h] = rect(&rt, &plan_key(&rt, "col", 5));
-    let from = center(&rt, &format!("plan-title-{}", polish.id));
-    drag(&mut rt, from, (x + w / 2.0, y + h - 40.0));
-    assert_eq!(task(&rt, "Polish the details that matter").planned_on, None, "dropped into Someday");
-}
-
-#[test]
-fn escape_cancels_a_drag_and_nothing_changes() {
-    let (mut rt, _dir) = app();
-    let order = open_titles(&rt);
-    let easy = task(&rt, "Easy 5 km. Leave the headphones at home.").id;
-    let from = center(&rt, &format!("plan-title-{easy}"));
-    drag_to(&mut rt, from, (from.0, from.1 - 300.0));
-    assert!(rt.state.drag.dragging().is_some());
+    assert_eq!(rt.state.drag.target().unwrap().list, ListId::Rows(TaskList::Day(day)));
+    assert!(rt.find("drag-room").is_some());
     press(&mut rt, Key::Escape, Mods::default());
     assert_eq!(rt.state.drag, DragState::Idle);
-    rt.pointer_up(from.0, from.1 - 300.0);
-    rt.frame(0.0);
-    assert_eq!(open_titles(&rt), order);
-    assert!(rt.find("drag-lift").is_none());
+    settle(&mut rt);
+    assert!(rt.find("drag-room").is_none());
+    assert_ne!(rt.state.snap.task(id).unwrap().planned_on, Some(day));
+
+    let from = center(&rt, &format!("row-title-{id}"));
+    drag(&mut rt, from, to);
+    assert_eq!(rt.state.snap.task(id).unwrap().planned_on, Some(day));
+    assert_eq!(rt.state.undo.shown.as_ref().unwrap().toast, quest_view::undo::Toast::DateChanged);
 }
 
 #[test]
-fn a_dropped_card_outside_any_list_snaps_back() {
-    let (mut rt, _dir) = app();
-    let order = open_titles(&rt);
-    let easy = task(&rt, "Easy 5 km. Leave the headphones at home.");
-    let from = center(&rt, &format!("plan-title-{}", easy.id));
-    drag(&mut rt, from, (from.0, 20.0));
-    assert_eq!(open_titles(&rt), order);
-    assert_eq!(task(&rt, "Easy 5 km. Leave the headphones at home."), easy, "unchanged");
+fn sidebar_drop_highlights_quest_and_files_the_task_without_opening_it() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '1');
+    settle(&mut rt);
+    let id = quest_view::lists::inbox(&rt.state.snap)[0].id;
+    let quest = rt.state.snap.active_quests().next().unwrap().id;
+    let from = center(&rt, &format!("row-title-{id}"));
+    let to = center(&rt, &format!("nav-quest-{quest}"));
+    drag_to(&mut rt, from, to);
+    assert_eq!(rt.state.drag.target().unwrap().list, ListId::File(TaskList::Quest(quest)));
+    rt.pointer_up(to.0, to.1);
+    settle(&mut rt);
+    assert_eq!(rt.state.snap.task(id).unwrap().quest_id, Some(quest));
+    assert_eq!(rt.state.undo.shown.as_ref().unwrap().toast, quest_view::undo::Toast::QuestChanged);
+    assert!(rt.state.task_modal.is_none());
 }
 
 #[test]
-fn option_arrows_move_a_focused_card() {
-    let (mut rt, _dir) = app();
-    let make = task(&rt, "Make the first impression feel effortless").id;
-    rt.update(|_, tx| tx.focus_when_shown(format!("plan-task-{make}"), true));
-    rt.frame(0.0);
-    let alt = Mods { alt: true, ..Mods::default() };
-    press(&mut rt, Key::Up, alt);
-    assert_eq!(open_titles(&rt)[0], "Make the first impression feel effortless");
-    press(&mut rt, Key::Right, alt);
-    let today = rt.state.today();
-    assert_eq!(task(&rt, "Make the first impression feel effortless").planned_on, Some(today + Days::new(1)));
+fn keyboard_sort_and_day_quick_add() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '3');
+    press(&mut rt, Key::Down, Mods::default());
+    let id = rt.state.selected_task.unwrap();
+    press(&mut rt, Key::Down, Mods { alt: true, ..Mods::default() });
+    assert_eq!(quest_view::lists::today(&rt.state.snap, rt.state.today())[1].id, id);
+    let date = rt.state.today() + Days::new(1);
+    let (x, y) = center(&rt, &format!("plan-head-{date}"));
+    rt.pointer_move(x, y);
+    settle(&mut rt);
+    click(&mut rt, &format!("plan-add-{date}"));
+    assert_eq!(rt.state.quick_defaults().dates.planned_on, Some(date));
+    type_text(&mut rt, "From the day header");
+    press(&mut rt, Key::Enter, Mods::default());
+    assert_eq!(task(&rt, "From the day header").planned_on, Some(date));
+}
+
+#[test]
+fn unplanned_quest_tasks_can_be_dragged_from_the_tray_into_a_day() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '3');
+    scroll_into_view(&mut rt, "plan-not-planned");
+    click(&mut rt, "plan-not-planned");
+    let task = task(&rt, "Sketch a pricing page");
+    assert!(task.planned_on.is_none());
+    let source = format!("row-title-{}", task.id);
+    scroll_into_view(&mut rt, &source);
+    let day = rt.state.today() + Days::new(12);
+    let from = center(&rt, &source);
+    let to = center(&rt, &format!("plan-head-{day}"));
+    drag(&mut rt, from, to);
+    let moved = rt.state.snap.task(task.id).unwrap();
+    assert_eq!((moved.planned_on, moved.due_on), (Some(day), Some(day)));
+}
+
+#[test]
+fn plan_navigation_crosses_days_and_g_returns_to_today() {
+    let (mut rt, _dir) = demo_app();
+    command(&mut rt, '2');
+    let num_today = super::lists::shown_tasks(&rt.state).len();
+    command(&mut rt, '3');
+    settle(&mut rt);
+    let today_key = format!("plan-head-{}", rt.state.today());
+    let y = rect(&rt, &today_key)[1];
+    for _ in 0..=num_today {
+        type_text(&mut rt, "j");
+    }
+    assert_eq!(rt.state.selected_task, Some(task(&rt, "Polish the details that matter").id));
+    scroll_into_view(&mut rt, "plan-not-planned");
+    assert!(rect(&rt, &today_key)[1] < y);
+    type_text(&mut rt, "g");
+    settle(&mut rt);
+    assert_eq!(rect(&rt, &today_key)[1], y);
+    assert_eq!(rt.state.selected_task, None);
 }

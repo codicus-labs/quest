@@ -37,7 +37,7 @@ pub(super) fn test_app(demo: bool) -> (Runtime<State>, TempDir) {
     let state = State::new(Arc::new(store), profiles, clock);
     let mut rt = Runtime::new(state, super::view, (1440.0, 900.0), Env::new(true, 1.0));
     rt.on_key = Some(keys::on_key);
-    rt.poll = Some(|s: &mut State, clock, tx| s.refresh(clock, tx));
+    rt.poll = Some(|s: &mut State, _, tx| s.refresh(tx));
     rt.frame(0.0);
     (rt, dir)
 }
@@ -91,14 +91,6 @@ pub(super) fn go(rt: &mut Runtime<State>, view: View) {
     rt.frame(0.0);
 }
 
-/// The key of a planner column's `part` ("col", "add", "list") at `index`; the backlog is last.
-pub(super) fn plan_key(rt: &Runtime<State>, part: &str, index: usize) -> String {
-    if index >= crate::plan_strip::VISIBLE_DAYS {
-        return format!("plan-{part}-backlog");
-    }
-    format!("plan-{part}-{}", rt.state.plan.from() + chrono::Days::new(index as u64))
-}
-
 /// Presses `key` once whatever is fading in has landed (an element at opacity 0 takes no press).
 pub(super) fn click(rt: &mut Runtime<State>, key: &str) {
     rt.settle_all();
@@ -109,31 +101,6 @@ pub(super) fn click(rt: &mut Runtime<State>, key: &str) {
     rt.frame(0.0);
 }
 
-/// Two quick clicks on `key`.
-pub(super) fn double_click(rt: &mut Runtime<State>, key: &str) {
-    rt.settle_all();
-    rt.frame(0.0);
-    let (x, y) = rt.find(key).unwrap_or_else(|| panic!("`{key}` is on screen"));
-    for _ in 0..2 {
-        rt.pointer_down(x, y);
-        rt.pointer_up(x, y);
-    }
-    rt.frame(0.0);
-}
-
-/// Clicks a card just right of its title, on the title's line: its free space, away from the
-/// buttons.
-pub(super) fn click_beside_title(rt: &mut Runtime<State>, prefix: &str, id: quest_domain::EntityId) {
-    rt.settle_all();
-    rt.frame(0.0);
-    let key = format!("{prefix}-title-{id}");
-    let [x, y, w, h] = rt.presented(&key).unwrap_or_else(|| panic!("`{key}` is drawn")).0;
-    let at = (x + w + 40.0, y + h / 2.0);
-    rt.pointer_down(at.0, at.1);
-    rt.pointer_up(at.0, at.1);
-    rt.frame(0.0);
-}
-
 #[test]
 fn command_digits_switch_views_and_escape_leaves_focus_for_today() {
     let (mut rt, _dir) = demo_app();
@@ -141,7 +108,7 @@ fn command_digits_switch_views_and_escape_leaves_focus_for_today() {
     assert_eq!(rt.state.view, View::Inbox);
     command(&mut rt, '3');
     assert_eq!(rt.state.view, View::Plan);
-    assert!(rt.find("plan").is_some(), "the planner is drawn");
+    assert!(rt.find("plan-page").is_some(), "the planner is drawn");
     command(&mut rt, '5');
     assert_eq!(rt.state.view, View::Logbook);
     let first_quest = rt.state.snap.active_quests().next().map(|q| q.id).expect("a demo quest");
@@ -169,7 +136,7 @@ fn n_focuses_the_add_field_and_enter_creates_a_task() {
     let (mut rt, _dir) = demo_app();
     command(&mut rt, '3');
     type_text(&mut rt, "n");
-    assert_eq!(rt.state.view, View::Today);
+    assert_eq!(rt.state.view, View::Plan);
     let before = rt.state.snap.tasks.len();
     type_text(&mut rt, "Stretch for ten minutes");
     press(&mut rt, Key::Enter, Mods::default());

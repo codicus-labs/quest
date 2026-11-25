@@ -1,5 +1,5 @@
 use chrono::{DateTime, NaiveDate, Utc};
-use quest_domain::{Command, DateField, EntityId, Position, Snapshot, Task, TaskDates};
+use quest_domain::{Command, DateField, EntityId, Position, Snapshot, Task, TaskDates, TaskList};
 use quest_view::{
     calendar, quick_add,
     undo::{self, TaskEdit, UndoEvent},
@@ -7,7 +7,7 @@ use quest_view::{
 use rune::Tx;
 
 use super::quest_picker::PickFor;
-use super::{AddAt, Overlay, State, View};
+use super::{Overlay, State, View};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Calendar {
@@ -31,6 +31,7 @@ pub fn field_key(task: Option<EntityId>, field: DateField) -> String {
 pub(super) enum TrackedEdit {
     Quest(EntityId),
     Dates(EntityId),
+    Placement(EntityId, TaskList, NaiveDate),
     Completion(EntityId),
 }
 
@@ -39,6 +40,7 @@ impl TrackedEdit {
         match command {
             Command::AssignTask { id, .. } => Some(Self::Quest(*id)),
             Command::MoveTask { id, .. } | Command::SetTaskDue { id, .. } => Some(Self::Dates(*id)),
+            Command::PlaceTask { id, placement, today, .. } => Some(Self::Placement(*id, placement.list(), *today)),
             Command::CompleteTask { id, .. }
             | Command::CompleteTaskFromPlan { id, .. }
             | Command::ReopenTask { id } => Some(Self::Completion(*id)),
@@ -49,7 +51,7 @@ impl TrackedEdit {
 
     pub fn id(self) -> EntityId {
         match self {
-            Self::Quest(id) | Self::Dates(id) | Self::Completion(id) => id,
+            Self::Quest(id) | Self::Dates(id) | Self::Placement(id, ..) | Self::Completion(id) => id,
         }
     }
 }
@@ -59,6 +61,7 @@ impl State {
         let Some(after) = self.snap.task(before.id) else { return };
         let change = match edit {
             TrackedEdit::Dates(_) => TaskEdit::dates(&before, after, old, &self.snap),
+            TrackedEdit::Placement(_, list, today) => TaskEdit::placement(&before, after, old, &self.snap, list, today),
             TrackedEdit::Quest(id) => {
                 (before.quest_id != after.quest_id).then_some(TaskEdit::Quest { id, previous: before.quest_id })
             }
@@ -75,7 +78,12 @@ impl State {
             }
         };
         if let Some(change) = change {
-            self.step_undo(UndoEvent::TaskEdited(change));
+            let event = if matches!(edit, TrackedEdit::Placement(..)) {
+                UndoEvent::TaskPlaced(change)
+            } else {
+                UndoEvent::TaskEdited(change)
+            };
+            self.step_undo(event);
         }
     }
 
@@ -107,9 +115,12 @@ impl State {
         let picker = self.task_calendar.is_some_and(|c| c.task.is_none())
             || self.quest_picker.as_ref().is_some_and(|q| q.target == PickFor::QuickAdd);
         let has_focus = tx.focused().is_some_and(|key| key.starts_with("quick-add"));
-        if self.quick_fields.is_some() && !has_focus && !picker && self.quick_add.text.trim().is_empty() {
-            self.reset_quick_add();
-            changed = true;
+        if !has_focus && !picker && self.quick_add.text.trim().is_empty() {
+            let was_open = self.plan_quick_day.take().is_some();
+            if was_open || self.quick_fields.is_some() {
+                self.reset_quick_add();
+                changed = true;
+            }
         }
         changed
     }
@@ -121,7 +132,11 @@ impl State {
     }
 
     pub fn quick_defaults(&self) -> quick_add::Fields {
-        quick_add::Fields::for_view(self.view, self.today())
+        let mut fields = quick_add::Fields::for_view(self.view, self.today());
+        if self.view == View::Plan {
+            fields.dates.planned_on = self.plan_quick_day;
+        }
+        fields
     }
 
     pub fn quick_base(&self) -> quick_add::Fields {
@@ -138,11 +153,7 @@ impl State {
     }
 
     pub fn save_quick_add(&mut self) {
-        let position = match self.add_at {
-            AddAt::Top => Position::Top,
-            AddAt::Bottom => Position::Bottom,
-        };
-        if let Some(command) = self.quick_draft().command(EntityId::new(), position) {
+        if let Some(command) = self.quick_draft().command(EntityId::new(), Position::Bottom) {
             self.dispatch(command);
             if self.notice.is_none() {
                 self.reset_quick_add();
@@ -192,7 +203,7 @@ impl State {
         let at = self.clock.now();
         self.dispatch(match calendar.field {
             DateField::Plan => Command::MoveTask { id, planned_on: day, position: Position::Bottom, at },
-            DateField::Due => Command::SetTaskDue { id, due_on: day, at },
+            DateField::Due => Command::SetTaskDue { id, due_on: day, today: self.today(), at },
         });
     }
 

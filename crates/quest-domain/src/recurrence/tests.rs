@@ -205,7 +205,7 @@ fn generated_tasks_respect_pin_and_get_the_sources_checklist_unticked_without_a_
         replica.run(Command::AddChecklistItem { id: item, task_id: id, text: text.into(), position: Position::Bottom });
     }
     replica.run(Command::SetChecklistItemDone { id: ticked, done: true });
-    replica.run(Command::SetTaskDue { id, due_on: Some(starts), at: at(starts, 8) });
+    replica.run(Command::SetTaskDue { id, due_on: Some(starts), today: starts, at: at(starts, 8) });
     for (id, pin) in [(id, RepeatPin::Top), (bottom, RepeatPin::Bottom)] {
         replica.run(Command::SetTaskRepeat {
             id,

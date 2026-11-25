@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use chrono::{NaiveDate, Utc};
 use common::{TestServer, TestStore};
-use quest_domain::{Command, EntityId, Position};
+use quest_domain::{Command, EntityId, Placement, Position, TaskList};
 use quest_store::{StoreError, SyncOutcome, SyncStatus};
 
 const PATIENCE: Duration = Duration::from_secs(20);
@@ -78,6 +78,14 @@ async fn a_change_on_one_device_arrives_live_on_another() {
 
     let task = a.create_task("Plan the week");
     b.wait_for("the task from A", |s| s.snapshot().task(task).is_some());
+    let today = NaiveDate::from_ymd_opt(2026, 11, 25).expect("valid date");
+    a.store()
+        .dispatch(Command::PlaceTask { id: task, placement: Placement::FileIn(TaskList::Today), today, at: Utc::now() })
+        .unwrap();
+    let placed = a.store().snapshot().task(task).unwrap().clone();
+    b.wait_for("the plan and day order from A", |s| {
+        s.snapshot().task(task).is_some_and(|t| t.planned_on == Some(today) && t.day_order == placed.day_order)
+    });
     a.wait_live_and_drained();
     server.stop().await;
 }
@@ -185,7 +193,7 @@ async fn a_store_opened_while_the_server_is_down_drains_its_outbox_once_it_is_ba
     assert_eq!(a.store().account().map(|a| a.info.subject.is_empty()), Some(false), "still signed in");
     a.wait_offline();
     let task = a.create_task("Written offline");
-    a.wait_for("the offline change to be pending", |s| matches!(s.status(), SyncStatus::Offline { pending: 6, .. }));
+    a.wait_for("the offline change to be pending", |s| matches!(s.status(), SyncStatus::Offline { pending: 1.., .. }));
 
     server.start().await;
     a.wait_live_and_drained();

@@ -257,6 +257,11 @@ fn month_day(s: &State, p: &Pal, popups: &mut Vec<El>) -> El {
     setting("On", controls, p)
 }
 
+pub fn open_overview(s: &mut State, tx: &mut Tx) {
+    tx.blur();
+    s.overlay = Overlay::RecurringTasks;
+}
+
 pub fn overview_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
     let mut scheduled: Vec<_> = s
         .snap

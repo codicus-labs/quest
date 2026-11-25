@@ -25,6 +25,7 @@ fn snapshot_with(done: bool) -> Snapshot {
         completed_at: done.then(|| frozen().at),
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     };
     Snapshot { tasks: vec![task], ..Snapshot::default() }
@@ -147,7 +148,7 @@ fn new_dates_plan_at_the_bottom_or_set_the_deadline_and_a_bad_quest_id_is_refuse
     );
     assert_eq!(
         set_due(&task(false), Some(day), frozen()),
-        Some(Command::SetTaskDue { id: id(1), due_on: Some(day), at })
+        Some(Command::SetTaskDue { id: id(1), due_on: Some(day), today: frozen().today(), at })
     );
     assert_eq!(set_quest(&task(false), Some("nope")), Err(MobileError::InvalidId { value: "nope".into() }));
     assert_eq!(

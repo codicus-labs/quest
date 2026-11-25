@@ -204,7 +204,12 @@ fn commands_for(snapshot: &Snapshot, verb: &str, rest: &str) -> Result<Vec<Comma
         "start" => Command::StartFocus { entry_id: EntityId::new(), task_id: task()?.id, at: now },
         "stop" => Command::StopFocus { at: now },
         "move" => Command::MoveTask { id: task()?.id, planned_on: day(arg)?, position: Position::Bottom, at: now },
-        "due" => Command::SetTaskDue { id: task()?.id, due_on: day(arg)?, at: now },
+        "due" => Command::SetTaskDue {
+            id: task()?.id,
+            due_on: day(arg)?,
+            today: now.with_timezone(&Local).date_naive(),
+            at: now,
+        },
         "repeat" => Command::SetTaskRepeat { id: task()?.id, rule: Some(rule(arg)?), now },
         "norepeat" => Command::SetTaskRepeat { id: task()?.id, rule: None, now },
         "log" => {

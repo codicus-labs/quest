@@ -76,6 +76,7 @@ pub(crate) fn task(n: u128, title: &str, quest: Option<u128>, on: Option<&str>) 
         completed_at: None,
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     }
 }

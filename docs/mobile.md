@@ -440,6 +440,28 @@ Focus-Aufgabe kommen aus Rust.
   Phone/Tablet: Focus laufend, pausiert, Pick, Pick leer, Home mit Entwurf im kompakten Feld. „Logged time“
   in Fake und Referenzen im Rust-Format („1h 26m“).
 
+## Plan-Tagesliste (R2c, UniFFI)
+
+Für die neue Android-UI: `QuestCore.plan_sections(now: Moment) → PlanSections`. Dieselbe Abfrage versorgt
+Desktop und Android. `days` enthält 14 Tagesabschnitte ab heute, auch leere. Der erste enthält die offenen
+Today-Zeilen in derselben Reihenfolge wie Today; darunter rendert die UI `done_today` als „n done“.
+`later` ist eine Liste von `PlanMonthSection { start, partial, days }`; `start` ist der Monatserste und
+`partial` markiert „Rest of …“. `not_planned` enthält offene Quest-Tasks ohne Plan-Datum (UI initial zu).
+
+- `PlanDaySection { date, tasks, due }`: `tasks` sind `HomeTask`-Zeilen; `due` enthält
+  `PlanDueMarker { task_id, title }`. Zeigt „⚑ Due: …“ an dem Datum, wenn der Task dort keine eigene Zeile hat.
+- `weeks: Vec<PlanWeek>`, mit je sieben `PlanWeekDay { date, has_tasks, jump_enabled }` (Mo–So). Zeige den
+  Punkt bei `has_tasks` und erlaube den Sprung nur bei `jump_enabled`.
+- `QuestCore.place_task(task_id, list: PlanTaskList, before_task_id, now)`: Position vor dem Anker, ohne
+  Anker am Ende. `PlanTaskList` ist `Today`, `Day { date }`, `Inbox` oder `Quest { quest_id }`.
+  Innerhalb von Today bleibt ein liegengebliebener Plantag erhalten. Ein Drop auf einen anderen Tag setzt
+  das Plan-Datum samt gekoppelter Deadline und Verschiebe-Zählung. Die Änderung landet im Undo-Slot ohne Snackbar.
+- Datum ist jeweils `YYYY-MM-DD`, IDs sind Strings. Für das Tages-Plus `add_quick_draft` mit
+  `QuickFields.planned_on = date` verwenden. `plan_sections` registriert die Repeat-Vorschauen zur Bearbeitung;
+  beim Verlassen `leave_plan()` aufrufen.
+
+Die ältere Android-Board-API unten bleibt verfügbar. Die Android-Oberfläche wird in R2c nicht geändert.
+
 ## Phase 3 (Android): Plan
 
 Kotlin liest `plan(window, quest_filter, now)`; Fenster (`plan_window`), Rand-Geschwindigkeit

@@ -1,0 +1,6 @@
+[
+  {"t": 0.2, "type": "scroll", "key": "plan-page-scroll", "dy": -2000},
+  {"t": 0.8, "type": "tap", "key": "plan-not-planned"},
+  {"t": 1.2, "type": "scroll", "key": "plan-page-scroll", "dy": -2000},
+  {"t": 1.8, "type": "mark", "name": "end"}
+]

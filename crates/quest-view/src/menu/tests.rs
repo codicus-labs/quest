@@ -15,6 +15,7 @@ fn task(quest: bool, done: bool) -> Task {
         completed_at: done.then(|| "2026-10-15T14:40:00Z".parse().unwrap()),
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     }
 }

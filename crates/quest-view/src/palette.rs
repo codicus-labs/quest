@@ -18,7 +18,6 @@ pub enum Mode {
     /// A quest (or none) for a task.
     AssignQuest(EntityId),
     /// The quest Quest Work is filtered to (or all).
-    FilterQuest,
     /// The workspace to show.
     SwitchWorkspace,
 }
@@ -46,7 +45,6 @@ pub enum Action {
     LogWork,
     /// Opens the AI capture panel: free text structured into a proposal to confirm.
     CaptureWithAi,
-    FilterQuest(Option<EntityId>),
     SwitchWorkspace(EntityId),
     ManageWorkspaces,
 }
@@ -85,7 +83,6 @@ pub fn entries_for(
         Mode::Commands => commands(views, query, snapshot),
         Mode::MoveTo(task) => move_to(task, query, now.date()),
         Mode::AssignQuest(task) => assign_quest(task, query, snapshot, at),
-        Mode::FilterQuest => filter_quest(query, snapshot),
         Mode::SwitchWorkspace => switch_workspace(query, snapshot),
     }
 }
@@ -96,7 +93,6 @@ pub fn placeholder(mode: Mode) -> &'static str {
         Mode::Commands => "Search tasks and quests, or jump to…",
         Mode::MoveTo(_) => "Move to which day?",
         Mode::AssignQuest(_) => "Which quest is this task for?",
-        Mode::FilterQuest => "Show quest work for which quest?",
         Mode::SwitchWorkspace => "Switch to which workspace?",
     }
 }
@@ -205,21 +201,6 @@ fn assign_quest(task: EntityId, query: &str, snapshot: &Snapshot, at: DateTime<U
     out
 }
 
-fn filter_quest(query: &str, snapshot: &Snapshot) -> Vec<Entry> {
-    let mut out = Vec::new();
-    let all = "All quests";
-    if matches(all, query) {
-        out.push(Entry { title: all.into(), hint: "Filter".into(), action: Action::FilterQuest(None) });
-    }
-    let quests = snapshot.active_quests().filter(|q| matches(&q.title, query));
-    out.extend(quests.map(|q| Entry {
-        title: q.title.clone(),
-        hint: "Quest".into(),
-        action: Action::FilterQuest(Some(q.id)),
-    }));
-    out
-}
-
 fn other_workspaces(snapshot: &Snapshot) -> impl Iterator<Item = &Workspace> {
     snapshot.live_workspaces().filter(move |w| w.id != snapshot.workspace)
 }
@@ -297,6 +278,7 @@ mod tests {
             completed_at: done.then(|| "2026-10-15T14:40:00Z".parse().unwrap()),
             description: String::new(),
             repeat: None,
+            day_order: String::new(),
             series: None,
         };
         Snapshot {
@@ -379,11 +361,8 @@ mod tests {
     }
 
     #[test]
-    fn filtering_offers_all_quests_and_each_active_one() {
+    fn search_matches_log_work() {
         let snap = snapshot();
-        let all = super::entries(Mode::FilterQuest, "", &snap, now(), at());
-        assert_eq!(all[0].action, Action::FilterQuest(None));
-        assert_eq!(all[1].action, Action::FilterQuest(Some(snap.quests[0].id)));
         let log = entries("log", &snap);
         assert_eq!(log[0].action, Action::LogWork);
     }

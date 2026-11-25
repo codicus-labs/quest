@@ -29,6 +29,7 @@ fn snapshot() -> (Snapshot, EntityId, EntityId) {
         completed_at: done.then(|| "2026-10-15T14:40:00Z".parse().unwrap()),
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     };
     let (open, done) = (task("Motif ideas", false), task("Pick three motifs", true));

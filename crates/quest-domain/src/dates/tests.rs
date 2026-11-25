@@ -26,6 +26,7 @@ fn task(plan: Option<u32>, due: Option<u32>) -> Task {
         completed_at: None,
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     }
 }
@@ -66,7 +67,7 @@ fn only_dates_moved_later_count_as_postponed() {
 }
 
 #[test]
-fn today_holds_open_tasks_planned_or_due_until_today_ranked_by_urgency() {
+fn today_holds_open_tasks_planned_or_due_until_today() {
     let today = d(25);
     let overdue_task = task(None, Some(24));
     let carried = task(Some(23), None);
@@ -77,10 +78,6 @@ fn today_holds_open_tasks_planned_or_due_until_today_ranked_by_urgency() {
     assert!(!is_today(&later, today));
     assert!(overdue(&overdue_task, today) && !overdue(&due_today, today));
     assert!(carried_over(&carried, today) && !carried_over(&planned_today, today));
-    let ranks: Vec<u8> =
-        [&overdue_task, &carried, &due_today, &planned_today].iter().map(|t| today_rank(t, today)).collect();
-    assert_eq!(ranks, [0, 1, 2, 3]);
-
     let mut done = task(Some(20), Some(21));
     done.completed_at = Some(Utc.with_ymd_and_hms(2026, 11, 21, 9, 0, 0).unwrap());
     assert!(!is_today(&done, today) && !overdue(&done, today) && !carried_over(&done, today));

@@ -49,7 +49,7 @@ fn titles(tasks: &[&Task]) -> Vec<String> {
 }
 
 #[test]
-fn today_ranks_overdue_carried_over_due_today_then_the_rest() {
+fn today_keeps_manual_order_regardless_of_urgency() {
     let mut b = Board::new();
     b.task("planned today", None, Some(25), None);
     b.task("due today", None, None, Some(25));
@@ -58,7 +58,77 @@ fn today_ranks_overdue_carried_over_due_today_then_the_rest() {
     b.task("tomorrow", None, Some(26), None);
     let done = b.task("done", None, Some(25), None);
     b.run(Command::CompleteTask { id: done, at: at(25) });
-    assert_eq!(titles(&today(&b.snapshot, d(25))), ["overdue", "carried over", "due today", "planned today"]);
+    assert_eq!(titles(&today(&b.snapshot, d(25))), ["planned today", "due today", "carried over", "overdue"]);
+}
+
+#[test]
+fn placement_between_tied_keys_keeps_other_order_and_undo_restores_the_tie() {
+    use crate::undo::TaskEdit;
+    use quest_domain::{Placement, TaskList};
+
+    let mut board = Board::new();
+    let today_date = d(25);
+    let moved = board.task("moved", None, Some(23), None);
+    let a = board.task("first tie", None, Some(25), None);
+    let b = board.task("second tie", None, Some(25), None);
+    let (first, second) = (a.min(b), a.max(b));
+    for id in [a, b] {
+        board.run(Command::RestoreTaskEdit {
+            id,
+            dates: None,
+            sort_key: None,
+            day_order: Some("k".into()),
+            rekeyed: Vec::new(),
+            quest_id: None,
+            completed_at: None,
+            postponements: Vec::new(),
+            at: at(25),
+        });
+    }
+    let old = board.snapshot.clone();
+    let list = TaskList::Today;
+    board.run(Command::PlaceTask {
+        id: moved,
+        placement: Placement::InList { list, position: Position::Before(second) },
+        today: today_date,
+        at: at(25),
+    });
+    let ids = |snap: &Snapshot| today(snap, today_date).into_iter().map(|task| task.id).collect::<Vec<_>>();
+    assert_eq!(ids(&board.snapshot), [first, moved, second]);
+    let before = old.task(moved).unwrap();
+    let after = board.snapshot.task(moved).unwrap();
+    assert_eq!(after.planned_on, before.planned_on, "carried-over is still carried over");
+    assert_eq!(after.sort_key, before.sort_key, "Today does not move the task in the quest or Inbox");
+
+    let undo = TaskEdit::placement(before, after, &old, &board.snapshot, list, today_date).unwrap();
+    board.run(undo.command(at(25)));
+    assert_eq!(ids(&board.snapshot), ids(&old));
+    assert_eq!(board.snapshot.task(second).unwrap().day_order, "k");
+}
+
+#[test]
+fn sidebar_inbox_clears_quest_and_plan_but_keeps_due_and_undo_restores_the_placement() {
+    use quest_domain::{Placement, TaskList};
+
+    let mut board = Board::new();
+    let quest = EntityId::new();
+    board.run(Command::CreateQuest { id: quest, title: "Q".into(), color: QuestColor::Red });
+    let id = board.task("Filed", Some(quest), Some(24), Some(25));
+    let other = board.task("Inbox", None, None, None);
+    let old = board.snapshot.clone();
+    board.run(Command::PlaceTask { id, placement: Placement::FileIn(TaskList::Inbox), today: d(25), at: at(25) });
+    let filed = board.snapshot.task(id).unwrap();
+    assert_eq!((filed.quest_id, filed.planned_on, filed.due_on), (None, None, Some(d(25))));
+    assert_eq!(inbox(&board.snapshot).iter().map(|t| t.id).collect::<Vec<_>>(), [other, id]);
+    assert!(board.snapshot.postponements.is_empty());
+
+    let before = old.task(id).unwrap();
+    board.run(
+        crate::undo::TaskEdit::placement(before, filed, &old, &board.snapshot, TaskList::Inbox, d(25))
+            .unwrap()
+            .command(at(25)),
+    );
+    assert_eq!(board.snapshot.task(id), Some(before));
 }
 
 #[test]

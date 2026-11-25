@@ -7,7 +7,7 @@
 mod tests;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use quest_domain::{Command, EntityId, Position};
+use quest_domain::{Command, EntityId, Placement, Position, TaskList};
 
 /// How far (in points) a press travels before it becomes a drag rather than a click.
 pub const DRAG_THRESHOLD: f32 = 4.0;
@@ -58,37 +58,13 @@ impl From<[f32; 4]> for Rect {
     }
 }
 
-/// A list's two kinds of task, shown apart: QUEST WORK (tasks with a quest) and OTHER. A card
-/// only drags among cards of its own kind; giving or taking its quest moves it across.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Section {
-    Quest,
-    Other,
-}
-
-/// A task list that takes drops: a place for tasks, shown as a QUEST WORK and an OTHER section.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ListId {
-    /// Home's lists: today.
-    Home,
-    /// A planner column.
-    Day(NaiveDate),
-    /// The planner's "Someday" column.
-    Backlog,
+    Rows(TaskList),
+    File(TaskList),
 }
 
-impl ListId {
-    /// The day a task dropped here is planned for.
-    pub fn day(self, today: NaiveDate) -> Option<NaiveDate> {
-        match self {
-            ListId::Home => Some(today),
-            ListId::Day(day) => Some(day),
-            ListId::Backlog => None,
-        }
-    }
-}
-
-/// What a drag carries: a task card (≡ handle).
+/// What a drag carries.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Payload {
     pub task: EntityId,
@@ -130,6 +106,9 @@ pub struct Geometry {
 /// points, as laid out after scrolling.
 pub fn hit(geometry: &Geometry, payload: &Payload, at: Point, lifted: Option<Rect>) -> Option<Target> {
     let list = geometry.lists.iter().find(|l| l.rect.contains(at))?;
+    if matches!(list.list, ListId::File(_)) {
+        return Some(Target { list: list.list, before: None });
+    }
     let room = geometry.room.filter(|r| r.list == list.list);
     let probe = lifted.unwrap_or(Rect { x: at.x, y: at.y, w: 0.0, h: 0.0 });
     Some(Target { list: list.list, before: slot_at(list, payload.task, room, probe) })
@@ -282,15 +261,14 @@ pub fn step(state: DragState, event: DragEvent) -> (DragState, Effect) {
     }
 }
 
-/// The command a drop of `task` on `target` runs: plan it for the list's day, before `before`
-/// or at the end.
 pub fn drop_command(task: EntityId, target: Target, today: NaiveDate, at: DateTime<Utc>) -> Command {
-    Command::MoveTask {
-        id: task,
-        planned_on: target.list.day(today),
-        position: target.before.map_or(Position::Bottom, Position::Before),
-        at,
-    }
+    let placement = match target.list {
+        ListId::Rows(list) => {
+            Placement::InList { list, position: target.before.map_or(Position::Bottom, Position::Before) }
+        }
+        ListId::File(list) => Placement::FileIn(list),
+    };
+    Command::PlaceTask { id: task, placement, today, at }
 }
 
 pub use quest_view::reorder::nudge;

@@ -41,6 +41,13 @@ def main():
     path, question, title = sys.argv[1:4]
     with open(path) as f:
         tree = json.load(f)
+    if question == "quest":
+        for element in tree["elements"]:
+            match = re.search(r"nav-quest-([0-9a-f-]{36})", element.get("path", ""))
+            if element.get("text") == title and match:
+                print(match.group(1))
+                return
+        sys.exit(1)
     if question == "keytext":
         wanted = sys.argv[4]
         sys.exit(0 if any(e.get("key") == title and e.get("text") == wanted for e in tree["elements"]) else 1)
@@ -69,6 +76,13 @@ def main():
     if question == "id":
         print(task)
         return
+    if question == "above":
+        anchor = card_id(tree, sys.argv[4])
+        titles = [e.get("key") for e in tree["elements"]]
+        sys.exit(0 if anchor and titles.index(f"row-title-{task}") < titles.index(f"row-title-{anchor}") else 1)
+    if question == "under":
+        day = sys.argv[4]
+        sys.exit(0 if any(e.get("key") == f"row-title-{task}" and f"plan-day-{day}" in e.get("path", "") for e in tree["elements"]) else 1)
     if question == "rowtext":
         wanted = sys.argv[4]
         sys.exit(0 if any(f"row-{task}" in e.get("path", "") and e.get("text") == wanted for e in tree["elements"]) else 1)

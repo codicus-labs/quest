@@ -22,6 +22,7 @@ pub mod fields {
 
     pub const TASK_PLANNED_ON: &str = "planned_on";
     pub const TASK_DUE_ON: &str = "due_on";
+    pub const TASK_DAY_ORDER: &str = "day_order";
     pub const TASK_COMPLETED_AT: &str = "completed_at";
     pub const TASK_DESCRIPTION: &str = "description";
     pub const TASK_REPEAT: &str = "repeat";
@@ -114,6 +115,7 @@ pub struct Task {
     pub planned_on: Option<NaiveDate>,
     /// The day it has to be done by; never before `planned_on`.
     pub due_on: Option<NaiveDate>,
+    pub day_order: String,
     pub sort_key: String,
     pub completed_at: Option<DateTime<Utc>>,
     /// Markdown notes; empty when there are none.
@@ -281,6 +283,9 @@ impl Task {
             quest_id: get(values, fields::QUEST_ID).unwrap_or_else(|| initial.as_ref().and_then(|o| o.quest_id)),
             planned_on: get(values, fields::TASK_PLANNED_ON).unwrap_or_else(|| initial.as_ref().map(|o| o.planned_on)),
             due_on: get_opt(values, fields::TASK_DUE_ON),
+            day_order: get(values, fields::TASK_DAY_ORDER).unwrap_or_else(|| {
+                initial.as_ref().map_or_else(|| format!("V{}V", id.0.simple()), |o| o.sort_key.clone())
+            }),
             sort_key: get(values, fields::SORT_KEY)
                 .or_else(|| initial.as_ref().map(|o| o.sort_key.clone()))
                 .unwrap_or_default(),

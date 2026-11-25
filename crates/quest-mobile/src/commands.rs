@@ -97,7 +97,7 @@ pub(crate) fn set_planned(task: &Task, planned_on: Option<NaiveDate>, now: Now) 
 
 /// Sets or clears the deadline; nothing when it is so already.
 pub(crate) fn set_due(task: &Task, due_on: Option<NaiveDate>, now: Now) -> Option<Command> {
-    (task.due_on != due_on).then_some(Command::SetTaskDue { id: task.id, due_on, at: now.at })
+    (task.due_on != due_on).then_some(Command::SetTaskDue { id: task.id, due_on, today: now.today(), at: now.at })
 }
 
 /// Sets or (with `None`) stops the repeat of the task's series.

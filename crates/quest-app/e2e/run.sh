@@ -8,6 +8,7 @@
 # e2e/browser.py (`--browser`), which follows the redirects and picks the user at the fake with
 # login_hint=$QUEST_E2E_USER. Tokens go to a file per instance (`--token-file`), not the keychain.
 #
+# r2c  Click-to-open, persisted Today ordering, moving between days and filing in a quest.
 # a–d  A signs in (anna) and adds a task, B (anna) receives it, completes it, and gets a task live.
 # e    AI: ben (AI features off) gets no "Capture with AI" in ⌘K; anna turns AI features on (privacy
 #      notice), then captures (proposal from a fixture, `--capture-fixture`) and takes it back (⌘Z).
@@ -53,6 +54,7 @@ await_url() {
 # A script template with this run's server (and task id) filled in.
 script() {
   sed -e "s|__SERVER__|$server|" -e "s/__TASK_ID__/${task_id:-}/" -e "s/__WORKSPACE__/${workspace_id:-}/" \
+    -e "s/__DAY__/${day:-}/" -e "s/__QUEST_ID__/${quest_id:-}/" \
     "$here/$1.json" >"$work/$1.json"
   echo "$work/$1.json"
 }
@@ -110,6 +112,29 @@ if [ -n "$task_id" ]; then
   check r3-undo "r3 Undo reopened the completed task" open "R3 draft"
 else
   fail "r3 skipped: no task for Undo"
+fi
+
+r2c_time=2026-11-24T13:00
+moving="Make the first impression feel effortless"
+anchor="Design the next chapter"
+quest="Write every week"
+day=2026-11-28
+run anna "$root/r2c" r2c-inspect r2c-seed --demo --now "$r2c_time" --scene today
+task_id=$(tree "$out/r2c-seed.json" id "$moving" 2>/dev/null)
+quest_id=$(tree "$out/r2c-seed.json" quest "$quest" 2>/dev/null)
+if [ -n "$task_id" ] && [ -n "$quest_id" ]; then
+  run anna "$root/r2c" r2c-detail r2c-detail --now "$r2c_time" --scene today
+  check r2c-detail "r2c one click opens the inline detail" key task-modal-title
+  run anna "$root/r2c" r2c-reorder r2c-reordered --now "$r2c_time" --scene today
+  check r2c-reordered "r2c Today drag reorders the row" above "$moving" "$anchor"
+  run anna "$root/r2c" r2c-inspect r2c-restart --now "$r2c_time" --scene today
+  check r2c-restart "r2c Today order persists after restart" above "$moving" "$anchor"
+  run anna "$root/r2c" r2c-replan r2c-replanned --now "$r2c_time" --scene plan
+  check r2c-replanned "r2c Plan drag changes the plan date" under "$moving" "$day"
+  run anna "$root/r2c" r2c-file r2c-filed --now "$r2c_time" --scene plan
+  check r2c-filed "r2c sidebar drag assigns the quest" rowtext "$moving" "$quest"
+else
+  fail "r2c skipped: demo task or quest not found"
 fi
 
 # a. A signs in as anna through the browser and adds a task on Today.

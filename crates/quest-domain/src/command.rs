@@ -4,6 +4,8 @@
 mod checklist;
 mod edit_entry;
 mod task_dates;
+mod task_order;
+pub use task_order::{Placement, PreviousTaskOrder, TaskList};
 mod timer;
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -106,10 +108,17 @@ pub enum Command {
         position: Position,
         at: DateTime<Utc>,
     },
+    PlaceTask {
+        id: EntityId,
+        placement: Placement,
+        today: NaiveDate,
+        at: DateTime<Utc>,
+    },
     /// Sets or clears the deadline; see `set_due`.
     SetTaskDue {
         id: EntityId,
         due_on: Option<NaiveDate>,
+        today: NaiveDate,
         at: DateTime<Utc>,
     },
     CompleteTask {
@@ -121,6 +130,9 @@ pub enum Command {
         id: EntityId,
         dates: Option<crate::dates::TaskDates>,
         sort_key: Option<String>,
+        day_order: Option<String>,
+        rekeyed: Vec<PreviousTaskOrder>,
+        quest_id: Option<Option<EntityId>>,
         completed_at: Option<Option<DateTime<Utc>>>,
         postponements: Vec<EntityId>,
         at: DateTime<Utc>,
@@ -374,7 +386,8 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
         Command::MoveTask { id, planned_on, position, at } => {
             task_dates::move_task(snapshot, *id, *planned_on, *position, *at)?
         }
-        Command::SetTaskDue { id, due_on, at } => task_dates::set_task_due(snapshot, *id, *due_on, *at)?,
+        Command::PlaceTask { id, placement, today, at } => task_order::place(snapshot, *id, *placement, *today, *at)?,
+        Command::SetTaskDue { id, due_on, today, at } => task_dates::set_task_due(snapshot, *id, *due_on, *today, *at)?,
         Command::CompleteTask { id, at } | Command::CompleteTaskFromPlan { id, at, .. } => {
             let task = snapshot.task(*id).ok_or(CommandError::UnknownTask(*id))?;
             let mut writes = stop_running(snapshot, *at, |running| running.entry.task_id == Some(*id));
@@ -388,7 +401,17 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
             }
             writes
         }
-        Command::RestoreTaskEdit { id, dates, sort_key, completed_at, postponements, at } => {
+        Command::RestoreTaskEdit {
+            id,
+            dates,
+            sort_key,
+            day_order,
+            rekeyed,
+            quest_id,
+            completed_at,
+            postponements,
+            at,
+        } => {
             task_exists(*id)?;
             let mut writes = Vec::new();
             if let Some(dates) = dates {
@@ -398,6 +421,16 @@ pub fn plan(command: &Command, snapshot: &Snapshot) -> Result<Vec<FieldWrite>, C
             }
             if let Some(key) = sort_key {
                 writes.push(write(Task, *id, fields::SORT_KEY, json!(key)));
+            }
+            if let Some(key) = day_order {
+                writes.push(write(Task, *id, fields::TASK_DAY_ORDER, json!(key)));
+            }
+            writes.extend(rekeyed.iter().filter(|key| snapshot.task(key.id).is_some()).map(PreviousTaskOrder::write));
+            if let Some(quest) = quest_id {
+                if let Some(quest) = quest {
+                    quest_exists(*quest)?;
+                }
+                writes.push(write(Task, *id, fields::QUEST_ID, json!(quest)));
             }
             if let Some(completed_at) = completed_at {
                 if completed_at.is_some() {

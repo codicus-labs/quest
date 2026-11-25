@@ -3,7 +3,7 @@
 //! new quest; the player card at the bottom.
 
 use chrono::Local;
-use quest_domain::EntityId;
+use quest_domain::{EntityId, TaskList};
 use quest_view::lists;
 use quest_view::player::{self, Player};
 use quest_view::tracked::{self, QuestWeek};
@@ -94,13 +94,17 @@ fn nav_item(s: &State, view: View, glyph: &'static Icon, ink: Color, count: usiz
     if count > 0 {
         item = item.child(text(count.to_string()).font(ty::SMALL).color(p.faint));
     }
-    item
+    match view {
+        View::Today => super::drag::sidebar(s, TaskList::Today, item, p),
+        View::Inbox => super::drag::sidebar(s, TaskList::Inbox, item, p),
+        _ => item,
+    }
 }
 
 fn quest_item(s: &State, quest: &QuestWeek, target_ms: i64, p: &Pal) -> El {
     let view = View::Quest(quest.quest);
     let on = s.view == view;
-    row()
+    let item = row()
         .key(format!("nav-quest-{}", quest.quest))
         .role("tab")
         .label(quest.title.clone())
@@ -127,7 +131,8 @@ fn quest_item(s: &State, quest: &QuestWeek, target_ms: i64, p: &Pal) -> El {
                 .min_w(0.0),
         )
         .child(text(format::hours(quest.ms)).font(ty::SMALL).color(p.faint))
-        .on_press_tx(move |s: &mut State, tx: &mut Tx| s.go_with(view, tx))
+        .on_press_tx(move |s: &mut State, tx: &mut Tx| s.go_with(view, tx));
+    super::drag::sidebar(s, TaskList::Quest(quest.quest), item, p)
 }
 
 /// An 18-point ring: the track, and the share `fraction` drawn clockwise from the top.

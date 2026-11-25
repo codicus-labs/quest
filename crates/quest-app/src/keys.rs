@@ -23,10 +23,13 @@ pub enum Shortcut {
     Settings,
     Sheet,
     NewTask,
-    ToggleOther,
     /// T, ⌥⌘I: show or hide the tracked-time column.
     ToggleTracked,
     /// J / ↓ and K / ↑: the next or previous row.
+    JumpToday,
+    Nudge {
+        up: bool,
+    },
     Select {
         next: bool,
     },
@@ -54,32 +57,11 @@ pub enum TaskKey {
     Open,
 }
 
-/// What a focused task card does with a key.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CardKey {
-    /// ⌥↑ / ⌥↓: one place up or down.
-    Nudge { up: bool },
-    /// ⌥← / ⌥→: to the previous or next day.
-    Day { later: bool },
-}
-
-pub fn card_key(ev: &KeyEvent) -> Option<CardKey> {
-    if !ev.mods.alt || ev.mods.cmd || ev.mods.ctrl {
-        return None;
-    }
-    match ev.key {
-        Key::Up => Some(CardKey::Nudge { up: true }),
-        Key::Down => Some(CardKey::Nudge { up: false }),
-        Key::Left => Some(CardKey::Day { later: false }),
-        Key::Right => Some(CardKey::Day { later: true }),
-        _ => None,
-    }
-}
-
 /// Plain letters only arrive here when no text field took them (Rune's key routing gives a
 /// focused field's typing to the field first).
 pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
     let plain = !ev.mods.cmd && !ev.mods.ctrl && !ev.mods.alt;
+    let reorder = ev.mods.alt && !ev.mods.cmd && !ev.mods.ctrl && !ev.mods.shift;
     if let Key::Command(letter) = ev.key
         && ev.mods.shift
         && !ev.mods.alt
@@ -101,6 +83,8 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
                 None => Shortcut::GoQuest(index - View::SIDEBAR.len()),
             })
         }
+        Key::Up if reorder => Some(Shortcut::Nudge { up: true }),
+        Key::Down if reorder => Some(Shortcut::Nudge { up: false }),
         Key::Down if plain => Some(Shortcut::Select { next: true }),
         Key::Up if plain => Some(Shortcut::Select { next: false }),
         Key::Escape => Some(Shortcut::Back),
@@ -110,12 +94,12 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         Key::Backspace | Key::Delete => Some(Shortcut::DeleteSelection),
         Key::Text(t) if plain => match t.to_lowercase().as_str() {
             "f" => Some(Shortcut::Go(View::Focus)),
+            "g" => Some(Shortcut::JumpToday),
             "j" => Some(Shortcut::Select { next: true }),
             "k" => Some(Shortcut::Select { next: false }),
             "t" => Some(Shortcut::ToggleTracked),
             "?" => Some(Shortcut::Sheet),
             "n" => Some(Shortcut::NewTask),
-            "v" => Some(Shortcut::ToggleOther),
             " " => Some(Shortcut::Task(TaskKey::StartPause)),
             "x" => Some(Shortcut::Task(TaskKey::ToggleDone)),
             "l" | "p" | "d" => t.chars().next().and_then(Picker::from_letter).map(Shortcut::Pick),
@@ -153,6 +137,9 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             s.go_with(View::Quest(quest), tx);
         }
         Shortcut::ToggleTracked => toggle_tracked(s),
+        Shortcut::JumpToday if s.view == View::Plan => crate::ui::plan::jump_today(s, tx),
+        Shortcut::JumpToday => return false,
+        Shortcut::Nudge { up } => return crate::ui::drag::nudge(s, up, tx),
         Shortcut::Select { next } => {
             if !s.select_next_row(next) {
                 return false;
@@ -166,12 +153,15 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Shortcut::Sheet if s.overlay == Overlay::None => s.overlay = Overlay::Shortcuts,
         Shortcut::Sheet => return false,
         Shortcut::NewTask => {
+            if s.view == View::Plan {
+                crate::ui::plan::open_add(s, s.today(), tx);
+                return true;
+            }
             if !matches!(s.view, View::Today | View::Inbox | View::Quest(_)) {
                 s.go_with(View::Today, tx);
             }
             tx.focus_when_shown("quick-add", true);
         }
-        Shortcut::ToggleOther => s.show_other = !s.show_other,
         Shortcut::Back if s.task_calendar.is_some() => s.close_calendar(tx),
         Shortcut::Back if s.date_picker.is_some() => s.date_picker = None,
         Shortcut::Back if s.overlay == Overlay::LogWork => s.close_log_work(),
@@ -189,6 +179,7 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Shortcut::Back if s.task_modal.is_some() => {
             tx.blur();
             s.close_task_modal();
+            s.selected_task = None;
         }
         Shortcut::Back if s.selected_task.is_some() => s.selected_task = None,
         Shortcut::Back if s.menu.is_some() => s.menu = None,
@@ -293,7 +284,7 @@ mod tests {
     #[test]
     fn letters_create_toggle_and_act_on_tasks() {
         assert_eq!(shortcut(&text("n")), Some(Shortcut::NewTask));
-        assert_eq!(shortcut(&text("v")), Some(Shortcut::ToggleOther));
+        assert_eq!(shortcut(&text("g")), Some(Shortcut::JumpToday));
         assert_eq!(shortcut(&text("?")), Some(Shortcut::Sheet));
         assert_eq!(shortcut(&text(" ")), Some(Shortcut::Task(TaskKey::StartPause)));
         assert_eq!(shortcut(&text("x")), Some(Shortcut::Task(TaskKey::ToggleDone)));
@@ -312,14 +303,10 @@ mod tests {
         assert_eq!(shortcut(&key(Key::Command('z'))), Some(Shortcut::Undo));
     }
 
-    fn with(key: Key, alt: bool, shift: bool) -> KeyEvent {
-        KeyEvent { key, mods: Mods { alt, shift, ..Mods::default() } }
-    }
-
     #[test]
-    fn option_arrows_move_cards() {
-        assert_eq!(card_key(&with(Key::Up, true, false)), Some(CardKey::Nudge { up: true }));
-        assert_eq!(card_key(&with(Key::Right, true, false)), Some(CardKey::Day { later: true }));
-        assert_eq!(card_key(&with(Key::Up, false, false)), None, "plain arrows stay focus navigation");
+    fn option_arrows_sort_tasks() {
+        let with_alt = |key| KeyEvent { key, mods: Mods { alt: true, ..Mods::default() } };
+        assert_eq!(shortcut(&with_alt(Key::Up)), Some(Shortcut::Nudge { up: true }));
+        assert_eq!(shortcut(&with_alt(Key::Down)), Some(Shortcut::Nudge { up: false }));
     }
 }

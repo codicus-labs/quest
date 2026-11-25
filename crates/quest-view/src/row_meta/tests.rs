@@ -18,6 +18,7 @@ fn task(plan: Option<u32>, due: Option<u32>) -> Task {
         completed_at: None,
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     }
 }

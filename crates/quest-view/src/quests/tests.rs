@@ -30,6 +30,7 @@ fn task(n: u128, on: Option<NaiveDate>, done: Option<&str>) -> Task {
         completed_at: done.map(at),
         description: String::new(),
         repeat: None,
+        day_order: String::new(),
         series: None,
     }
 }

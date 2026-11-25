@@ -20,9 +20,9 @@ mod workspace;
 
 pub use batch::{PlannedBatch, plan_all};
 pub use change::{EntityId, EntityKind, FieldChange, FieldStore, FieldWrite};
-pub use command::{Command, CommandError, Position, WorkTask, plan};
+pub use command::{Command, CommandError, Placement, Position, PreviousTaskOrder, TaskList, WorkTask, plan};
 pub use dates::{
-    DateField, TaskDates, carried_over, is_inbox, is_today, overdue, postponed_fields, set_due, set_planned, today_rank,
+    DateField, TaskDates, carried_over, is_inbox, is_today, overdue, postponed_fields, set_due, set_planned,
 };
 pub use hlc::{Hlc, HlcClock, HlcParseError, NodeId};
 pub use hours::WorkTime;
