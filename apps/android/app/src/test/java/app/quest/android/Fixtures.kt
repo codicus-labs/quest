@@ -61,7 +61,10 @@ import uniffi.quest_mobile.QuestCard
 import uniffi.quest_mobile.QuestDetail
 import uniffi.quest_mobile.QuestHue
 import uniffi.quest_mobile.QuestsData
-import uniffi.quest_mobile.ReviewData
+import uniffi.quest_mobile.CalendarMonth
+import uniffi.quest_mobile.DateTarget
+import uniffi.quest_mobile.QuickFields
+import uniffi.quest_mobile.WeeklyReviewData
 import uniffi.quest_mobile.SearchMode
 import uniffi.quest_mobile.SearchOutcome
 import uniffi.quest_mobile.SearchResult
@@ -229,7 +232,6 @@ class FakeCore(
     var quests: QuestsData = QuestSamples.quests,
     /** Quest pages by id; a missing id is an unknown quest. */
     val questDetails: MutableMap<String, QuestDetail> = mutableMapOf("q1" to QuestSamples.detail),
-    var review: ReviewData = QuestSamples.review,
     var archive: ArchiveData = QuestSamples.archive,
     /** What [search] lists, by mode and query. */
     var searchResults: (SearchMode, String) -> List<SearchResult> = { _, query -> QuestSamples.commands.filter { it.title.contains(query, ignoreCase = true) } },
@@ -279,8 +281,7 @@ class FakeCore(
     val syncWaits = mutableListOf<Long>()
     val flushes = mutableListOf<Long>()
 
-    /** The week of every [review] read. */
-    val reviewWeeks = mutableListOf<String?>()
+    val reviewOffsets = mutableListOf<Int>()
 
     /** Every [search] as mode and query. */
     val searches = mutableListOf<Pair<SearchMode, String>>()
@@ -565,11 +566,13 @@ class FakeCore(
         return "new"
     }
 
-    override fun review(week: String?, now: Moment): ReviewData {
+    override fun weeklyReview(offset: Int, now: Moment): WeeklyReviewData {
         maybeFail()
-        reviewWeeks += week
-        return review
+        reviewOffsets += offset
+        return if (offset == -1) QuestSamples.lastWeek else QuestSamples.review
     }
+
+    override fun taskCalendar(cursor: String?, fields: QuickFields, target: DateTarget, now: Moment): CalendarMonth? = null
 
     override fun archive(now: Moment): ArchiveData {
         maybeFail()

@@ -20,41 +20,31 @@ class ReviewViewModelTest {
         ReviewViewModel(openedHolder(core, backgroundScope, main.dispatcher), saved)
 
     @Test
-    fun readsThisWeekOnlyWhileShown() = runTest(main.dispatcher) {
+    fun readsOnlyWhileShown() = runTest(main.dispatcher) {
         val vm = viewModel()
-        assertEquals(emptyList<String?>(), core.reviewWeeks)
+        assertEquals(emptyList<Int>(), core.reviewOffsets)
 
         vm.setShown(true)
-
         assertEquals(ReviewUiState.Ready(QuestSamples.review), vm.state.value)
-        assertEquals(listOf<String?>(null), core.reviewWeeks.distinct())
-    }
+        assertEquals(listOf(0), core.reviewOffsets.distinct())
 
-    @Test
-    fun arrowsAndBarsMoveByTheCoresWeeksAndThisWeekGoesBack() = runTest(main.dispatcher) {
-        val vm = viewModel()
+        vm.setShown(false)
+        vm.changeWeek(-1)
+        assertEquals(listOf(0), core.reviewOffsets.distinct())
+
         vm.setShown(true)
-
-        core.review = QuestSamples.lastWeek
-        vm.previous()
-        assertEquals("2026-11-16", core.reviewWeeks.last())
-        vm.next()
-        assertEquals("2026-11-23", core.reviewWeeks.last())
-        vm.selectWeek("2026-10-12")
-        assertEquals("2026-10-12", core.reviewWeeks.last())
-        vm.thisWeek()
-        assertEquals(null, core.reviewWeeks.last())
+        assertEquals(ReviewUiState.Ready(QuestSamples.lastWeek), vm.state.value)
     }
 
     @Test
-    fun theWeekSurvivesProcessDeath() = runTest(main.dispatcher) {
+    fun theOffsetSurvivesProcessDeath() = runTest(main.dispatcher) {
         val saved = SavedStateHandle()
         val vm = viewModel(saved)
         vm.setShown(true)
-        vm.previous()
+        vm.changeWeek(-1)
 
         viewModel(saved).setShown(true)
 
-        assertEquals("2026-11-16", core.reviewWeeks.last())
+        assertEquals(-1, core.reviewOffsets.last())
     }
 }

@@ -11,11 +11,12 @@ import uniffi.quest_mobile.QuestDetail
 import uniffi.quest_mobile.QuestHue
 import uniffi.quest_mobile.QuestTaskGroup
 import uniffi.quest_mobile.QuestsData
-import uniffi.quest_mobile.ReviewData
-import uniffi.quest_mobile.ReviewDay
-import uniffi.quest_mobile.ReviewQuest
-import uniffi.quest_mobile.ReviewSegment
-import uniffi.quest_mobile.ReviewWeek
+import uniffi.quest_mobile.ReviewBucket
+import uniffi.quest_mobile.ReviewMetrics
+import uniffi.quest_mobile.ReviewPostponed
+import uniffi.quest_mobile.ReviewShare
+import uniffi.quest_mobile.ReviewSince
+import uniffi.quest_mobile.WeeklyReviewData
 import uniffi.quest_mobile.SearchKind
 import uniffi.quest_mobile.SearchResult
 import uniffi.quest_mobile.SearchToken
@@ -126,49 +127,50 @@ object QuestSamples {
         toast = null,
     )
 
-    private fun day(label: String, hours: String, fraction: Float, writing: Float, fitness: Float, today: Boolean = false) = ReviewDay(
-        label = label,
-        hours = hours,
-        isToday = today,
-        fraction = fraction,
-        segments = listOf(ReviewSegment("q1", BLUE, writing), ReviewSegment("q2", GREEN, fitness)).filter { it.fraction > 0f },
-        a11yLabel = "$label: $hours",
-    )
+    private const val HOUR_MS = 3_600_000L
 
-    val review = ReviewData(
+    val review = WeeklyReviewData(
         weekStart = "2026-11-23",
         weekLabel = "Nov 23 – 29",
-        previousWeek = "2026-11-16",
-        nextWeek = "2026-11-30",
-        isThisWeek = true,
-        questHours = "6.2h",
-        target = "/ 20h",
-        targetNote = "31% of your weekly target",
-        targetProgress = 0.31f,
-        dailyAverage = "1.2h",
-        questShare = "78%",
-        days = listOf(
-            day("Mon", "2.5h", 1f, 0.7f, 0.3f),
-            day("Tue", "1.5h", 0.6f, 0.6f, 0f),
-            day("Wed", "2.2h", 0.88f, 0.5f, 0.38f, today = true),
-            day("Thu", "0h", 0f, 0f, 0f),
-            day("Fri", "0h", 0f, 0f, 0f),
-            day("Sat", "0h", 0f, 0f, 0f),
-            day("Sun", "0h", 0f, 0f, 0f),
+        current = ReviewMetrics(4u, 8u, 7u, 12 * HOUR_MS + 2_880_000),
+        previous = ReviewMetrics(2u, 3u, 3u, 8 * HOUR_MS + 2_160_000),
+        goalMs = 20 * HOUR_MS,
+        mostPostponed = listOf(
+            ReviewPostponed("t1", "Outline chapter 3", false, 4u,
+                listOf(listOf("2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23")),
+                listOf(listOf("2026-11-27", "2026-11-29"))),
+            ReviewPostponed("t2", "Draft this week’s essay", false, 2u,
+                listOf(listOf("2026-11-24", "2026-11-27")),
+                listOf(listOf("2026-11-26", "2026-11-29"))),
+            ReviewPostponed("t3", "Write the launch announcement", true, 1u,
+                emptyList(), listOf(listOf("2026-11-24", "2026-12-02"))),
         ),
-        byQuest = listOf(ReviewQuest("q1", "Write the book", BLUE, "4.5h", 1f, "Write the book: 4.5h"), ReviewQuest("q2", "Fitness", GREEN, "1.7h", 0.38f, "Fitness: 1.7h")),
-        byQuestA11y = "Hours by quest: Write the book 4.5h, Fitness 1.7h",
-        questWork = "6.2h quest work",
-        other = "1.8h other",
-        questFraction = 0.78f,
-        splitA11y = "6.2 hours quest work, 1.8 hours other",
-        weeks = listOf(5f, 8f, 12f, 9f, 14f, 11f, 16f, 6.2f).mapIndexed { index, hours ->
-            ReviewWeek(weekStart = "2026-${if (index < 4) "10" else "11"}-${10 + index}", label = "W${41 + index}", hours = "${hours}h", fraction = hours / 16f, selected = index == 7, a11yLabel = "Week ${41 + index}: ${hours}h")
-        },
-        weeksA11y = "Hours in the last 8 weeks",
+        carriedOver = listOf(ReviewSince("t4", "Review the interview notes", "2026-11-24")),
+        overdue = listOf(ReviewSince("t5", "Send the course registration", "2026-11-26")),
+        trackedMsPerDay = listOf(4 * HOUR_MS, 3 * HOUR_MS, 2 * HOUR_MS, 3 * HOUR_MS, 3 * HOUR_MS, 0L, 0L),
+        shares = listOf(
+            ReviewShare(ReviewBucket.Quest("q1", "Write the book", BLUE), 9 * HOUR_MS, 0.60),
+            ReviewShare(ReviewBucket.Quest("q2", "Fitness", GREEN), 3 * HOUR_MS + 2_880_000, 0.2533),
+            ReviewShare(ReviewBucket.Organizing, HOUR_MS + 1_800_000, 0.10),
+            ReviewShare(ReviewBucket.NoQuest, 2_520_000, 0.0467),
+        ),
     )
 
-    val lastWeek = review.copy(weekStart = "2026-11-16", weekLabel = "Nov 16 – 22", previousWeek = "2026-11-09", nextWeek = "2026-11-23", isThisWeek = false)
+    val lastWeek = review.copy(
+        weekStart = "2026-11-16",
+        weekLabel = "Nov 16 – 22",
+        current = review.previous,
+        previous = ReviewMetrics(3u, 5u, 0u, 5 * HOUR_MS),
+        mostPostponed = listOf(
+            ReviewPostponed("t4", "Review the interview notes", false, 3u,
+                listOf(listOf("2026-11-16", "2026-11-18", "2026-11-19", "2026-11-24")), emptyList()),
+        ),
+        carriedOver = emptyList(),
+        overdue = emptyList(),
+        trackedMsPerDay = listOf(2 * HOUR_MS, HOUR_MS, 0L, 3 * HOUR_MS, 0L, 2 * HOUR_MS + 2_160_000, 0L),
+        shares = listOf(review.shares.first().copy(trackedMs = review.previous.questMs, fraction = 1.0)) +
+            review.shares.takeLast(2).map { it.copy(trackedMs = 0, fraction = 0.0) },
+    )
 
     val archivedQuest = ArchiveItem(TrashKind.QUEST, "q8", "Old blog", "Archived quest", "#d6b64a")
 

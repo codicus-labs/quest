@@ -116,14 +116,17 @@ private fun Marks(marks: List<RowMark>, colors: QuestColors, modifier: Modifier 
 
 /** The mini-player's timer and stop control. */
 @Composable
-fun StopPill(timer: String, title: String, onStop: () -> Unit, modifier: Modifier = Modifier) {
+fun StopPill(timer: String, title: String, onStop: () -> Unit, modifier: Modifier = Modifier, organizing: Boolean = false) {
+    val colors = QuestTheme.colors
+    val background = if (organizing) colors.barTrack else colors.accentFill
+    val foreground = if (organizing) colors.text else OnAccentFill
     val label = stringResource(R.string.timer_stop_label, timer)
     val shape = RoundedCornerShape(50)
     Row(
         modifier
             .minimumInteractiveComponentSize()
             .heightIn(min = 32.dp)
-            .background(QuestTheme.colors.accentFill, shape)
+            .background(background, shape)
             .clickable(onClick = onStop)
             .semantics(mergeDescendants = true) {
                 role = Role.Button
@@ -134,7 +137,7 @@ fun StopPill(timer: String, title: String, onStop: () -> Unit, modifier: Modifie
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(QuestIcons.Stop, contentDescription = null, tint = OnAccentFill, modifier = Modifier.size(14.dp))
-        Text(timer, style = QuestType.monoTime, color = OnAccentFill)
+        Icon(QuestIcons.Stop, contentDescription = null, tint = foreground, modifier = Modifier.size(14.dp))
+        Text(timer, style = QuestType.monoTime, color = foreground)
     }
 }

@@ -615,6 +615,10 @@ Trend- und Balkenanteile, a11y-Texte und Prüfungen kommen aus Rust.
   `delete_task` und `undo`. Danach den gleichen Offset erneut lesen. Unter 60 Sekunden
   Organizing werden in der Domain beim Timerwechsel oder Stop weich gelöscht; mobile
   Timer-Signaturen bleiben unverändert.
+- Android öffnet die neue Ansicht unter Tracked → Weekly review. Der `CoreHolder` liest
+  nur bei sichtbarer Review; die Aktionen lösen ein Neulesen desselben Wochenoffsets aus.
+  Plan und Deadline nutzen den Task-Kalender wieder, Delete die bestehende Undo-Snackbar.
+  Der Organizing-Stopp ist grau und delegiert auch kurze Einträge ohne eigenen Hinweis an die Domain.
 
 ## Phase 6 (Android): Widget, Hintergrund-Sync, Quick-Add, Shortcuts, Kachel
 

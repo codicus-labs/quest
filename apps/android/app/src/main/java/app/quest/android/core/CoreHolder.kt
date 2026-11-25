@@ -25,7 +25,7 @@ import uniffi.quest_mobile.Account
 import uniffi.quest_mobile.ChecklistProgress
 import uniffi.quest_mobile.ArchiveData
 import uniffi.quest_mobile.QuestsData
-import uniffi.quest_mobile.ReviewData
+import uniffi.quest_mobile.WeeklyReviewData
 import uniffi.quest_mobile.HomeData
 import uniffi.quest_mobile.HomeQuery
 import uniffi.quest_mobile.MobileException
@@ -57,7 +57,7 @@ sealed interface CoreState {
         /** The Quests tab; null while it is not shown. */
         val quests: QuestsData? = null,
         /** The review of the asked week; null while the review is not shown. */
-        val review: ReviewData? = null,
+        val review: WeeklyReviewData? = null,
         /** The archive; null while it is not shown. */
         val archive: ArchiveData? = null,
         /** The mini player above the tabs. */
@@ -84,9 +84,6 @@ sealed interface ListPage {
 
     data class Gone(override val kind: ListKind) : ListPage
 }
-
-/** The review's week: any ISO day in it, null for this week. */
-data class ReviewQuery(val week: String?)
 
 /** What the plan shows: the built [window] of days, QUEST WORK filtered by [questFilter]. */
 data class PlanPage(
@@ -175,7 +172,7 @@ class CoreHolder(
 
     @Volatile private var questsShown = false
 
-    @Volatile private var reviewQuery: ReviewQuery? = null
+    @Volatile private var reviewOffset: Int? = null
 
     @Volatile private var archiveShown = false
 
@@ -354,10 +351,10 @@ class CoreHolder(
         markStale()
     }
 
-    /** The review asks for [query] (null: not shown); [state] follows shortly. */
-    fun setReviewQuery(query: ReviewQuery?) {
-        if (query == reviewQuery) return
-        reviewQuery = query
+    /** The review asks for [offset] (null: not shown); [state] follows shortly. */
+    fun setReviewOffset(offset: Int?) {
+        if (offset == reviewOffset) return
+        reviewOffset = offset
         markStale()
     }
 
@@ -444,7 +441,7 @@ class CoreHolder(
                 workspaces = core.workspaces(now),
                 plan = plan,
                 quests = if (questsShown) core.quests(now) else null,
-                review = reviewQuery?.let { core.review(it.week, now) },
+                review = reviewOffset?.let { core.weeklyReview(it, now) },
                 archive = if (archiveShown) core.archive(now) else null,
                 player = core.player(now),
                 list = listShown?.let { kind ->

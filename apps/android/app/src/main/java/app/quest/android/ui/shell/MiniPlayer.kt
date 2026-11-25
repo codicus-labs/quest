@@ -77,7 +77,7 @@ fun MiniPlayer(card: PlayerCard, actions: PlayerActions, modifier: Modifier = Mo
                     )
                 }
             }
-            StopPill(card.timer, stringResource(R.string.organizing), actions.stop, Modifier.testTag("player-stop"))
+            StopPill(card.timer, stringResource(R.string.organizing), actions.stop, Modifier.testTag("player-stop"), organizing = true)
         }
         is PlayerCard.Resume -> Frame(actions.openFocus, modifier) {
             Texts(card.title, card.quest?.name, card.quest)

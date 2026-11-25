@@ -105,7 +105,7 @@ enum class Detail(@StringRes val title: Int) {
     Account(R.string.account),
     Settings(R.string.settings),
     Archive(R.string.archive),
-    Review(R.string.nav_review),
+    Review(R.string.review_title),
 }
 
 /** Where the Quests tab is: the quests, one quest's list, or the Logbook. */
@@ -561,7 +561,7 @@ private fun DetailPage(detail: Detail, viewModels: AppViewModels, snackbar: Snac
     when (detail) {
         Detail.Search -> SearchPage(viewModels, snackbar, navigation.timerStarted, navigation.search, navigation.captureShown)
         Detail.Archive -> scaffolded { ArchiveDetail(viewModels, snackbar, navigation.openQuest) }
-        Detail.Review -> scaffolded { ReviewDestination(viewModels) }
+        Detail.Review -> scaffolded { ReviewDestination(viewModels, snackbar) }
         Detail.Account -> scaffolded { AccountPage(viewModels.account, navigation) }
         Detail.Settings -> scaffolded {
             val vm = viewModels.settings

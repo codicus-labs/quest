@@ -122,6 +122,9 @@ val shellScenes = listOf(
             EntrySheetContent(EntrySheetState.PickingTask(TaskPickerState("", LogWorkSamples.choices)), EntryActions.None)
         }
     },
+    Scene("organizing-mini-player", SceneKind.Component) {
+        MiniPlayer(ListSamples.playerOrganizing, PlayerActions.None)
+    },
     Scene("mini-player", SceneKind.Component) {
         MiniPlayer(ListSamples.playerRunning, PlayerActions.None)
         MiniPlayer(ListSamples.playerOrganizing, PlayerActions.None)

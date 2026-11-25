@@ -14,7 +14,9 @@ import uniffi.quest_mobile.SyncOutcome
 import uniffi.quest_mobile.UrlPolicy
 import uniffi.quest_mobile.QuestHue
 import uniffi.quest_mobile.QuestsData
-import uniffi.quest_mobile.ReviewData
+import uniffi.quest_mobile.DateTarget
+import uniffi.quest_mobile.QuickFields
+import uniffi.quest_mobile.WeeklyReviewData
 import uniffi.quest_mobile.SearchMode
 import uniffi.quest_mobile.SearchOutcome
 import uniffi.quest_mobile.SearchResult
@@ -208,7 +210,10 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
     override fun addQuestTask(questId: String, title: String, backlog: Boolean, position: AddPosition, now: Moment): String =
         core.addQuestTask(questId, title, backlog, position, now)
 
-    override fun review(week: String?, now: Moment): ReviewData = core.review(week, now)
+    override fun weeklyReview(offset: Int, now: Moment): WeeklyReviewData = core.weeklyReview(offset, now)
+
+    override fun taskCalendar(cursor: String?, fields: QuickFields, target: DateTarget, now: Moment) =
+        uniffi.quest_mobile.taskCalendar(cursor, fields, target, now)
 
     override fun archive(now: Moment): ArchiveData = core.archive(now)
 

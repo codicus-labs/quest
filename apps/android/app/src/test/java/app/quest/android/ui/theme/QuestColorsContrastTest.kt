@@ -44,6 +44,7 @@ class QuestColorsContrastTest {
             put("inline code on $name", contrast(c.text, c.textMuted.copy(alpha = 0.12f).compositeOver(background)))
         }
         put("Focus Done", contrast(OnAccentFill, c.accentFill))
+        put("Organizing Stop", contrast(c.text, c.barTrack))
         val darkestTimeline = Color.Black.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
         val lightestTimeline = Color.White.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
         put("timeline text", contrast(c.text, if (dark) lightestTimeline else darkestTimeline))
@@ -68,6 +69,7 @@ class QuestColorsContrastTest {
         val darkestTimeline = Color.Black.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
         val lightestTimeline = Color.White.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
         put("outside-focus hatch", minOf(contrast(c.textMuted, darkestTimeline), contrast(c.textMuted, lightestTimeline)))
+        put("review day bars on track", contrast(c.accent, c.barTrack))
         put("checklist drop outline", contrast(c.borderStrong, c.textMuted.copy(alpha = 0.08f).compositeOver(c.card)))
     }
 

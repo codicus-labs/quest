@@ -12,7 +12,10 @@ import uniffi.quest_mobile.QuickAddForm
 import uniffi.quest_mobile.SyncOutcome
 import uniffi.quest_mobile.QuestHue
 import uniffi.quest_mobile.QuestsData
-import uniffi.quest_mobile.ReviewData
+import uniffi.quest_mobile.CalendarMonth
+import uniffi.quest_mobile.DateTarget
+import uniffi.quest_mobile.QuickFields
+import uniffi.quest_mobile.WeeklyReviewData
 import uniffi.quest_mobile.SearchMode
 import uniffi.quest_mobile.SearchOutcome
 import uniffi.quest_mobile.SearchResult
@@ -149,6 +152,7 @@ interface QuestCoreApi : WorkspacesApi {
 
     /** Adds a task with the list's defaults (Today: planned today; a quest's list: its quest). Returns its id. */
     fun addToList(kind: ListKind, title: String, now: Moment): String
+    fun taskCalendar(cursor: String?, fields: QuickFields, target: DateTarget, now: Moment): CalendarMonth?
     fun quickDayLabel(iso: String): String
     fun listQuickDefaults(kind: ListKind, now: Moment): uniffi.quest_mobile.QuickFields
     fun toggleListTask(id: String, now: Moment)
@@ -211,8 +215,8 @@ interface QuestCoreApi : WorkspacesApi {
     /** The quest page's add field: today or the backlog, at [position]. Returns the new id. */
     fun addQuestTask(questId: String, title: String, backlog: Boolean, position: AddPosition, now: Moment): String
 
-    /** The week with [week] in it (any ISO day; null: this week). */
-    fun review(week: String?, now: Moment): ReviewData
+    /** [offset] is relative to the current local week; 0 is this week. */
+    fun weeklyReview(offset: Int, now: Moment): WeeklyReviewData
 
     /** Deleted quests, tasks, checklist items and sessions, newest first. */
     fun archive(now: Moment): ArchiveData

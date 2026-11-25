@@ -41,10 +41,11 @@ val questScenes = listOf(
         val completed = QuestSamples.toggled(QuestSamples.detail)
         SheetFrame { QuestSheetContent("Edit quest") { QuestEditorFields(QuestEditorState.Editing(completed, completed.title), QuestEditorActions.None, autoFocus = false) } }
     },
-    Scene("review", SceneKind.Screen) { DetailScaffold("Review", onBack = {}) { ReviewScreen(ReviewUiState.Ready(QuestSamples.review), ReviewActions.None) } },
-    Scene("review-other-week", SceneKind.Screen) {
-        val empty = QuestSamples.lastWeek.copy(byQuest = emptyList(), questHours = "0h", dailyAverage = "0h", questShare = "0%", targetProgress = 0f, questFraction = 0f)
-        DetailScaffold("Review", onBack = {}) { ReviewScreen(ReviewUiState.Ready(empty), ReviewActions.None) }
+    Scene("review", SceneKind.Screen) {
+        DetailScaffold("Weekly review", onBack = {}) { ReviewScreen(ReviewUiState.Ready(QuestSamples.review), ReviewActions.None) }
+    },
+    Scene("review-previous", SceneKind.Screen) {
+        DetailScaffold("Weekly review", onBack = {}) { ReviewScreen(ReviewUiState.Ready(QuestSamples.lastWeek), ReviewActions.None) }
     },
     Scene("archive", SceneKind.Screen) { DetailScaffold("Archive", onBack = {}) { ArchiveScreen(ArchiveUiState.Ready(QuestSamples.archive), ArchiveActions.None) } },
     Scene("archive-empty", SceneKind.Screen) { DetailScaffold("Archive", onBack = {}) { ArchiveScreen(ArchiveUiState.Ready(QuestSamples.emptyArchive), ArchiveActions.None) } },

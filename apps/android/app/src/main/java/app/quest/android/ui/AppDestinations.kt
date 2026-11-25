@@ -26,6 +26,7 @@ import app.quest.android.settings.Appearance
 import app.quest.android.ui.archive.ArchiveActions
 import app.quest.android.ui.archive.ArchiveScreen
 import app.quest.android.ui.components.QuestSnackbarHost
+import app.quest.android.ui.components.UndoSnackbar
 import app.quest.android.ui.lists.ListActions
 import app.quest.android.ui.lists.QuickAddActions
 import app.quest.android.ui.lists.ListScreen
@@ -36,7 +37,6 @@ import app.quest.android.ui.quests.QuestEditorSheet
 import app.quest.android.ui.quests.QuestEditorViewModel
 import app.quest.android.ui.quests.QuestNavActions
 import app.quest.android.ui.quests.QuestNavScreen
-import app.quest.android.ui.review.ReviewActions
 import app.quest.android.ui.review.ReviewScreen
 import app.quest.android.ui.search.SearchActions
 import app.quest.android.ui.search.SearchScreen
@@ -147,14 +147,19 @@ internal fun TrackedDestination(viewModels: AppViewModels, openReview: () -> Uni
 
 /** The weekly review (from Tracked or Search); the core builds it only while it is composed. */
 @Composable
-internal fun ReviewDestination(viewModels: AppViewModels) {
+internal fun ReviewDestination(viewModels: AppViewModels, snackbar: SnackbarHostState) {
     val vm = viewModels.review
     DisposableEffect(vm) {
         vm.setShown(true)
         onDispose { vm.setShown(false) }
     }
     val state by vm.state.collectAsStateWithLifecycle()
-    ReviewScreen(state, ReviewActions(previous = { vm.previous() }, next = { vm.next() }, thisWeek = vm::thisWeek, selectWeek = vm::selectWeek))
+    val player = viewModels.player
+    val toast by player.toast.collectAsStateWithLifecycle()
+    ShowMessages(vm.message, vm::dismissMessage, snackbar)
+    ReviewScreen(state, vm.actions(viewModels.taskSheet::open), footer = {
+        toast?.let { UndoSnackbar(it.text, player::undo, actionLabel = it.actionLabel, onDismiss = player::dismissToast) }
+    })
 }
 
 /** The archive (from the drawer or Search); read only while composed. */

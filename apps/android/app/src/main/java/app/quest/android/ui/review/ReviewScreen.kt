@@ -1,31 +1,29 @@
 package app.quest.android.ui.review
 
 import androidx.compose.animation.core.animate
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,91 +35,122 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.quest.android.R
 import app.quest.android.ui.components.PeriodLabel
+import app.quest.android.ui.components.QuestBottomSheet
+import app.quest.android.ui.components.QuestIcons
 import app.quest.android.ui.components.WIDEST_WEEK
-import app.quest.android.ui.task.Caps
+import app.quest.android.ui.task.TaskCalendarChoices
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import uniffi.quest_mobile.ReviewData
+import uniffi.quest_mobile.CalendarMonth
+import uniffi.quest_mobile.DateTarget
+import uniffi.quest_mobile.QuickFields
+import uniffi.quest_mobile.ReviewPostponed
+import uniffi.quest_mobile.ReviewSince
+import uniffi.quest_mobile.WeeklyReviewData
 
 class ReviewActions(
     val previous: () -> Unit,
     val next: () -> Unit,
-    val thisWeek: () -> Unit,
-    val selectWeek: (weekStart: String) -> Unit,
+    val openTask: (String) -> Unit = {},
+    val fields: (String) -> QuickFields? = { null },
+    val calendar: (String?, QuickFields, DateTarget) -> CalendarMonth? = { _, _, _ -> null },
+    val shiftMonth: (String, Boolean) -> String? = { _, _ -> null },
+    val setDate: (String, DateTarget, String?) -> Unit = { _, _, _ -> },
+    val moveToInbox: (String) -> Unit = {},
+    val delete: (String) -> Unit = {},
 ) {
     companion object {
-        /** Does nothing; for screenshots. */
-        val None = ReviewActions({}, {}, {}, {})
+        val None = ReviewActions({}, {})
     }
 }
 
-/** Where a swipe turns the week: a quarter of the width. */
 private const val SWIPE_THRESHOLD = 0.25f
 
-/**
- * The weekly review: the week by arrows or a swipe, its figures
- * and four charts. One column on phones, two from 840 dp.
- */
+private data class DatePicker(val taskId: String, val target: DateTarget, val fields: QuickFields)
+
 @Composable
-fun ReviewScreen(state: ReviewUiState, actions: ReviewActions) {
-    when (state) {
-        ReviewUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        is ReviewUiState.Failed -> Box(Modifier.fillMaxSize().padding(QuestSpacing.screen), contentAlignment = Alignment.Center) {
-            Text(state.message, style = QuestType.body, color = QuestTheme.colors.textMuted)
+fun ReviewScreen(state: ReviewUiState, actions: ReviewActions, footer: @Composable () -> Unit = {}) {
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            when (state) {
+                ReviewUiState.Loading -> CircularProgressIndicator()
+                is ReviewUiState.Failed -> Text(state.message, style = QuestType.body, color = QuestTheme.colors.text)
+                is ReviewUiState.Ready -> ReviewPage(state.review, actions)
+            }
         }
-        is ReviewUiState.Ready -> ReviewPage(state.review, actions)
+        footer()
     }
 }
 
 @Composable
-private fun ReviewPage(review: ReviewData, actions: ReviewActions) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val wide = maxWidth >= 840.dp
-        SwipeWeeks(actions) {
+private fun ReviewPage(review: WeeklyReviewData, actions: ReviewActions) {
+    var picker by remember { mutableStateOf<DatePicker?>(null) }
+    SwipeWeeks(actions) {
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            val wide = maxWidth >= 840.dp && LocalDensity.current.fontScale <= 1.3f
+            val stackedMetrics = maxWidth < 380.dp || LocalDensity.current.fontScale > 1.3f
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = QuestSpacing.screen).padding(bottom = QuestSpacing.section),
+                Modifier.widthIn(max = 1040.dp).fillMaxSize().verticalScroll(rememberScrollState())
+                    .testTag("review-scroll").padding(horizontal = QuestSpacing.screen).padding(bottom = QuestSpacing.section),
                 verticalArrangement = Arrangement.spacedBy(QuestSpacing.large),
             ) {
-                Header(review, actions)
-                Figures(review, wide)
+                WeekHeader(review.weekLabel, actions)
+                ReviewMetrics(review, stackedMetrics)
+                val ranked = @Composable {
+                    ReviewSection(stringResource(R.string.review_most_postponed), empty = review.mostPostponed.isEmpty()) {
+                        review.mostPostponed.forEach { task ->
+                            PostponedRow(task, actions) { target ->
+                                actions.fields(task.taskId)?.let { picker = DatePicker(task.taskId, target, it) }
+                            }
+                        }
+                    }
+                }
                 if (wide) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(QuestSpacing.large)) {
-                        ChartCard(stringResource(R.string.review_per_day), Modifier.weight(1.4f)) { DayBars(review.days) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(QuestSpacing.section)) {
+                        Column(Modifier.weight(1f)) { ranked() }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(QuestSpacing.large)) {
-                            ChartCard(stringResource(R.string.review_by_quest)) { QuestBars(review) }
-                            ChartCard(stringResource(R.string.review_quest_vs_other)) { SplitBar(review) }
+                            ReviewRemainder(review, actions)
                         }
                     }
                 } else {
-                    ChartCard(stringResource(R.string.review_per_day)) { DayBars(review.days) }
-                    ChartCard(stringResource(R.string.review_by_quest)) { QuestBars(review) }
-                    ChartCard(stringResource(R.string.review_quest_vs_other)) { SplitBar(review) }
+                    ranked()
+                    ReviewRemainder(review, actions)
                 }
-                ChartCard(stringResource(R.string.review_recent_weeks)) { WeekBars(review, actions.selectWeek) }
+            }
+        }
+    }
+    picker?.let { active ->
+        val title = if (active.target == DateTarget.PLAN) R.string.review_schedule else R.string.review_set_deadline
+        QuestBottomSheet(stringResource(title), onDismiss = { picker = null }) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                TaskCalendarChoices(active.target, { actions.calendar(it, active.fields, active.target) }, actions.shiftMonth) {
+                    actions.setDate(active.taskId, active.target, it)
+                    picker = null
+                }
             }
         }
     }
 }
 
-/** The page follows the finger sideways; past [SWIPE_THRESHOLD] it turns to the week before or after. */
 @Composable
 private fun SwipeWeeks(actions: ReviewActions, content: @Composable () -> Unit) {
-    // Follows the finger synchronously; only settling back animates.
     var offset by remember { mutableFloatStateOf(0f) }
     var settling by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -134,7 +163,7 @@ private fun SwipeWeeks(actions: ReviewActions, content: @Composable () -> Unit) 
             .fillMaxSize()
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
-                    onDragStart = { settling?.cancel() },
+                    onDragStart = { settling?.cancel(); offset = 0f },
                     onDragEnd = {
                         val moved = offset
                         val turned = abs(moved) > size.width * SWIPE_THRESHOLD
@@ -154,101 +183,107 @@ private fun SwipeWeeks(actions: ReviewActions, content: @Composable () -> Unit) 
     ) { content() }
 }
 
-/** Title and subtitle; the week with arrows, and "This week" when another one shows. */
 @Composable
-private fun Header(review: ReviewData, actions: ReviewActions) {
+private fun WeekHeader(label: String, actions: ReviewActions) {
     val colors = QuestTheme.colors
-    Column {
-        Text(stringResource(R.string.review_title), style = QuestType.stat, color = colors.text, modifier = Modifier.semantics { heading() })
-        Text(stringResource(R.string.review_subtitle), style = QuestType.body, color = colors.textMuted)
-        FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = actions.previous, modifier = Modifier.testTag("review-previous")) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = stringResource(R.string.review_previous_week), tint = colors.textMuted)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = actions.previous, modifier = Modifier.testTag("review-previous")) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.review_previous_week), tint = colors.text)
+        }
+        PeriodLabel(label, WIDEST_WEEK, QuestType.bodyMedium, colors.text, Modifier.weight(1f, fill = false))
+        IconButton(onClick = actions.next, modifier = Modifier.testTag("review-next")) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, stringResource(R.string.review_next_week), tint = colors.text)
+        }
+    }
+}
+
+@Composable
+private fun ReviewRemainder(review: WeeklyReviewData, actions: ReviewActions) {
+    StatusSection(R.string.review_carried_over, review.carriedOver, actions.openTask)
+    StatusSection(R.string.review_overdue, review.overdue, actions.openTask, overdue = true)
+    ReviewSection(stringResource(R.string.review_where_time)) {
+        ReviewTime(review)
+    }
+}
+
+@Composable
+private fun ReviewSection(title: String, empty: Boolean = false, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(QuestSpacing.small)) {
+        Text(title, style = QuestType.nav, color = QuestTheme.colors.text, modifier = Modifier.semantics { heading() })
+        if (empty) {
+            Text(stringResource(R.string.review_empty), style = QuestType.small, color = QuestTheme.colors.textMuted)
+        } else {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun StatusSection(title: Int, tasks: List<ReviewSince>, open: (String) -> Unit, overdue: Boolean = false) {
+    ReviewSection(stringResource(title), empty = tasks.isEmpty()) {
+        tasks.forEach { task ->
+            Column {
+                TaskTitle(task.title, { open(task.taskId) })
+                Text(
+                    stringResource(R.string.review_since, reviewDate(task.since)),
+                    style = QuestType.small,
+                    color = if (overdue) QuestTheme.colors.error else QuestTheme.colors.textMuted,
+                )
+            }
+            HorizontalDivider(color = QuestTheme.colors.border)
+        }
+    }
+}
+
+@Composable
+private fun PostponedRow(task: ReviewPostponed, actions: ReviewActions, pickDate: (DateTarget) -> Unit) {
+    val colors = QuestTheme.colors
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(QuestSpacing.small)) {
+            Box(Modifier.weight(1f)) { TaskTitle(task.title, { actions.openTask(task.taskId) }) }
+            Text("↷ ${task.count}", style = QuestType.smallMedium, color = colors.accent, modifier = Modifier.testTag("review-count:${task.taskId}"))
+        }
+        History(R.string.review_plan, task.plan)
+        History(R.string.task_deadline, task.deadline)
+        if (!task.isDone) {
+            Row {
+                IconButton(onClick = { pickDate(DateTarget.PLAN) }, modifier = Modifier.testTag("review-plan:${task.taskId}")) {
+                    Icon(Icons.Filled.DateRange, stringResource(R.string.review_schedule), Modifier.size(20.dp), tint = colors.textMuted)
                 }
-                PeriodLabel(review.weekLabel, WIDEST_WEEK, QuestType.bodyMedium, colors.text, textModifier = Modifier.testTag("review-week-label"))
-                IconButton(onClick = actions.next, modifier = Modifier.testTag("review-next")) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = stringResource(R.string.review_next_week), tint = colors.textMuted)
+                IconButton(onClick = { pickDate(DateTarget.DEADLINE) }) {
+                    Icon(QuestIcons.Flag, stringResource(R.string.review_set_deadline), Modifier.size(20.dp), tint = colors.textMuted)
+                }
+                IconButton(onClick = { actions.moveToInbox(task.taskId) }) {
+                    Icon(QuestIcons.Inbox, stringResource(R.string.review_move_to_inbox), Modifier.size(20.dp), tint = colors.textMuted)
+                }
+                IconButton(onClick = { actions.delete(task.taskId) }, modifier = Modifier.testTag("review-delete:${task.taskId}")) {
+                    Icon(QuestIcons.Trash, stringResource(R.string.delete), Modifier.size(20.dp), tint = colors.textMuted)
                 }
             }
-            if (!review.isThisWeek) {
-                OutlinedButton(onClick = actions.thisWeek, contentPadding = PaddingValues(horizontal = QuestSpacing.medium), modifier = Modifier.testTag("review-this-week")) {
-                    Text(stringResource(R.string.review_this_week), style = QuestType.bodyMedium)
-                }
-            }
         }
-    }
-}
-
-/** Quest hours against the target (with progress), daily average, quest work's share. */
-@Composable
-private fun Figures(review: ReviewData, wide: Boolean) {
-    val colors = QuestTheme.colors
-    val questHours = @Composable { modifier: Modifier ->
-        FigureCard(stringResource(R.string.review_quest_hours), modifier) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(review.questHours, style = QuestType.bigStat, color = colors.accent, modifier = Modifier.testTag("review-quest-hours"))
-                Text(review.target, style = QuestType.body, color = colors.textMuted, modifier = Modifier.padding(start = QuestSpacing.tight, bottom = 4.dp))
-            }
-            LinearProgressIndicator(
-                progress = { review.targetProgress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)),
-                color = colors.accent,
-                trackColor = colors.barTrack,
-                strokeCap = StrokeCap.Round,
-                gapSize = 0.dp,
-                drawStopIndicator = {},
-            )
-            Text(review.targetNote, style = QuestType.small, color = colors.textFaint)
-        }
-    }
-    val average = @Composable { modifier: Modifier ->
-        FigureCard(stringResource(R.string.review_daily_average), modifier) {
-            Text(review.dailyAverage, style = QuestType.bigStat, color = colors.text, modifier = Modifier.testTag("review-daily-average"))
-        }
-    }
-    val share = @Composable { modifier: Modifier ->
-        FigureCard(stringResource(R.string.review_quest_vs_other), modifier) {
-            Text(review.questShare, style = QuestType.bigStat, color = colors.text, modifier = Modifier.testTag("review-quest-share"))
-        }
-    }
-    if (wide) {
-        Row(horizontalArrangement = Arrangement.spacedBy(QuestSpacing.large)) {
-            questHours(Modifier.weight(1f))
-            average(Modifier.weight(1f))
-            share(Modifier.weight(1f))
-        }
-    } else {
-        questHours(Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(QuestSpacing.large)) {
-            average(Modifier.weight(1f))
-            share(Modifier.weight(1f))
-        }
+        HorizontalDivider(color = colors.border, modifier = Modifier.padding(top = QuestSpacing.tight))
     }
 }
 
 @Composable
-private fun FigureCard(title: String, modifier: Modifier, content: @Composable () -> Unit) {
-    Card(modifier.semantics(mergeDescendants = true) {}) {
-        Caps(title)
-        content()
+private fun TaskTitle(title: String, open: () -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().heightIn(min = QuestSpacing.touchTarget).clickable(role = Role.Button, onClick = open),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(title, style = QuestType.bodyMedium, color = QuestTheme.colors.text)
     }
 }
 
 @Composable
-private fun ChartCard(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Card(modifier.fillMaxWidth()) {
-        Caps(title)
-        content()
+private fun History(label: Int, chains: List<List<String>>) {
+    chains.forEach { chain ->
+        Text(
+            stringResource(R.string.review_history, stringResource(label), chain.joinToString(" → ") { reviewDate(it) }),
+            style = QuestType.small,
+            color = QuestTheme.colors.textMuted,
+        )
     }
 }
 
-@Composable
-private fun Card(modifier: Modifier, content: @Composable () -> Unit) {
-    val colors = QuestTheme.colors
-    val shape = RoundedCornerShape(QuestSpacing.cardRadius)
-    Column(
-        modifier.background(colors.card, shape).border(QuestSpacing.hairline, colors.border, shape).padding(QuestSpacing.large),
-        verticalArrangement = Arrangement.spacedBy(QuestSpacing.medium),
-    ) { content() }
-}
+private fun reviewDate(iso: String) = LocalDate.parse(iso).format(DateTimeFormatter.ofPattern("MMM d"))
