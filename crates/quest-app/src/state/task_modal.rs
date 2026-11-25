@@ -9,7 +9,7 @@ pub struct TaskModal {
     pub task: EntityId,
     pub tray_alias: bool,
     pub title: TextEdit,
-    pub description: TextEdit,
+    pub checklist: super::checklist::ChecklistEdits,
 }
 
 impl TaskModal {
@@ -18,7 +18,7 @@ impl TaskModal {
             task: EntityId::new(),
             tray_alias: false,
             title: TextEdit::default(),
-            description: TextEdit::default(),
+            checklist: Default::default(),
         }
     }
 }
@@ -26,12 +26,15 @@ impl TaskModal {
 impl State {
     /// Opens the dialog on `task`. Focus then shows it while nothing runs, as a picked card did.
     pub fn open_task_modal(&mut self, task: EntityId) {
+        if self.task_modal.as_ref().is_some_and(|form| form.task != task) {
+            self.close_task_modal();
+        }
         let Some(t) = self.plan_task(task) else { return };
         self.task_modal = Some(TaskModal {
             task,
             tray_alias: false,
             title: TextEdit::new(t.title.clone()),
-            description: TextEdit::new(t.description.clone()),
+            checklist: Default::default(),
         });
         self.show_task_time = false;
         self.menu = None;
@@ -48,7 +51,9 @@ impl State {
         self.task_calendar = None;
         self.quest_picker = None;
         self.save_task_title();
-        self.save_task_description();
+        if self.note.as_ref().is_some_and(|note| note.host == super::notes::NoteHost::Detail) {
+            self.finish_note();
+        }
         self.task_modal = None;
     }
 
@@ -65,15 +70,6 @@ impl State {
         let Some(form) = &self.task_modal else { return };
         let Some(command) = self.plan_task(form.task).and_then(|t| rename(&t, &form.title.text)) else { return };
         self.dispatch(command);
-    }
-
-    pub fn save_task_description(&mut self) {
-        let Some(form) = &self.task_modal else { return };
-        let (id, description) = (form.task, form.description.text.clone());
-        if self.plan_task(id).is_none_or(|t| t.description == description) {
-            return;
-        }
-        self.dispatch(Command::SetTaskDescription { id, description });
     }
 
     pub fn toggle_task_detail(&mut self, id: EntityId) {

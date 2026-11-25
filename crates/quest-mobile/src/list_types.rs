@@ -39,6 +39,8 @@ pub struct ListRow {
     pub quest: Option<QuestChip>,
     /// Date marks in reading order; empty for done tasks.
     pub marks: Vec<RowMark>,
+    /// Absent when the task has no checklist items.
+    pub checklist_progress: Option<crate::ChecklistProgress>,
     /// This task's timer runs: Stop with `timer` instead of Play.
     pub timer_running: bool,
     /// The running time ("36:13"), counting live; None while not running.

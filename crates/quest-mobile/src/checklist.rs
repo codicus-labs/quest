@@ -8,6 +8,10 @@ use crate::error::MobileError;
 use crate::ids::parse_id;
 use crate::task_types::{ChecklistPosition, ChecklistRow};
 
+pub(crate) fn progress(snapshot: &Snapshot, task: EntityId) -> Option<crate::ChecklistProgress> {
+    quest_view::checklist::progress(snapshot, task).map(|p| crate::ChecklistProgress { done: p.done, total: p.total })
+}
+
 pub(crate) fn rows(snapshot: &Snapshot, task: EntityId) -> Vec<ChecklistRow> {
     snapshot
         .checklist_of(task)

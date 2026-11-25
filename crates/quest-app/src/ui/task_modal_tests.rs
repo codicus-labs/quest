@@ -65,12 +65,14 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
 
     edit_at_end(&mut rt, |s| &mut s.task_modal_fields().title);
     type_text(&mut rt, " v2");
-    edit_at_end(&mut rt, |s| &mut s.task_modal_fields().description);
+    click(&mut rt, "task-modal-description");
     type_text(&mut rt, " Notes.");
     let renamed = format!("{title} v2");
     assert_eq!(rt.state.snap.task(id).unwrap().title, renamed, "the title saves as it changes");
     assert!(rt.find(&title_key).is_none(), "the expanded row has only one title");
 
+    press(&mut rt, Key::Escape, Mods::default());
+    assert_eq!(modal_task(&rt), Some(id), "Esc in notes leaves the detail open");
     if close_with_esc {
         press(&mut rt, Key::Escape, Mods::default());
     } else {
@@ -89,7 +91,7 @@ fn edits_in_the_dialog(view: char, prefix: &str, title: &str, close_with_esc: bo
     click_card(&mut rt, prefix, id);
     assert_eq!(modal_task(&rt), Some(id));
     assert_eq!(text_of(&rt, "task-modal-title"), Some(renamed));
-    assert_eq!(rt.state.task_modal.as_ref().unwrap().description.text, saved.description);
+    assert_eq!(rt.state.snap.task(id).unwrap().description, saved.description);
     assert!(rt.find("task-modal-description").is_some());
 }
 
@@ -231,7 +233,7 @@ fn date_quest_and_delete_act_on_the_task() {
 }
 
 #[test]
-fn notes_show_and_save_plain_text() {
+fn notes_render_markdown_after_blur() {
     let (mut rt, _dir) = app('2');
     let id = task(&rt, OPEN).id;
     rt.update(move |s, _| s.open_task_modal(id));
@@ -239,8 +241,10 @@ fn notes_show_and_save_plain_text() {
     click(&mut rt, "task-modal-description");
     press(&mut rt, Key::Command('a'), Mods { cmd: true, ..Mods::default() });
     type_text(&mut rt, "# A large heading");
-    assert_eq!(text_of(&rt, "task-modal-description").as_deref(), Some("# A large heading"));
+    assert_eq!(text_of(&rt, "task-modal-description-source").as_deref(), Some("# A large heading"));
     click(&mut rt, "task-modal-title");
-    assert_eq!(text_of(&rt, "task-modal-description").as_deref(), Some("# A large heading"));
+    settle(&mut rt);
+    assert!(rt.find("task-modal-description-source").is_none());
+    assert_eq!(text_of(&rt, "note-block-0").as_deref(), Some("A large heading"));
     assert_eq!(rt.state.snap.task(id).unwrap().description, "# A large heading");
 }

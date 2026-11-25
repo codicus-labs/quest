@@ -178,6 +178,15 @@ fn marks(s: &State, task: &Task, shows: Shows, p: &Pal) -> El {
         };
         marks = marks.child(text(mark.text).font(ty::META).color(color).single_line());
     }
+    if let Some(progress) = quest_view::checklist::progress(&s.snap, task.id) {
+        marks = marks.child(
+            text(progress.to_string())
+                .key(format!("row-checklist-{}", task.id))
+                .font(ty::META)
+                .color(p.faint)
+                .single_line(),
+        );
+    }
     if let Some(quest) = parts::quest_of(s, task).filter(|_| shows.quest) {
         marks =
             marks.child(

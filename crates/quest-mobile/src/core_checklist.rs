@@ -23,6 +23,26 @@ impl QuestCore {
         })
     }
 
+    pub fn checklist_progress(&self, task_id: String) -> Result<Option<crate::ChecklistProgress>, MobileError> {
+        guard(|| {
+            let task = self.task(&task_id)?;
+            Ok(checklist::progress(&self.store().snapshot(), task.id))
+        })
+    }
+
+    /// Inserts a blank item after an existing checklist item. Returns the new id.
+    pub fn insert_checklist_item_after(&self, item_id: String) -> Result<String, MobileError> {
+        guard(|| {
+            let item = self.checklist_item(&item_id)?;
+            let snapshot = self.store().snapshot();
+            let position = quest_view::checklist::after(&snapshot, item.id)
+                .ok_or(MobileError::UnknownChecklistItem { id: item_id })?;
+            let id = EntityId::new();
+            self.dispatch(Command::AddChecklistItem { id, task_id: item.task_id, text: String::new(), position })?;
+            Ok(id.to_string())
+        })
+    }
+
     /// Adds an open item at `position`; a blank text is `EmptyTitle`. Returns its id.
     pub fn add_checklist_item(
         &self,
@@ -46,6 +66,24 @@ impl QuestCore {
     /// Ticks the item off (`done`) or opens it again.
     pub fn set_checklist_item_done(&self, item_id: String, done: bool) -> Result<(), MobileError> {
         guard(|| self.dispatch_some(checklist::set_done(&self.checklist_item(&item_id)?, done)))
+    }
+
+    /// Ticks or reopens an item and puts the change in the Undo slot.
+    pub fn set_checklist_item_done_with_undo(
+        &self,
+        item_id: String,
+        done: bool,
+        now: Moment,
+    ) -> Result<(), MobileError> {
+        guard(|| {
+            let now = Now::parse(&now)?;
+            let item = self.checklist_item(&item_id)?;
+            if let Some(command) = checklist::set_done(&item, done) {
+                self.dispatch(command)?;
+                self.undo_state().checklist_done(item.id, item.done, now.at);
+            }
+            Ok(())
+        })
     }
 
     /// Moves the item within its checklist.

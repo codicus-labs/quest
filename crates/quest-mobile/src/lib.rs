@@ -12,6 +12,11 @@ mod archive;
 mod capture;
 mod capture_types;
 mod checklist;
+mod markdown;
+pub use markdown::{
+    MarkdownBlock, MarkdownInline, MarkdownInlineKind, MarkdownListItem, MarkdownTaskMarker, parse_markdown,
+    toggle_task_marker,
+};
 mod commands;
 mod connections;
 mod core;
@@ -92,8 +97,8 @@ pub use crate::task_fields::{
     completion_linger_ms, quick_add_defaults, shift_calendar_date, task_calendar, update_quick_date,
 };
 pub use crate::task_types::{
-    ChecklistPosition, ChecklistRow, DayValue, LoggedEntry, PostponedCount, QuickAddForm, RepeatCheck, RepeatDraft,
-    RepeatFrequency, RepeatPinChoice, RepeatWeekday, TaskDetail,
+    ChecklistPosition, ChecklistProgress, ChecklistRow, DayValue, LoggedEntry, PostponedCount, QuickAddForm,
+    RepeatCheck, RepeatDraft, RepeatFrequency, RepeatPinChoice, RepeatWeekday, TaskDetail,
 };
 pub use crate::types::{
     Account, AddPosition, FocusPickTask, FocusSession, FocusView, HomeData, HomeQuery, HomeTask, Moment, QuestChip,

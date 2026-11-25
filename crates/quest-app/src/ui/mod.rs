@@ -6,6 +6,9 @@ mod account;
 mod archive;
 mod auth_dialogs;
 mod capture;
+mod checklist;
+#[cfg(test)]
+mod checklist_tests;
 pub mod chrome;
 pub(crate) mod date_picker;
 pub mod drag;

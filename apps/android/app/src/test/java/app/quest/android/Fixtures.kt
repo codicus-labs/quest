@@ -370,6 +370,28 @@ class FakeCore(
 
     override fun setTaskDescription(taskId: String, description: String) = record("describe $taskId $description")
 
+    override fun parseNote(source: String) = listOf(uniffi.quest_mobile.MarkdownBlock.Paragraph(
+        listOf(uniffi.quest_mobile.MarkdownInline(source, false, false, uniffi.quest_mobile.MarkdownInlineKind.Text)),
+    ))
+    override fun toggleTaskMarker(source: String, offset: ULong): String {
+        record("toggle marker $offset")
+        return source
+    }
+    override fun checklist(taskId: String) = emptyList<uniffi.quest_mobile.ChecklistRow>()
+    override fun checklistProgress(taskId: String): uniffi.quest_mobile.ChecklistProgress? = null
+    override fun addChecklistItem(taskId: String, text: String): String {
+        record("add checklist $taskId $text")
+        return "new-item"
+    }
+    override fun insertChecklistItemAfter(itemId: String): String {
+        record("insert checklist after $itemId")
+        return "new-item"
+    }
+    override fun renameChecklistItem(itemId: String, text: String) = record("rename checklist $itemId $text")
+    override fun setChecklistItemDoneWithUndo(itemId: String, done: Boolean, now: Moment) = record("check $itemId $done")
+    override fun deleteChecklistItem(itemId: String, now: Moment) = record("delete checklist $itemId")
+    override fun moveChecklistItem(itemId: String, before: String?) = record("move checklist $itemId before $before")
+
     override fun setTaskQuest(taskId: String, questId: String?) = record("quest $taskId $questId")
 
     override fun setTaskPlanned(taskId: String, plannedOn: String?, now: Moment) = record("day $taskId $plannedOn")

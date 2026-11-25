@@ -119,6 +119,21 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
 
     override fun setTaskDescription(taskId: String, description: String) = core.setTaskDescription(taskId, description)
 
+    override fun parseNote(source: String) = uniffi.quest_mobile.parseMarkdown(source)
+    override fun toggleTaskMarker(source: String, offset: ULong) = uniffi.quest_mobile.toggleTaskMarker(source, offset)
+    override fun checklist(taskId: String) = core.checklist(taskId)
+    override fun checklistProgress(taskId: String) = core.checklistProgress(taskId)
+    override fun addChecklistItem(taskId: String, text: String) =
+        core.addChecklistItem(taskId, text, uniffi.quest_mobile.ChecklistPosition.Bottom)
+    override fun insertChecklistItemAfter(itemId: String) = core.insertChecklistItemAfter(itemId)
+    override fun renameChecklistItem(itemId: String, text: String) = core.renameChecklistItem(itemId, text)
+    override fun setChecklistItemDoneWithUndo(itemId: String, done: Boolean, now: Moment) =
+        core.setChecklistItemDoneWithUndo(itemId, done, now)
+    override fun deleteChecklistItem(itemId: String, now: Moment) = core.deleteChecklistItem(itemId, now)
+    override fun moveChecklistItem(itemId: String, before: String?) =
+        core.moveChecklistItem(itemId, before?.let { uniffi.quest_mobile.ChecklistPosition.Before(it) }
+            ?: uniffi.quest_mobile.ChecklistPosition.Bottom)
+
     override fun setTaskQuest(taskId: String, questId: String?) = core.setTaskQuest(taskId, questId)
 
     override fun setTaskPlanned(taskId: String, plannedOn: String?, now: Moment) = core.setTaskPlanned(taskId, plannedOn, now)

@@ -148,6 +148,18 @@ else
   fail "r2c skipped: demo task or quest not found"
 fi
 
+run anna "$root/r4" r2c-inspect r4-seed --demo --now "$r2c_time" --scene today
+task_id=$(tree "$out/r4-seed.json" id "$anchor" 2>/dev/null)
+if [ -n "$task_id" ]; then
+  run anna "$root/r4" r4-detail r4-detail --now "$r2c_time" --scene today
+  check r4-detail "r4 Notes edits Markdown and renders it after Esc" keytext note-block-0 "R4 rendered note"
+  check r4-detail "r4 Enter in an item creates a new editable item" shows "Follow up"
+  run anna "$root/r4" r2c-inspect r4-list --now "$r2c_time" --scene today
+  check r4-list "r4 two items checked with Cmd+Enter, row shows 2/5 after restart" keytext "row-checklist-$task_id" "2/5"
+else
+  fail "r4 skipped: demo task not found"
+fi
+
 # a. A signs in as anna through the browser and adds a task on Today.
 run anna "$root/a" a-sign-in a-signed-in
 check a-signed-in "a  A signed in as anna" shows "Signed in as Anna Example"

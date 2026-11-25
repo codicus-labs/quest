@@ -80,6 +80,18 @@ interface QuestCoreApi : WorkspacesApi {
 
     fun setTaskDescription(taskId: String, description: String)
 
+    fun parseNote(source: String): List<uniffi.quest_mobile.MarkdownBlock>
+    fun toggleTaskMarker(source: String, offset: ULong): String
+    fun checklist(taskId: String): List<uniffi.quest_mobile.ChecklistRow>
+    fun checklistProgress(taskId: String): uniffi.quest_mobile.ChecklistProgress?
+    fun addChecklistItem(taskId: String, text: String): String
+    fun insertChecklistItemAfter(itemId: String): String
+    fun renameChecklistItem(itemId: String, text: String)
+    fun setChecklistItemDoneWithUndo(itemId: String, done: Boolean, now: Moment)
+    fun deleteChecklistItem(itemId: String, now: Moment)
+    fun moveChecklistItem(itemId: String, before: String?)
+
+
     fun setTaskQuest(taskId: String, questId: String?)
 
     /** Plans the task for [plannedOn] (ISO, "2026-11-24"); null unplans it. A later deadline is pulled along. */

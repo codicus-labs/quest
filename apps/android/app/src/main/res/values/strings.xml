@@ -54,6 +54,11 @@
 
     <!-- Task sheet -->
     <string name="task_description">Description</string>
+    <string name="task_notes">Notes</string>
+    <string name="task_notes_edit">Edit notes</string>
+    <string name="task_notes_done">Done</string>
+    <string name="task_checklist_add">Add checklist item</string>
+    <string name="task_checklist_item">Checklist item</string>
     <string name="task_description_placeholder">Add a description…</string>
     <string name="task_date">Date</string>
     <string name="task_choose_date">Choose date</string>

@@ -198,13 +198,16 @@ fn focus_edits_the_title_and_description() {
     let (mut rt, _dir) = demo_app();
     let design = task(&rt, "Design the next chapter").id;
     go(&mut rt, View::Focus);
-    click(&mut rt, "focus-description");
+    type_text(&mut rt, "e");
+    assert!(rt.find("focus-description-source").is_some());
     type_text(&mut rt, "Start from the reader's question.");
     press(&mut rt, Key::Enter, Mods::default());
     type_text(&mut rt, "Then the outline.");
+    press(&mut rt, Key::Escape, Mods::default());
     let saved = rt.state.snap.task(design).map(|t| t.description.clone());
     assert_eq!(saved.as_deref(), Some("Start from the reader's question.\nThen the outline."), "multi-line");
-    assert_eq!(rt.state.view, View::Focus, "letters in a field are not shortcuts");
+    assert_eq!(rt.state.view, View::Focus, "Esc in notes does not close Focus");
+    assert!(rt.find("focus-description-source").is_none());
     click(&mut rt, "focus-title");
     press(&mut rt, Key::End, Mods::default());
     type_text(&mut rt, " again");

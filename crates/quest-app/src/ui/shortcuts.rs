@@ -9,7 +9,7 @@ use crate::ui::parts;
 
 type Group = (&'static str, &'static [(&'static [&'static str], &'static str)]);
 
-const LEFT: [Group; 2] = [
+const LEFT: [Group; 3] = [
     (
         "Go to",
         &[
@@ -31,6 +31,18 @@ const LEFT: [Group; 2] = [
             (&["G"], "Jump to Today in Plan"),
             (&["?"], "Shortcuts"),
             (&["Esc"], "Back"),
+        ],
+    ),
+    (
+        "Notes & checklist",
+        &[
+            (&["E / ↵"], "Edit notes (Markdown)"),
+            (&["Esc"], "Save notes / leave checklist"),
+            (&["↵"], "Add item below"),
+            (&["⌫"], "Delete empty item"),
+            (&["↑/↓"], "Previous / next item"),
+            (&["⌥", "↑/↓"], "Move item"),
+            (&["⌘", "↵"], "Check item"),
         ],
     ),
 ];

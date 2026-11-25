@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.quest_mobile.Account
+import uniffi.quest_mobile.ChecklistProgress
 import uniffi.quest_mobile.ArchiveData
 import uniffi.quest_mobile.QuestsData
 import uniffi.quest_mobile.ReviewData
@@ -86,7 +87,11 @@ sealed interface ListPage {
 data class ReviewQuery(val week: String?)
 
 /** What the plan shows: the built [window] of days, QUEST WORK filtered by [questFilter]. */
-data class PlanPage(val sections: PlanSections, val today: TaskList)
+data class PlanPage(
+    val sections: PlanSections,
+    val today: TaskList,
+    val checklistProgress: Map<String, ChecklistProgress> = emptyMap(),
+)
 
 /** The result of one action on the core. */
 sealed interface Outcome<out T> {
@@ -416,7 +421,19 @@ class CoreHolder(
             // Clear previews on the same reader that registers them.
             if (!showPlan && planRead) core.leavePlan()
             planRead = showPlan
-            val plan = if (showPlan) PlanPage(core.planSections(now), core.taskList(ListKind.Today, now)) else null
+            val plan = if (showPlan) {
+                val sections = core.planSections(now)
+                val tasks = sections.days.drop(1).flatMap { it.tasks } +
+                    sections.later.flatMap { month -> month.days.flatMap { it.tasks } } + sections.notPlanned
+                val progress = tasks.mapNotNull { task ->
+                    try {
+                        core.checklistProgress(task.id)?.let { task.id to it }
+                    } catch (_: MobileException.UnknownTask) {
+                        null
+                    }
+                }.toMap()
+                PlanPage(sections, core.taskList(ListKind.Today, now), progress)
+            } else null
             CoreState.Ready(
                 home = home,
                 sync = core.syncState(),

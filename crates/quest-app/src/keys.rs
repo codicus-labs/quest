@@ -36,6 +36,7 @@ pub enum Shortcut {
     Back,
     DeleteSelection,
     Undo,
+    EditNotes,
     Pick(Picker),
     QuickPick(Picker),
     Task(TaskKey),
@@ -94,6 +95,7 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         Key::Backspace | Key::Delete => Some(Shortcut::DeleteSelection),
         Key::Text(t) if plain => match t.to_lowercase().as_str() {
             "f" => Some(Shortcut::Go(View::Focus)),
+            "e" if !ev.mods.shift => Some(Shortcut::EditNotes),
             "g" => Some(Shortcut::JumpToday),
             "j" => Some(Shortcut::Select { next: true }),
             "k" => Some(Shortcut::Select { next: false }),
@@ -191,6 +193,7 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             s.delete(Deletable::Task(task));
         }
         Shortcut::Undo => s.undo_latest(),
+        Shortcut::EditNotes => return s.edit_notes(tx),
         Shortcut::Pick(picker) => {
             let Some(task) = s.shortcut_task() else { return false };
             task_fields::open(s, Some(task), picker, tx);

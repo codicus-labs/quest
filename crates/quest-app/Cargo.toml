@@ -18,11 +18,10 @@ serde_json.workspace = true
 sys-locale.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
-pulldown-cmark.workspace = true
 chrono-tz.workspace = true
 iana-time-zone.workspace = true
 rune = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669", features = ["tooling"] }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669", features = ["markdown"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
 
 [lints]
 workspace = true

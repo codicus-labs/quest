@@ -38,6 +38,9 @@ class QuestColorsContrastTest {
                 put("$name on $surface", contrast(ink, background))
             }
         }
+        for ((name, background) in listOf("bg" to c.bg, "card" to c.card)) {
+            put("inline code on $name", contrast(c.text, c.textMuted.copy(alpha = 0.12f).compositeOver(background)))
+        }
         val scheme = colorScheme(c, dark)
         put("onPrimary on primary", contrast(scheme.onPrimary, scheme.primary))
         // Quests' FABs and filled buttons put `card` on the accent.
@@ -56,6 +59,7 @@ class QuestColorsContrastTest {
         for ((name, fill) in listOf("accent" to c.accent, "error" to c.error)) {
             put("$name icon on its tint", contrast(fill, fill.copy(alpha = SWIPE_TINT).compositeOver(c.bg)))
         }
+        put("checklist drop outline", contrast(c.borderStrong, c.textMuted.copy(alpha = 0.08f).compositeOver(c.card)))
     }
 
     private fun belowAa(c: QuestColors, dark: Boolean) =

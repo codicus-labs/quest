@@ -65,6 +65,7 @@ import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.launch
+import uniffi.quest_mobile.ChecklistProgress
 import uniffi.quest_mobile.HomeTask
 import uniffi.quest_mobile.ListRow
 import uniffi.quest_mobile.PlanDaySection
@@ -120,7 +121,7 @@ private fun PlanContent(page: PlanPage, actions: PlanActions) {
                     section.rows.forEach { add(SortItem.Row("today-${it.id}", list, it)) }
                 }
             } else {
-                day.tasks.forEach { add(SortItem.Row("${day.date}-${it.id}", list, it.toListRow())) }
+                day.tasks.forEach { add(SortItem.Row("${day.date}-${it.id}", list, it.toListRow(page.checklistProgress[it.id]))) }
             }
             day.due.forEach { marker ->
                 add(SortItem.Decoration("due-${day.date}-${marker.taskId}", list) { DueMarker(marker.title) })
@@ -148,7 +149,7 @@ private fun PlanContent(page: PlanPage, actions: PlanActions) {
                 Text(plan.notPlanned.size.toString(), style = QuestType.small, color = QuestTheme.colors.textMuted)
             }
         })
-        if (showUnplanned) plan.notPlanned.forEach { add(SortItem.Row("unplanned-${it.id}", null, it.toListRow())) }
+        if (showUnplanned) plan.notPlanned.forEach { add(SortItem.Row("unplanned-${it.id}", null, it.toListRow(page.checklistProgress[it.id]))) }
     }
 
     Column(Modifier.widthIn(max = ListMaxWidth).fillMaxSize().padding(horizontal = QuestSpacing.medium)) {
@@ -245,7 +246,8 @@ private fun WeekStrip(weeks: List<PlanWeek>, today: String, onJump: (String) -> 
     }
 }
 
-private fun HomeTask.toListRow() = ListRow(
+private fun HomeTask.toListRow(progress: ChecklistProgress?) = ListRow(
     id = id, title = title, done = done, quest = quest, marks = emptyList(),
     timerRunning = timerRunning, timer = tracked, canStartTimer = canStartTimer,
+    checklistProgress = progress,
 )

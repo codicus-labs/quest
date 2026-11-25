@@ -53,6 +53,23 @@ fn a_checklist_is_added_to_ticked_moved_renamed_and_deleted_with_undo() {
     assert_eq!(blank, MobileError::EmptyTitle);
 }
 
+#[test]
+fn checklist_progress_and_undo_cover_items_inserted_after_an_anchor() {
+    let (_dir, core) = open();
+    let task =
+        core.add_task("Pack".into(), TaskSection::Other, AddPosition::Bottom, HomeQuery::default(), now()).unwrap();
+    assert_eq!(core.checklist_progress(task.clone()).unwrap(), None);
+    let first = core.add_checklist_item(task.clone(), "First".into(), ChecklistPosition::Bottom).unwrap();
+    core.add_checklist_item(task.clone(), "Last".into(), ChecklistPosition::Bottom).unwrap();
+    let middle = core.insert_checklist_item_after(first).unwrap();
+    assert_eq!(texts(&core, &task), [("First".into(), false), ("".into(), false), ("Last".into(), false)]);
+    core.rename_checklist_item(middle.clone(), "Middle".into()).unwrap();
+    core.set_checklist_item_done_with_undo(middle, true, now()).unwrap();
+    assert_eq!(core.checklist_progress(task.clone()).unwrap(), Some(crate::ChecklistProgress { done: 1, total: 3 }));
+    core.undo(now()).unwrap();
+    assert_eq!(texts(&core, &task), [("First".into(), false), ("Middle".into(), false), ("Last".into(), false)]);
+}
+
 fn id_of_nothing() -> String {
     EntityId::new().to_string()
 }

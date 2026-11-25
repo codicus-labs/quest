@@ -26,10 +26,10 @@ object ListSamples {
     val fitness = Samples.fitness
 
     private fun row(id: String, title: String, quest: QuestChip? = null, vararg marks: RowMark) =
-        ListRow(id, title, done = false, quest = quest, marks = marks.toList(), timerRunning = false, timer = null, canStartTimer = true)
+        ListRow(id, title, done = false, quest = quest, marks = marks.toList(), timerRunning = false, timer = null, canStartTimer = true, checklistProgress = null)
 
     private fun done(id: String, title: String, quest: QuestChip? = null) =
-        ListRow(id, title, done = true, quest = quest, marks = emptyList(), timerRunning = false, timer = null, canStartTimer = false)
+        ListRow(id, title, done = true, quest = quest, marks = emptyList(), timerRunning = false, timer = null, canStartTimer = false, checklistProgress = null)
 
     private fun overdue(day: String) = RowMark("overdue · $day", MarkTone.OVERDUE)
     private fun since(day: String) = RowMark("since $day", MarkTone.MUTED)

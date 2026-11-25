@@ -1,4 +1,4 @@
-//! What Focus is about and its editable title and description.
+//! What Focus is about and its editable title.
 
 use quest_domain::{Command, EntityId, Task};
 pub use quest_view::focus::FocusTarget;
@@ -10,7 +10,6 @@ use super::{State, View};
 pub struct FocusDraft {
     pub task: EntityId,
     pub title: TextEdit,
-    pub description: TextEdit,
 }
 
 impl State {
@@ -33,22 +32,14 @@ impl State {
         if self.focus_draft.as_ref().is_some_and(|d| d.task == task.id) {
             return;
         }
-        let draft = FocusDraft {
-            task: task.id,
-            title: TextEdit::new(task.title.clone()),
-            description: TextEdit::new(task.description.clone()),
-        };
+        let draft = FocusDraft { task: task.id, title: TextEdit::new(task.title.clone()) };
         self.focus_draft = Some(draft);
     }
 
     /// Focus's fields for its text inputs. Only empty when Focus shows no task, and then no
     /// field is on screen: a stray edit lands in a draft no task owns, and saving skips it.
     pub fn focus_fields(&mut self) -> &mut FocusDraft {
-        self.focus_draft.get_or_insert_with(|| FocusDraft {
-            task: EntityId::new(),
-            title: TextEdit::default(),
-            description: TextEdit::default(),
-        })
+        self.focus_draft.get_or_insert_with(|| FocusDraft { task: EntityId::new(), title: TextEdit::default() })
     }
 
     /// Saves the edited title; an empty one is not saved (the task keeps its name).
@@ -59,15 +50,6 @@ impl State {
             return;
         }
         self.dispatch(Command::RenameTask { id, title });
-    }
-
-    pub fn save_focus_description(&mut self) {
-        let Some(draft) = &self.focus_draft else { return };
-        let (id, description) = (draft.task, draft.description.text.clone());
-        if self.snap.task(id).is_none_or(|t| t.description == description) {
-            return;
-        }
-        self.dispatch(Command::SetTaskDescription { id, description });
     }
 
     pub fn start_focus(&mut self, task: EntityId) {

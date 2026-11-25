@@ -143,6 +143,7 @@ impl RowContext<'_> {
             done: task.is_done(),
             quest,
             marks: row_meta::date_marks(task, self.today, on_quest_list).into_iter().map(mark).collect(),
+            checklist_progress: crate::checklist::progress(self.snapshot, task.id),
             timer_running: running_since.is_some(),
             timer: running_since.map(|since| format::timer((self.at - since).num_milliseconds())),
             can_start_timer: !task.is_done(),

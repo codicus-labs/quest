@@ -62,6 +62,12 @@ pub struct ChecklistRow {
     pub done: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ChecklistProgress {
+    pub done: u32,
+    pub total: u32,
+}
+
 /// Where a checklist item is added or moved to.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum ChecklistPosition {

@@ -34,7 +34,7 @@ pub(super) fn add(
     snapshot.task(task).ok_or(CommandError::UnknownTask(task))?;
     Ok(vec![
         write(Item, id, fields::TASK_ID, json!(task)),
-        write(Item, id, fields::CHECKLIST_TEXT, json!(title(text)?)),
+        write(Item, id, fields::CHECKLIST_TEXT, json!(if text.is_empty() { String::new() } else { title(text)? })),
         write(Item, id, fields::CHECKLIST_DONE, json!(false)),
         write(Item, id, fields::SORT_KEY, json!(sort_key(snapshot, task, id, position))),
         in_workspace(Item, id, snapshot),
@@ -43,7 +43,7 @@ pub(super) fn add(
 
 pub(super) fn rename(snapshot: &Snapshot, id: EntityId, text: &str) -> Result<Vec<FieldWrite>, CommandError> {
     item(snapshot, id)?;
-    Ok(vec![write(Item, id, fields::CHECKLIST_TEXT, json!(title(text)?))])
+    Ok(vec![write(Item, id, fields::CHECKLIST_TEXT, json!(text))])
 }
 
 pub(super) fn set_done(snapshot: &Snapshot, id: EntityId, done: bool) -> Result<Vec<FieldWrite>, CommandError> {

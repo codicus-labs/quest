@@ -44,6 +44,37 @@ Jetpack Compose (apps/android)          Screens, StateFlow, Threading der Plattf
 - `quest-app` bindet die Module per `use quest_view::{…}` ein, Verhalten unverändert (Snapshots
   byte-identisch). `quest-mobile` baut daraus ab Phase 1 seine UI-Records; Kotlin rechnet keine Labels.
 
+## Markdown-Notizen und Checkliste (R4)
+
+- Notizquelle bleibt `TaskDetail.description` (ein synchronisiertes Markdown-Feld). Speichern über
+  `QuestCore.setTaskDescription`, nach Eingaben entprellt und beim Verlassen des Editors sofort.
+- `parseMarkdown(text): List<MarkdownBlock>`: `Heading(level, content)` (1–3),
+  `Paragraph(content)`, `ItemList(start, items)` (ohne `start`: ungeordnet),
+  `Quote(blocks)`, `Code(text)`. `MarkdownListItem(marker, blocks)` kann einen
+  `MarkdownTaskMarker(checked, offset)` haben. `MarkdownInline(text, bold, italic, kind)`
+  hat `MarkdownInlineKind.Text`, `Code` oder `Link(url)`.
+  Als native Elemente zeichnen: HTML ist Klartext; nur `http://`, `https://` und `mailto:`
+  kommen als Link zurück. Keine WebView oder Interpretation als HTML.
+- `toggleTaskMarker(text, offset): String` erhält den **UTF-8-Byteoffset** (`ULong`) aus dem
+  Modell, keinen Kotlin-Stringindex. Nur einen Marker aus der aktuellen Notizfassung anwenden.
+  Die Funktion ändert die Quelle, nicht den Store; anschließend als Notiz speichern.
+  Markdown-Aufgabenpunkte zählen nicht zur strukturierten Checkliste.
+- `TaskDetail.checklist` bzw. `QuestCore.checklist(taskId)` liefert sortierte
+  `ChecklistRow(id, text, done)`. `ListRow.checklistProgress` und
+  `QuestCore.checklistProgress(taskId)` liefern `ChecklistProgress(done, total)` (oder
+  `null` ohne Punkte). Die Zeile kann daraus etwa „2/5“ anzeigen.
+- `addChecklistItem(taskId, text, position)` fügt einen beschrifteten Punkt ein.
+  `insertChecklistItemAfter(itemId)` legt einen leeren Punkt direkt darunter an.
+  Beide liefern die ID des neuen Punkts. `renameChecklistItem(itemId, text)` speichert
+  eine nichtleere Beschriftung. `moveChecklistItem(itemId, position)` verschiebt den
+  Punkt innerhalb seiner Liste; `ChecklistPosition` ist `Top`, `Bottom` oder
+  `Before(itemId)`.
+- `setChecklistItemDoneWithUndo(itemId, done, now)` setzt den Haken mit Undo. Die ältere
+  Variante `setChecklistItemDone(itemId, done)` setzt ihn ohne Undo.
+  `deleteChecklistItem(itemId, now)` löscht weich und ist rückgängig machbar.
+  Beides mit Undo nutzt denselben Slot wie Task-Aktionen; `QuestCore.undo(now)` nimmt
+  die letzte Aktion zurück.
+
 ## Sync until idle
 
 - `Store::sync_until_idle(timeout) -> SyncOutcome` (`Idle` | `Offline` | `TimedOut`) blockiert, bis die

@@ -69,7 +69,7 @@ abstract class ScreenshotTest(private val scene: Scene, private val dark: Boolea
     }
 
     companion object {
-        fun parameters(): List<Array<Any>> = scenes.flatMap { scene -> listOf(false, true).map { arrayOf(scene, it) } }
+        fun parameters(fixtures: List<Scene> = scenes): List<Array<Any>> = fixtures.flatMap { scene -> listOf(false, true).map { arrayOf(scene, it) } }
 
         /** The main screens at 200 % text size, light only: nothing may be cut off. */
         fun largeFontParameters(): List<Array<Any>> = scenes.filter { it.name in largeFontScenes }.map { arrayOf(it, false) }
@@ -96,7 +96,7 @@ class PhoneScreenshotTest(scene: Scene, dark: Boolean) : ScreenshotTest(scene, d
     companion object {
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0} dark={1}")
-        fun parameters() = ScreenshotTest.parameters()
+        fun parameters() = ScreenshotTest.parameters(scenes + notesScenes)
     }
 }
 

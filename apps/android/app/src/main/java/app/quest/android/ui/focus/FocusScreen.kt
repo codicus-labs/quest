@@ -63,6 +63,11 @@ import app.quest.android.ui.components.QuestPickerSheet
 import app.quest.android.ui.components.questColor
 import app.quest.android.ui.components.CenteredNote
 import app.quest.android.ui.components.EmptyNote
+import app.quest.android.ui.task.ChecklistActions
+import app.quest.android.ui.task.NoteActions
+import app.quest.android.ui.task.TaskChecklist
+import app.quest.android.ui.task.TaskNote
+import app.quest.android.ui.components.UndoSnackbar
 import app.quest.android.ui.theme.QuestSpacing
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.theme.QuestType
@@ -80,14 +85,16 @@ class FocusActions(
     val setQuest: (String?) -> Unit,
     val editTitle: (String) -> Unit,
     val commitTitle: () -> Unit,
-    val editDescription: (String) -> Unit,
-    val commitDescription: () -> Unit,
     /** Saves typed title and description (the app went to the background). */
     val saveDrafts: () -> Unit,
+    val notes: NoteActions = NoteActions.None,
+    val checklist: ChecklistActions = ChecklistActions(),
+    val undo: () -> Unit = {},
+    val dismissToast: () -> Unit = {},
 ) {
     companion object {
         /** Does nothing; for screenshots. */
-        val None = FocusActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        val None = FocusActions({}, {}, {}, {}, {}, {}, {}, {}, {})
     }
 }
 
@@ -139,7 +146,12 @@ fun FocusScreen(
                 TopBar(null, false, actions.close, note)
                 CenteredNote(state.message)
             }
-            is FocusUiState.Session -> SessionContent(state, actions, note)
+            is FocusUiState.Session -> {
+                SessionContent(state, actions, note)
+                state.toast?.let {
+                    UndoSnackbar(it.text, actions.undo, Modifier.align(Alignment.BottomCenter), it.actionLabel, actions.dismissToast)
+                }
+            }
             is FocusUiState.Pick -> PickContent(state.tasks, actions, note)
         }
     }
@@ -214,12 +226,10 @@ private fun SessionContent(state: FocusUiState.Session, actions: FocusActions, n
                     }
                     FocusButton(stringResource(R.string.task_complete), "focus-complete", actions.complete) { Icon(Icons.Filled.Check, null, Modifier.size(18.dp)) }
                 }
-                FocusDescription(
-                    state.description,
-                    actions.editDescription,
-                    actions.commitDescription,
-                    Modifier.padding(top = 32.dp),
-                )
+                TaskNote(session.taskId, state.description, actions.notes, "focus-description", Modifier.padding(top = 32.dp))
+                if (state.checklist.isNotEmpty()) {
+                    TaskChecklist(session.taskId, state.checklist, actions.checklist, editable = false)
+                }
             }
         }
     }

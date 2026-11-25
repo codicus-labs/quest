@@ -63,6 +63,13 @@ pub fn install(app: App<State>) -> App<State> {
             },
             Some("alt+down"),
         ))
+        .menu_item(item(
+            "Edit Notes",
+            |s, tx| {
+                s.edit_notes(tx);
+            },
+            None,
+        ))
         .menu_item(item("Undo Task Change", |s, _| s.undo_latest(), None))
         .menu_item(item("Keyboard Shortcuts", |s, _| s.overlay = Overlay::Shortcuts, None))
 }

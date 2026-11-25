@@ -151,11 +151,17 @@ internal fun TaskTimerIcon(running: Boolean) {
  * reaches 48 dp (`minimumInteractiveComponentSize`).
  */
 @Composable
-fun CompleteToggle(done: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, size: Dp = QuestSpacing.touchTarget) {
+fun CompleteToggle(
+    done: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = QuestSpacing.touchTarget,
+    uncheckedBorder: Color = QuestTheme.colors.borderStrong,
+    label: String = stringResource(R.string.task_complete),
+) {
     val colors = QuestTheme.colors
     val fill = if (done) colors.accentFill else Color.Transparent
-    val edge = if (done) colors.accentFill else colors.borderStrong
-    val label = stringResource(R.string.task_complete)
+    val edge = if (done) colors.accentFill else uncheckedBorder
     Box(
         modifier = modifier
             .size(size)

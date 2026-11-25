@@ -4052,7 +4052,6 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "iana-time-zone",
- "pulldown-cmark",
  "quest-capture",
  "quest-domain",
  "quest-protocol",
@@ -4222,6 +4221,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "chrono-tz",
+ "pulldown-cmark",
  "quest-domain",
  "uuid",
 ]
@@ -4787,7 +4787,6 @@ version = "0.0.1"
 source = "git+https://github.com/anomalyco/rune?rev=3f0d9973526818bae62c89c483fbd144a2a19669#3f0d9973526818bae62c89c483fbd144a2a19669"
 dependencies = [
  "icu_normalizer",
- "pulldown-cmark",
  "rune",
  "rune-highlights",
  "rune-motion",

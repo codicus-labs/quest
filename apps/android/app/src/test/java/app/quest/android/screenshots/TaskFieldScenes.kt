@@ -14,7 +14,6 @@ import app.quest.android.ui.task.SheetPage
 import app.quest.android.ui.task.TaskCalendarChoices
 import app.quest.android.ui.task.TaskQuestChoices
 import app.quest.android.ui.task.TaskSheet
-import app.quest.android.ui.task.TaskSheetActions
 import app.quest.android.ui.task.TaskSheetState
 import java.time.LocalDate
 import uniffi.quest_mobile.CalendarCell
@@ -76,7 +75,7 @@ private fun Calendar(title: String, target: DateTarget) {
 val taskFieldScenes = listOf(
     Scene("r3-task-detail", SceneKind.Window) {
         Background()
-        TaskSheet(TaskSheetState.Open(detail, detail.title, detail.description, SheetPage.Details, null), TaskSheetActions.None)
+        TaskSheet(TaskSheetState.Open(detail, detail.title, detail.description, SheetPage.Details, null), sampleSheetActions())
     },
     Scene("r3-task-quest", SceneKind.Window) {
         Background()

@@ -76,7 +76,15 @@ fun TaskRow(row: ListRow, actions: RowActions, modifier: Modifier = Modifier) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (row.marks.isNotEmpty()) Marks(row.marks, colors)
+            val progress = row.checklistProgress
+            if (progress == null) {
+                if (row.marks.isNotEmpty()) Marks(row.marks, colors)
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (row.marks.isNotEmpty()) Marks(row.marks, colors, Modifier.weight(1f, fill = false))
+                    Text("${progress.done}/${progress.total}", style = QuestType.small, color = colors.textMuted)
+                }
+            }
         }
         if (questTint != null) Dot(questTint, 8.dp, Modifier.padding(horizontal = QuestSpacing.small))
         if (row.timerRunning || row.canStartTimer) {
@@ -91,7 +99,7 @@ fun TaskRow(row: ListRow, actions: RowActions, modifier: Modifier = Modifier) {
 
 /** "overdue · Mon 23" in red, "due today" in the accent, the rest muted, one line. */
 @Composable
-private fun Marks(marks: List<RowMark>, colors: QuestColors) {
+private fun Marks(marks: List<RowMark>, colors: QuestColors, modifier: Modifier = Modifier) {
     val text = buildAnnotatedString {
         marks.forEachIndexed { i, mark ->
             if (i > 0) withStyle(SpanStyle(color = colors.textFaint)) { append("  ·  ") }
@@ -103,7 +111,7 @@ private fun Marks(marks: List<RowMark>, colors: QuestColors) {
             withStyle(SpanStyle(color = color)) { append(mark.text) }
         }
     }
-    Text(text, style = QuestType.small, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(text, modifier = modifier, style = QuestType.small, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 /** The mini-player's timer and stop control. */

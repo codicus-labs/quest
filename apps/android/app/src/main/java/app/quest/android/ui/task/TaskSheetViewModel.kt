@@ -12,6 +12,8 @@ import app.quest.android.core.failureMessage
 import app.quest.android.core.readCalendar
 import app.quest.android.core.shiftTaskMonth
 import java.io.Serializable
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +25,7 @@ import uniffi.quest_mobile.MobileException
 import uniffi.quest_mobile.RepeatCheck
 import uniffi.quest_mobile.RepeatWeekday
 import uniffi.quest_mobile.TaskDetail
+import uniffi.quest_mobile.UndoToast
 
 /** The task sheet's two pages: the task itself, and its repeat settings. */
 enum class SheetPage { Details, Repeat }
@@ -54,6 +57,7 @@ sealed interface TaskSheetState {
         val description: String,
         val page: SheetPage,
         val repeat: RepeatEditorState?,
+        val toast: UndoToast? = null,
     ) : TaskSheetState
 }
 
@@ -84,6 +88,7 @@ class TaskSheetViewModel(
 
     /** The task as last read, so a failed re-read keeps the sheet (and its drafts) open. */
     private var lastDetail: TaskDetail? = null
+    private var noteSave: Job? = null
 
     val state: StateFlow<TaskSheetState> = combine(core.state, inputs) { _, inputs -> sheetState(inputs) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, sheetState(inputs.value))
@@ -114,6 +119,7 @@ class TaskSheetViewModel(
             description = inputs.descriptionDraft ?: detail.description,
             page = if (repeat == null) SheetPage.Details else SheetPage.Repeat,
             repeat = repeat,
+            toast = (core.state.value as? CoreState.Ready)?.home?.toast,
         )
     }
 
@@ -145,7 +151,10 @@ class TaskSheetViewModel(
 
     private fun openTask(): String? = inputs.value.taskId
 
-    fun open(taskId: String) = update { SheetInputs(taskId = taskId) }
+    fun open(taskId: String) {
+        commitDescription()
+        update { SheetInputs(taskId = taskId) }
+    }
 
     /** Saves typed title and description, then closes. */
     fun close() {
@@ -166,14 +175,45 @@ class TaskSheetViewModel(
         update { it.copy(titleDraft = null) }
     }
 
-    fun editDescription(text: String) = update { it.copy(descriptionDraft = text) }
+    fun editDescription(text: String) {
+        update { it.copy(descriptionDraft = text) }
+        noteSave?.cancel()
+        noteSave = viewModelScope.launch {
+            delay(300)
+            commitDescription()
+        }
+    }
 
     fun commitDescription() {
+        noteSave?.cancel()
+        noteSave = null
         val taskId = openTask() ?: return
         val description = inputs.value.descriptionDraft ?: return
         report(core.perform { c, _ -> c.setTaskDescription(taskId, description) })
         update { it.copy(descriptionDraft = null) }
     }
+
+    val notes = NoteActions(::editDescription, ::commitDescription, core::parseNote) { source, offset ->
+        act { id -> core.toggleNoteMarker(id, source, offset) }
+    }
+
+    val checklist = ChecklistActions(
+        toggle = { id, done -> report(core.perform { c, now -> c.setChecklistItemDoneWithUndo(id, done, now) }) },
+        add = { text -> openTask()?.let { id -> itemId(core.perform { c, _ -> c.addChecklistItem(id, text) }) } },
+        insertAfter = { id -> itemId(core.perform { c, _ -> c.insertChecklistItemAfter(id) }) },
+        rename = { id, text -> report(core.perform { c, _ -> c.renameChecklistItem(id, text) }) },
+        delete = { id -> report(core.perform { c, now -> c.deleteChecklistItem(id, now) }) },
+        move = { id, before -> report(core.perform { c, _ -> c.moveChecklistItem(id, before) }) },
+    )
+
+    private fun itemId(outcome: Outcome<String>): String? {
+        report(outcome)
+        return (outcome as? Outcome.Done)?.value
+    }
+
+    fun undo() = report(core.perform { c, now -> c.undo(now) })
+
+    fun dismissToast() = report(core.perform { c, now -> c.dismissToast(now) })
 
     fun toggleDone() = act { taskId -> core.perform { c, now -> c.toggleListTask(taskId, now) } }
 

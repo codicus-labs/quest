@@ -58,15 +58,15 @@ pub fn view(s: &State, p: &Pal, leading: f32) -> El {
         .on_edit(|s: &mut State| &mut s.focus_fields().title)
         .on_input_change(|s: &mut State, _: &mut Tx| s.save_focus_title())
         .on_submit(|_: &mut State, tx: &mut Tx| tx.blur());
-    let notes = super::notes::field(
-        "focus-description",
-        &draft.description,
-        p,
-        |s| &mut s.focus_fields().description,
-        State::save_focus_description,
-    )
-    .max_h(150.0);
-    let description = col().w(520.0).min_h(60.0).padding(12.0).radius(10.0).border(1.0, p.border).child(notes);
+    let notes = super::notes::field(s, task, crate::state::notes::NoteHost::Focus, p);
+    let description = col()
+        .w(520.0)
+        .gap(8.0)
+        .padding(12.0)
+        .radius(10.0)
+        .border(1.0, p.border)
+        .child(notes)
+        .child(super::checklist::focus(s, task, p));
     let tracked = s.snap.task_tracked_ms(id, s.now);
     let toggle = if running {
         parts::button("focus-toggle", "Pause", Some(&icons::PAUSE), p, |s: &mut State, _: &mut Tx| s.stop_focus())
@@ -96,7 +96,15 @@ pub fn view(s: &State, p: &Pal, leading: f32) -> El {
         )
         .child(row().gap(14.0).mt(40.0).child(toggle.h(44.0).px(20.0)).child(complete.h(44.0).px(20.0)))
         .child(description.mt(36.0));
-    col().key("focus").w_full().h_full().fill(p.bg).child(top).child(center).child(el().h(64.0))
+    col().key("focus").w_full().h_full().fill(p.bg).child(top).child(
+        col()
+            .key("focus-scroll")
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .scroll(rune::ScrollSpec { stick_bottom: false })
+            .child(center.grow(0.0).pt(24.0).pb(64.0)),
+    )
 }
 
 fn back_button(p: &Pal) -> El {

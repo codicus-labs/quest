@@ -188,6 +188,10 @@ impl Deletable {
 pub enum Undoable {
     Delete(Deletable),
     Task(TaskEdit),
+    ChecklistDone {
+        id: EntityId,
+        previous: bool,
+    },
     /// A quest was completed or reopened: it goes back to `back_to`.
     QuestStatus {
         quest: EntityId,
@@ -230,6 +234,10 @@ pub struct UndoState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndoEvent {
     TaskEdited(TaskEdit),
+    ChecklistDone {
+        id: EntityId,
+        previous: bool,
+    },
     TaskPlaced(TaskEdit),
     Deleted {
         item: Deletable,
@@ -256,6 +264,7 @@ pub enum UndoEffect {
     None,
     Task(TaskEdit),
     Restore(Deletable),
+    SetChecklistDone { id: EntityId, done: bool },
     SetQuestStatus { quest: EntityId, status: QuestStatus },
 }
 
@@ -264,6 +273,11 @@ impl UndoState {
         let until = now + Duration::seconds(TOAST_SECONDS);
         let mut next = self.clone();
         let effect = match event {
+            UndoEvent::ChecklistDone { id, previous } => {
+                next.last = Some(Undoable::ChecklistDone { id, previous });
+                next.shown = Some(Shown { toast: Toast::Done, until });
+                UndoEffect::None
+            }
             UndoEvent::TaskEdited(edit) => {
                 next.shown = matches!(edit, TaskEdit::Completion { previous: None, .. })
                     .then_some(Shown { toast: Toast::Done, until: now + Duration::seconds(5) });
@@ -292,6 +306,10 @@ impl UndoState {
             }
             UndoEvent::Undo => match next.last.take() {
                 None => UndoEffect::None,
+                Some(Undoable::ChecklistDone { id, previous }) => {
+                    next.shown = None;
+                    UndoEffect::SetChecklistDone { id, done: previous }
+                }
                 Some(Undoable::Task(edit)) => {
                     next.shown = None;
                     UndoEffect::Task(edit)

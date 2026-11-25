@@ -14,6 +14,10 @@ use crate::types::UndoToast;
 pub(crate) enum UndoAction {
     Task(TaskEdit),
     Restore(Deletable),
+    SetChecklistDone {
+        id: EntityId,
+        done: bool,
+    },
     /// Puts a completed or reopened quest back to `status`.
     SetQuestStatus {
         quest: EntityId,
@@ -35,6 +39,11 @@ impl MobileUndo {
     }
 
     /// Restored from the archive: a toast or ⌘Z about it no longer applies.
+    pub fn checklist_done(&mut self, id: EntityId, previous: bool, now: DateTime<Utc>) {
+        self.completion_label = None;
+        self.step(UndoEvent::ChecklistDone { id, previous }, now);
+    }
+
     pub fn restored(&mut self, item: Deletable, now: DateTime<Utc>) {
         self.step(UndoEvent::Restored(item), now);
     }
@@ -85,6 +94,7 @@ impl MobileUndo {
             UndoEffect::Restore(item) => Some(UndoAction::Restore(item)),
             UndoEffect::SetQuestStatus { quest, status } => Some(UndoAction::SetQuestStatus { quest, status }),
             UndoEffect::Task(edit) => Some(UndoAction::Task(edit)),
+            UndoEffect::SetChecklistDone { id, done } => Some(UndoAction::SetChecklistDone { id, done }),
             UndoEffect::None => None,
         }
     }

@@ -106,6 +106,9 @@ impl QuestCore {
             match action {
                 UndoAction::Task(edit) => self.dispatch(edit.command(now.at)),
                 UndoAction::Restore(item) => self.dispatch(item.restore()),
+                UndoAction::SetChecklistDone { id, done } => {
+                    self.dispatch(quest_domain::Command::SetChecklistItemDone { id, done })
+                }
                 UndoAction::SetQuestStatus { quest, status } => {
                     self.dispatch(Command::SetQuestStatus { id: quest, status })
                 }

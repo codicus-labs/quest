@@ -107,6 +107,20 @@ const SCENES: &[Scene] = &[
         s.go(View::Plan);
         s.menu = first_open_task(s).map(|task| state::TaskMenu { task });
     }),
+    ("r4-detail", r4_detail),
+    ("r4-detail-light", |s| light(s, r4_detail)),
+    ("r4-edit", r4_edit),
+    ("r4-edit-light", |s| light(s, r4_edit)),
+    ("r4-focus", r4_focus),
+    ("r4-focus-light", |s| light(s, r4_focus)),
+    ("r4-list", |s| {
+        r4_notes(s);
+    }),
+    ("r4-list-light", |s| {
+        light(s, |s| {
+            r4_notes(s);
+        })
+    }),
     ("task-detail", task_detail),
     ("task-detail-light", |s| light(s, task_detail)),
     ("task-quest-picker", task_quest_picker),
@@ -256,6 +270,45 @@ fn task_detail(s: &mut State) {
     s.dispatch(Command::SetTaskDue { id, due_on: Some(today), today, at: s.now });
     s.dispatch(Command::SetTaskDue { id, due_on: today.checked_add_days(chrono::Days::new(3)), today, at: s.now });
     s.open_task_modal(id);
+}
+
+fn r4_notes(s: &mut State) -> Option<quest_domain::EntityId> {
+    use quest_domain::{Command, EntityId, Position};
+
+    let id = first_open_task(s)?;
+    let description = "Three screens: **onboarding**, *first list*, first tracked hour.\n\n### Open\n- Empty state: copy or a quiet illustration?\n- Does `Today` start empty?\n\n> Calm first, clever later.\n\nSketches: [shared board](https://example.org/board)";
+    s.dispatch(Command::SetTaskDescription { id, description: description.into() });
+    for (index, text) in ["Onboarding sketch", "First list", "First tracked hour", "Review with Anna", "Export frames"]
+        .into_iter()
+        .enumerate()
+    {
+        let item = EntityId::new();
+        s.dispatch(Command::AddChecklistItem { id: item, task_id: id, text: text.into(), position: Position::Bottom });
+        if index < 2 {
+            s.dispatch(Command::SetChecklistItemDone { id: item, done: true });
+        }
+    }
+    Some(id)
+}
+
+fn r4_detail(s: &mut State) {
+    if let Some(id) = r4_notes(s) {
+        s.open_task_modal(id);
+    }
+}
+
+fn r4_edit(s: &mut State) {
+    if let Some(id) = r4_notes(s) {
+        s.open_task_modal(id);
+        s.open_note(state::notes::NoteHost::Detail, id, &mut rune::Tx::default());
+    }
+}
+
+fn r4_focus(s: &mut State) {
+    if let Some(id) = r4_notes(s) {
+        s.start_focus(id);
+        s.go(View::Focus);
+    }
 }
 
 fn task_quest_picker(s: &mut State) {
@@ -412,7 +465,15 @@ fn main() {
     let app = menu_bar::install(
         App::new(spec)
             .titlebar(Titlebar::new(ui::sidebar::TITLEBAR))
-            .on_close(|s: &mut State, _: &mut rune::Tx| s.cancel_capture()),
+            .on_focus(|s: &mut State, focused, tx| {
+                if !focused {
+                    s.close_note(tx);
+                }
+            })
+            .on_close(|s: &mut State, _: &mut rune::Tx| {
+                s.finish_note();
+                s.cancel_capture();
+            }),
     );
     let handle = app.handle();
     // Opening the database happens once at launch, before the event loop draws anything;

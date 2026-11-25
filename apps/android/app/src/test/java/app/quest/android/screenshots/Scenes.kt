@@ -14,7 +14,6 @@ import app.quest.android.ui.components.TaskCardActions
 import app.quest.android.ui.task.RepeatEditorState
 import app.quest.android.ui.task.RepeatForm
 import app.quest.android.ui.task.SheetPage
-import app.quest.android.ui.task.TaskSheetActions
 import app.quest.android.ui.task.TaskSheetContent
 import app.quest.android.ui.task.TaskSheetState
 import app.quest.android.ui.theme.QuestTheme
@@ -33,7 +32,6 @@ import app.quest.android.ui.components.SectionHeader
 import app.quest.android.ui.components.SyncPill
 import app.quest.android.ui.components.TaskCard
 import app.quest.android.ui.components.UndoSnackbar
-import app.quest.android.ui.focus.FocusActions
 import app.quest.android.ui.focus.FocusScreen
 import app.quest.android.ui.focus.FocusUiState
 import app.quest.android.ui.navigation.DetailScaffold
@@ -93,7 +91,7 @@ private fun Plan() = Shell(Tab.Today, leading = { TodaySegment(showPlan = true, 
 
 /** Focus over the app, as in [app.quest.android.ui.QuestApp]. */
 @Composable
-private fun Focus(state: FocusUiState) = FocusScreen(state, FocusActions.None, keepScreenOn = false)
+private fun Focus(state: FocusUiState) = FocusScreen(state, sampleFocusActions(), keepScreenOn = false)
 
 private fun repeatState(form: RepeatForm, check: RepeatCheck) =
     TaskSheetState.Open(Samples.detail, Samples.detail.title, Samples.detail.description, SheetPage.Repeat, RepeatEditorState(form, check, null))
@@ -102,7 +100,7 @@ private fun repeatState(form: RepeatForm, check: RepeatCheck) =
 @Composable
 private fun Sheet(state: TaskSheetState.Open, repeats: Boolean = false) {
     val shown = if (repeats) state.copy(detail = state.detail.copy(repeats = true, repeatLabel = "Every month")) else state
-    SheetFrame { TaskSheetContent(shown, TaskSheetActions.None) }
+    SheetFrame { TaskSheetContent(shown, sampleSheetActions()) }
 }
 
 /** A modal sheet's area: centred and no wider than Material's modal sheet (`BottomSheetDefaults.SheetMaxWidth`, 640 dp), as on a tablet. */

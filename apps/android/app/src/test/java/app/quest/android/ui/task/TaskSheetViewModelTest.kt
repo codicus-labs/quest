@@ -7,7 +7,10 @@ import app.quest.android.FakeRepeatRules
 import app.quest.android.Samples
 import app.quest.android.ui.MainDispatcherRule
 import app.quest.android.ui.openedHolder
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -52,6 +55,22 @@ class TaskSheetViewModelTest {
         vm.close()
 
         assertEquals(listOf("rename t1 Outline chapter three", "describe t1 Two scenes."), core.calls)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun noteSavesAfter300MillisecondsWithoutTyping() = runTest(main.dispatcher) {
+        val vm = viewModel()
+        vm.open("t1")
+        vm.editDescription("First draft")
+        advanceTimeBy(250)
+        vm.editDescription("Final draft")
+        advanceTimeBy(299)
+        assertEquals(emptyList<String>(), core.calls)
+
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(listOf("describe t1 Final draft"), core.calls)
     }
 
     @Test

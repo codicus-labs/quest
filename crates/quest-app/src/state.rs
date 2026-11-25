@@ -20,9 +20,11 @@ pub mod capture;
 pub mod capture_draft;
 #[cfg(test)]
 mod capture_tests;
+mod checklist;
 pub mod entry_editor;
 mod focus;
 mod log_work;
+pub mod notes;
 pub mod quest_editor;
 pub mod quest_picker;
 pub mod recurrence;
@@ -136,8 +138,9 @@ pub struct State {
     pub review_week: NaiveDate,
     /// The task Focus is about when nothing runs: the one started or selected last.
     pub focus_task: Option<EntityId>,
-    /// Focus's editable title and description, for `focus_task`'s task.
     pub focus_draft: Option<FocusDraft>,
+    pub note: Option<notes::NoteDraft>,
+    closed_note: TextEdit,
     pub date_picker: Option<crate::ui::date_picker::Picker>,
     pub quest_picker: Option<quest_picker::QuestPicker>,
     /// Takes edits for a quest picker that already closed (`State::quest_picker_search`).
@@ -212,6 +215,8 @@ impl State {
             review_week: monday,
             focus_task: None,
             focus_draft: None,
+            note: None,
+            closed_note: TextEdit::default(),
             date_picker: None,
             quest_picker: None,
             closed_quest_search: TextEdit::new(""),
@@ -288,6 +293,7 @@ impl State {
             self.drag = DragState::Idle;
             self.landing = None;
         }
+        self.finish_note();
         self.view = view;
         self.close_repeat_editor();
         self.close_task_modal();
@@ -349,7 +355,10 @@ impl State {
     pub fn step_undo(&mut self, event: UndoEvent) {
         match event {
             // A newer delete is what ⌘Z takes back now; any other toast replaces the capture's.
-            UndoEvent::Deleted { .. } | UndoEvent::QuestStatusChanged { .. } | UndoEvent::TaskEdited(_) => {
+            UndoEvent::Deleted { .. }
+            | UndoEvent::QuestStatusChanged { .. }
+            | UndoEvent::TaskEdited(_)
+            | UndoEvent::ChecklistDone { .. } => {
                 self.capture_undo = None;
             }
             _ => {}
@@ -360,6 +369,7 @@ impl State {
             UndoEffect::None => {}
             UndoEffect::Task(edit) => self.undo_task_edit(edit),
             UndoEffect::Restore(item) => self.dispatch(item.restore()),
+            UndoEffect::SetChecklistDone { id, done } => self.dispatch(Command::SetChecklistItemDone { id, done }),
             UndoEffect::SetQuestStatus { quest, status } => {
                 self.dispatch(Command::SetQuestStatus { id: quest, status })
             }
@@ -434,6 +444,7 @@ impl State {
             changed |= self.generate_due_tasks();
         }
         changed |= self.refresh_task_fields(previous, tx);
+        changed |= self.refresh_note(tx);
         changed |= self.take_auth_events();
         changed |= self.take_capture_answer();
         changed |= self.refresh_ai_connections();

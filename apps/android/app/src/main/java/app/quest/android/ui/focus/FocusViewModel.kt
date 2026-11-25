@@ -3,6 +3,12 @@ package app.quest.android.ui.focus
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.quest.android.ui.task.ChecklistActions
+import app.quest.android.ui.task.NoteActions
+import app.quest.android.ui.task.parseNote
+import app.quest.android.ui.task.toggleNoteMarker
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import app.quest.android.core.CoreHolder
 import app.quest.android.core.CoreState
 import app.quest.android.core.Outcome
@@ -16,7 +22,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uniffi.quest_mobile.FocusPickTask
+import uniffi.quest_mobile.ChecklistRow
 import uniffi.quest_mobile.FocusSession
+import uniffi.quest_mobile.UndoToast
 import uniffi.quest_mobile.FocusView
 import uniffi.quest_mobile.QuestChip
 
@@ -50,6 +58,8 @@ sealed interface FocusUiState {
         val description: String,
         /** The quests to pick from for the chip. */
         val quests: List<QuestChip>,
+        val checklist: List<ChecklistRow> = emptyList(),
+        val toast: UndoToast? = null,
     ) : FocusUiState
 
     /** Nothing to focus on: "What are you working on?". */
@@ -61,6 +71,8 @@ private const val INPUTS_KEY = "focus.inputs"
 /** The Focus screen (desktop `ui/focus.rs`): one task with its timer, or a list to start one. */
 class FocusViewModel(private val core: CoreHolder, private val savedState: SavedStateHandle) : ViewModel() {
     private val inputs: StateFlow<FocusInputs> = savedState.getStateFlow(INPUTS_KEY, FocusInputs())
+
+    private var noteSave: Job? = null
 
     /** Re-read on every core change and tick, so the timer counts every second while it runs. */
     val state: StateFlow<FocusUiState> = combine(core.state, inputs, ::focusState)
@@ -78,8 +90,12 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
             is CoreState.Failed -> return FocusUiState.Failed(coreState.message)
             is CoreState.Ready -> coreState
         }
-        return when (val read = core.read { c, now -> c.focus(now, inputs.focusTask) }) {
-            is Outcome.Done -> when (val view = read.value) {
+        val read = core.read { c, now ->
+            val view = c.focus(now, inputs.focusTask)
+            view to if (view is FocusView.Session) c.checklist(view.session.taskId) else emptyList()
+        }
+        return when (read) {
+            is Outcome.Done -> when (val view = read.value.first) {
                 is FocusView.Pick -> FocusUiState.Pick(view.tasks)
                 is FocusView.Session -> {
                     val session = view.session
@@ -89,6 +105,8 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
                         title = drafts?.titleDraft ?: session.title,
                         description = drafts?.descriptionDraft ?: session.description,
                         quests = ready.home.quests,
+                        checklist = read.value.second,
+                        toast = ready.home.toast,
                     )
                 }
             }
@@ -166,7 +184,26 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
 
     fun editTitle(text: String) = editDraft { it.copy(titleDraft = text.replace('\n', ' ')) }
 
-    fun editDescription(text: String) = editDraft { it.copy(descriptionDraft = text) }
+    fun editDescription(text: String) {
+        editDraft { it.copy(descriptionDraft = text) }
+        noteSave?.cancel()
+        noteSave = viewModelScope.launch {
+            delay(300)
+            commitDescription()
+        }
+    }
+
+    val notes = NoteActions(::editDescription, ::commitDescription, core::parseNote) { source, offset ->
+        sessionTask()?.let { report(core.toggleNoteMarker(it, source, offset)) }
+    }
+
+    val checklist = ChecklistActions(
+        toggle = { id, done -> report(core.perform { c, now -> c.setChecklistItemDoneWithUndo(id, done, now) }) },
+    )
+
+    fun undo() = report(core.perform { c, now -> c.undo(now) })
+
+    fun dismissToast() = report(core.perform { c, now -> c.dismissToast(now) })
 
     /** Drafts belong to the task shown when typing started; switching tasks starts fresh ones. */
     private fun editDraft(change: (FocusInputs) -> FocusInputs) {
@@ -187,6 +224,8 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
     }
 
     fun commitDescription() {
+        noteSave?.cancel()
+        noteSave = null
         val current = inputs.value
         val taskId = current.draftTask ?: return
         val description = current.descriptionDraft ?: return

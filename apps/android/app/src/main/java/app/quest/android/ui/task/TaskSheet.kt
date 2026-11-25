@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import app.quest.android.ui.components.UndoSnackbar
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -59,8 +62,6 @@ class TaskSheetActions(
     val close: () -> Unit,
     val editTitle: (String) -> Unit,
     val commitTitle: () -> Unit,
-    val editDescription: (String) -> Unit,
-    val commitDescription: () -> Unit,
     val toggleDone: () -> Unit,
     val setQuest: (String?) -> Unit,
     val setDay: (String?) -> Unit,
@@ -77,12 +78,16 @@ class TaskSheetActions(
     val calendar: (String?, QuickFields, DateTarget) -> CalendarMonth? = { _, _, _ -> null },
     val shiftMonth: (String, Boolean) -> String? = { _, _ -> null },
     val openEntry: (String) -> Unit = {},
+    val notes: NoteActions = NoteActions.None,
+    val checklist: ChecklistActions = ChecklistActions(),
+    val undo: () -> Unit = {},
+    val dismissToast: () -> Unit = {},
 ) {
     val repeatEditor get() = RepeatEditorActions(editRepeat, toggleWeekday, saveRepeat, stopRepeating, closeRepeat)
 
     companion object {
         /** Does nothing; for screenshots. */
-        val None = TaskSheetActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        val None = TaskSheetActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
     }
 }
 
@@ -99,7 +104,13 @@ fun TaskSheet(state: TaskSheetState, actions: TaskSheetActions) {
         // The sheet is its own window, so it needs its own opt-in for UI automation ids.
         modifier = Modifier.semantics { testTagsAsResourceId = true }.testTag("task-sheet"),
     ) {
-        TaskSheetContent(state, actions)
+        LifecycleEventEffect(Lifecycle.Event.ON_STOP) { actions.notes.save() }
+        Box {
+            TaskSheetContent(state, actions)
+            state.toast?.let {
+                UndoSnackbar(it.text, actions.undo, Modifier.align(Alignment.BottomCenter), it.actionLabel, actions.dismissToast)
+            }
+        }
     }
 }
 
@@ -143,15 +154,8 @@ private fun TaskDetails(state: TaskSheetState.Open, actions: TaskSheetActions) {
         )
     }
     HorizontalDivider(color = QuestTheme.colors.border)
-    CommitField(
-        value = state.description,
-        onEdit = actions.editDescription,
-        onCommit = actions.commitDescription,
-        placeholder = stringResource(R.string.task_description_placeholder),
-        style = QuestType.body.copy(color = colors.textMuted),
-        singleLine = false,
-        modifier = Modifier.fillMaxWidth().testTag("sheet-description"),
-    )
+    TaskNote(detail.id, state.description, actions.notes, "sheet-description")
+    TaskChecklist(detail.id, detail.checklist, actions.checklist, editable = true)
     TaskFields(
         detail.quest, detail.plannedOn?.label?.substringBefore(','), detail.dueOn?.label?.substringBefore(','),
         onOpen = { picker = it }, planMoves = detail.postponed.plan, deadlineMoves = detail.postponed.due,

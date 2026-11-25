@@ -412,9 +412,11 @@ private fun focusActions(vm: FocusViewModel, timerStarted: () -> Unit) = FocusAc
     setQuest = vm::setQuest,
     editTitle = vm::editTitle,
     commitTitle = vm::commitTitle,
-    editDescription = vm::editDescription,
-    commitDescription = vm::commitDescription,
     saveDrafts = vm::commitDrafts,
+    notes = vm.notes,
+    checklist = vm.checklist,
+    undo = vm::undo,
+    dismissToast = vm::dismissToast,
 )
 
 /** The plan; the core builds its days only while it is composed (the task sheet over it keeps it). */
@@ -477,8 +479,10 @@ internal fun taskSheetActions(vm: TaskSheetViewModel, openEntry: (String) -> Uni
     close = vm::close,
     editTitle = vm::editTitle,
     commitTitle = vm::commitTitle,
-    editDescription = vm::editDescription,
-    commitDescription = vm::commitDescription,
+    notes = vm.notes,
+    checklist = vm.checklist,
+    undo = vm::undo,
+    dismissToast = vm::dismissToast,
     toggleDone = vm::toggleDone,
     setQuest = vm::setQuest,
     setDay = vm::setDay,

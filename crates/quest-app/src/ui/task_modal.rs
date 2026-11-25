@@ -23,20 +23,7 @@ pub fn title(form: &crate::state::TaskModal, p: &Pal) -> El {
 
 pub fn inline(s: &State, task: &Task, p: &Pal) -> El {
     let form = s.task_modal.as_ref().expect("an expanded row owns the detail");
-    let note = text_input(&form.description, ty::BODY)
-        .key("task-modal-description")
-        .label("Note")
-        .w_full()
-        .min_h(38.0)
-        .color(p.text)
-        .placeholder("Note", p.faint)
-        .on_edit(|s: &mut State| &mut s.task_modal_fields().description)
-        .on_input_change(|s: &mut State, _: &mut Tx| s.save_task_description())
-        .on_input_key(inline_keys)
-        .on_submit(|s: &mut State, _: &mut Tx| {
-            s.task_modal_fields().description.insert("\n");
-            s.save_task_description();
-        });
+    let note = super::notes::field(s, task, crate::state::notes::NoteHost::Detail, p);
     let mut detail = col()
         .key("task-modal")
         .w_full()
@@ -46,6 +33,7 @@ pub fn inline(s: &State, task: &Task, p: &Pal) -> El {
         .pb(10.0)
         .on_background_press(|_: &mut State| {})
         .child(note)
+        .child(super::checklist::detail(s, task, form, p))
         .child(super::task_fields::fields(s, Some(task), p, false));
     let total = s.snap.task_tracked_ms(task.id, s.now);
     if total > 0 {
