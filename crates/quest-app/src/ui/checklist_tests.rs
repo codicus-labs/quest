@@ -1,14 +1,31 @@
 use quest_domain::{Command, EntityId};
 use rune::{Key, Mods};
 
+use crate::state::View;
+
 use super::dnd_tests::{scroll_into_view, task};
 use super::tests::{click, command, demo_app, press, type_text};
 
 #[test]
 fn checklist_keyboard_reorders_deletes_and_undoes_in_the_open_row() {
+    checklist_keyboard(false);
+}
+
+#[test]
+fn focus_checklist_has_the_same_keyboard_controls_as_the_open_row() {
+    checklist_keyboard(true);
+}
+
+fn checklist_keyboard(in_focus: bool) {
     let (mut rt, _dir) = demo_app();
     let id = task(&rt, "Design the next chapter").id;
-    rt.update(move |s, _| s.open_task_modal(id));
+    rt.update(move |s, _| {
+        if in_focus {
+            s.go(View::Focus);
+        } else {
+            s.open_task_modal(id);
+        }
+    });
     scroll_into_view(&mut rt, "checklist-add");
     click(&mut rt, "checklist-add");
     for name in ["First", "Second"] {
@@ -39,7 +56,12 @@ fn checklist_keyboard_reorders_deletes_and_undoes_in_the_open_row() {
     press(&mut rt, Key::Escape, Mods::default());
     command(&mut rt, 'z');
     assert_eq!(items(&rt.state), [second, inserted, first]);
-    assert!(rt.state.task_modal.is_some());
+    if in_focus {
+        assert_eq!(rt.state.view, View::Focus);
+        assert!(rt.state.snap.running_entry().is_some());
+    } else {
+        assert!(rt.state.task_modal.is_some());
+    }
 }
 
 #[test]

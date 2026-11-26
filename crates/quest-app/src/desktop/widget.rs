@@ -8,7 +8,7 @@ use quest_view::{
 };
 use rune::{
     App, AppHandle, AppSpec, Cx, Display, Drag, El, Phase, PopupItem, PopupMenu, Tx, WindowHandle, WindowSpec, col,
-    icon, row, spacer, text,
+    icon, row, text,
 };
 
 use super::{Desktop, PreferenceWriter, passive_panel};
@@ -376,7 +376,11 @@ fn view(s: &Widget, _: &mut Cx<Widget>) -> El {
         |r| (s.now - r.entry.started_at).num_milliseconds(),
     );
     let time = || {
-        text(format::timer(ms))
+        text(format::compact_timer(ms))
+            .grow(1.0)
+            .min_w(0.0)
+            .single_line()
+            .truncate()
             .key("widget-time")
             .font(ty::BODY_MEDIUM.features("'tnum' 1"))
             .color(if paused.is_some() { p.muted } else { p.text })
@@ -445,17 +449,13 @@ fn view(s: &Widget, _: &mut Cx<Widget>) -> El {
             .px(13.0)
             .pt(6.0)
             .child(main)
-            .child(
-                row()
-                    .w_full()
-                    .h(40.0)
-                    .gap(4.0)
-                    .center_y()
-                    .child(time())
-                    .child(spacer())
-                    .children(play())
-                    .child(button("widget-stop", "Stop", &icons::STOP, p.muted, Action::Stop)),
-            )
+            .child(row().w_full().h(40.0).gap(4.0).center_y().child(time()).children(play()).child(button(
+                "widget-stop",
+                "Stop",
+                &icons::STOP,
+                p.muted,
+                Action::Stop,
+            )))
             .children(back)
     };
     body.key("timer-widget")

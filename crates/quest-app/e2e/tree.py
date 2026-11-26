@@ -65,6 +65,20 @@ def main():
             organizing = "Organizing · rebooked 14:44–now"
             sys.exit(0 if task in labels and organizing in labels else 1)
         sys.exit(0 if f"{title} 14:42–now" in labels and not any("rebooked" in label for label in labels) else 1)
+    if question == "stable-picker":
+        def shown(tree, key):
+            return next((e for e in tree["elements"] if e.get("key") == key
+                         and not e.get("exiting")), {})
+
+        with open(sys.argv[4]) as f:
+            stable = json.load(f)
+        first = shown(tree, title)
+        rect = first.get("rect")
+        _, form_y, _, form_h = shown(tree, "quick-add-box").get("rect", [0] * 4)
+        _, _, _, window_h = shown(tree, "app").get("rect", [0] * 4)
+        ok = (first.get("opacity") == 1 and rect is not None and rect == shown(stable, title).get("rect")
+              and rect[1] >= form_y + form_h and rect[1] + rect[3] <= window_h + 0.5)
+        sys.exit(0 if ok else 1)
     if question == "keytext":
         wanted = sys.argv[4]
         sys.exit(0 if any(e.get("key") == title and e.get("text") == wanted for e in tree["elements"]) else 1)

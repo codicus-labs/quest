@@ -1,0 +1,5 @@
+[
+  {"t":0.2,"type":"tap","key":"row-title-__TASK_ID__"},
+  {"t":0.6,"type":"tap","key":"task-modal-description"},
+  {"t":0.9,"type":"mark","name":"end"}
+]

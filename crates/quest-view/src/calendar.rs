@@ -77,6 +77,27 @@ pub fn shift(cursor: NaiveDate, step: Step, forward: bool, today: NaiveDate) -> 
     next.unwrap_or(cursor).max(today)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Selection {
+    Move(NaiveDate),
+    Apply(Option<NaiveDate>),
+}
+
+pub fn letter_selection(letter: &str, cursor: NaiveDate, today: NaiveDate) -> Option<Selection> {
+    Some(match letter.to_ascii_lowercase().as_str() {
+        "h" => Selection::Move(shift(cursor, Step::Day, false, today)),
+        "l" => Selection::Move(shift(cursor, Step::Day, true, today)),
+        "j" => Selection::Move(shift(cursor, Step::Week, true, today)),
+        "k" => Selection::Move(shift(cursor, Step::Week, false, today)),
+        "[" => Selection::Move(shift(cursor, Step::Month, false, today)),
+        "]" => Selection::Move(shift(cursor, Step::Month, true, today)),
+        "t" => Selection::Apply(QuickDate::Today.date(today)),
+        "m" => Selection::Apply(QuickDate::Tomorrow.date(today)),
+        "n" | "w" => Selection::Apply(QuickDate::NextMonday.date(today)),
+        _ => return None,
+    })
+}
+
 pub fn month(cursor: NaiveDate, today: NaiveDate, dates: TaskDates, field: DateField) -> Vec<Day> {
     let first = cursor.with_day(1).unwrap_or(cursor);
     let start = first.checked_sub_days(Days::new(u64::from(first.weekday().num_days_from_monday()))).unwrap_or(first);

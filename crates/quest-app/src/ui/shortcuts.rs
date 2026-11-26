@@ -48,12 +48,11 @@ const LEFT: [Group; 3] = [
     ),
 ];
 
-const RIGHT: [Group; 2] = [
+const RIGHT: [Group; 3] = [
     (
         "Tasks",
         &[
-            (&["J", "K"], "Next / previous"),
-            (&["↓", "↑"], "Next / previous"),
+            (&["J/K", "↓/↑"], "Next / previous"),
             (&["⌥", "↑/↓"], "Reorder task"),
             (&["↵"], "Open"),
             (&["X"], "Done / open"),
@@ -62,10 +61,21 @@ const RIGHT: [Group; 2] = [
             (&["N"], "New task"),
             (&["L", "P", "D"], "Quest / plan / deadline"),
             (&["⌘", "⇧", "L/P/D"], "Quick-add fields"),
-            (&["T", "M", "N", "⌫"], "Calendar quick dates"),
+            (&["⌘", "⇧", "N"], "Quick-add Markdown note"),
+            (&["R", "⌘⇧R"], "Edit repeat"),
             (&["W"], "Next week"),
             (&["⌘", "⌫"], "Delete"),
             (&["⌘", "Z"], "Undo"),
+        ],
+    ),
+    (
+        "Calendar",
+        &[
+            (&["H/L", "←/→"], "Previous / next day"),
+            (&["K/J", "↑/↓"], "Previous / next week"),
+            (&["[ / ]"], "Previous / next month"),
+            (&["↵"], "Apply date"),
+            (&["T", "M", "N/W", "⌫"], "Today / tomorrow / Monday / clear"),
         ],
     ),
     (
@@ -118,7 +128,7 @@ fn column(groups: &[Group], p: &Pal) -> El {
                 row()
                     .role("row")
                     .w_full()
-                    .h(32.0)
+                    .h(24.0)
                     .center_y()
                     .border_sides([0.0, 0.0, 1.0, 0.0], p.border)
                     .child(combo)

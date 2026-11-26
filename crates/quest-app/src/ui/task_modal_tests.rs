@@ -212,7 +212,7 @@ fn date_quest_and_delete_act_on_the_task() {
     click(&mut rt, "task-modal-quest");
     click(&mut rt, &format!("quest-picker-{first}"));
     assert_eq!(rt.state.snap.task(id).unwrap().quest_id, Some(first));
-    assert_eq!(text_of(&rt, "task-modal-repeat"), None, "Repeat is a row, not a field");
+    assert!(rt.find("task-modal-repeat").is_some());
     let first_entry =
         rt.state.snap.time_entries.iter().filter(|e| e.task_id == Some(id)).max_by_key(|e| e.started_at).unwrap().id;
     click(&mut rt, "task-time");
@@ -232,6 +232,26 @@ fn date_quest_and_delete_act_on_the_task() {
     assert!(modal_task(&rt).is_none() && rt.find("task-modal").is_none(), "and the dialog closed");
     click(&mut rt, "toast-action");
     assert!(rt.state.snap.task(id).is_some(), "Undo brings it back");
+}
+
+#[test]
+fn delete_edits_text_in_the_title_and_deletes_the_task_outside_it() {
+    let (mut rt, _dir) = app('2');
+    let id = task(&rt, OPEN).id;
+    click_card(&mut rt, "today", id);
+    click(&mut rt, "task-modal-title");
+    command(&mut rt, 'a');
+    let cmd = Mods { cmd: true, ..Mods::default() };
+    press(&mut rt, Key::Backspace, cmd);
+    assert_eq!(text_of(&rt, "task-modal-title").as_deref(), Some(""));
+    assert_eq!(rt.state.snap.task(id).unwrap().title, OPEN);
+    press(&mut rt, Key::Command('r'), Mods { cmd: true, shift: true, ..Mods::default() });
+    assert_eq!(rt.state.overlay, Overlay::RepeatEditor);
+    press(&mut rt, Key::Escape, Mods::default());
+    press(&mut rt, Key::Backspace, cmd);
+    assert!(rt.state.snap.task(id).is_none());
+    command(&mut rt, 'z');
+    assert_eq!(rt.state.snap.task(id).unwrap().title, OPEN);
 }
 
 #[test]

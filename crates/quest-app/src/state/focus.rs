@@ -12,6 +12,7 @@ use super::{State, View};
 pub struct FocusDraft {
     pub task: EntityId,
     pub title: TextEdit,
+    pub checklist: super::checklist::ChecklistEdits,
 }
 
 impl State {
@@ -34,14 +35,19 @@ impl State {
         if self.focus_draft.as_ref().is_some_and(|d| d.task == task.id) {
             return;
         }
-        let draft = FocusDraft { task: task.id, title: TextEdit::new(task.title.clone()) };
+        let draft =
+            FocusDraft { task: task.id, title: TextEdit::new(task.title.clone()), checklist: Default::default() };
         self.focus_draft = Some(draft);
     }
 
     /// Focus's fields for its text inputs. Only empty when Focus shows no task, and then no
     /// field is on screen: a stray edit lands in a draft no task owns, and saving skips it.
     pub fn focus_fields(&mut self) -> &mut FocusDraft {
-        self.focus_draft.get_or_insert_with(|| FocusDraft { task: EntityId::new(), title: TextEdit::default() })
+        self.focus_draft.get_or_insert_with(|| FocusDraft {
+            task: EntityId::new(),
+            title: TextEdit::default(),
+            checklist: Default::default(),
+        })
     }
 
     /// Saves the edited title; an empty one is not saved (the task keeps its name).

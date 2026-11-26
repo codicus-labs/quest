@@ -169,6 +169,15 @@ impl Store {
         Ok(())
     }
 
+    /// Like `dispatch_all`, planned against a specific live workspace.
+    pub fn dispatch_all_in(&self, workspace: EntityId, commands: &[Command]) -> Result<(), CommandError> {
+        let changes = self.shared.apply_local_batch(Some(workspace), commands)?;
+        if !changes.is_empty() {
+            self.queue(changes);
+        }
+        Ok(())
+    }
+
     /// Shows `workspace` from now on and remembers it for the next start of this profile on
     /// this device. Refused unless the workspace exists and is not deleted. Callers drop what
     /// belongs to the previous workspace (open dialogs, selection, undo).

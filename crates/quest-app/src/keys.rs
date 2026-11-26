@@ -36,8 +36,10 @@ pub enum Shortcut {
     },
     Back,
     DeleteSelection,
+    DeleteTask,
     Undo,
     EditNotes,
+    Repeat,
     Organize,
     BookOrganizing,
     Pick(Picker),
@@ -55,8 +57,6 @@ pub enum TaskKey {
     /// ⌘↵ in Focus: done, session over, back Home. In Log work: save.
     Complete,
     MoveToNextMonday,
-    /// ⌘⌫: delete, with an undo toast.
-    Delete,
     /// ↵: expand or collapse the selected row or the card under the pointer.
     Open,
 }
@@ -70,9 +70,13 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         && ev.mods.shift
         && !ev.mods.alt
         && !ev.mods.ctrl
-        && let Some(picker) = Picker::from_letter(letter)
     {
-        return Some(Shortcut::QuickPick(picker));
+        if letter.eq_ignore_ascii_case(&'r') {
+            return Some(Shortcut::Repeat);
+        }
+        if let Some(picker) = Picker::from_letter(letter) {
+            return Some(Shortcut::QuickPick(picker));
+        }
     }
     match &ev.key {
         Key::Command('k') => Some(Shortcut::TogglePalette),
@@ -94,13 +98,14 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         Key::Escape => Some(Shortcut::Back),
         Key::Enter if ev.mods.cmd => Some(Shortcut::Task(TaskKey::Complete)),
         Key::Enter if plain && !ev.mods.shift => Some(Shortcut::Task(TaskKey::Open)),
-        Key::Backspace | Key::Delete if ev.mods.cmd => Some(Shortcut::Task(TaskKey::Delete)),
+        Key::Backspace | Key::Delete if ev.mods.cmd => Some(Shortcut::DeleteTask),
         Key::Backspace | Key::Delete => Some(Shortcut::DeleteSelection),
         Key::Text(t) if plain => match t.to_lowercase().as_str() {
             "f" => Some(Shortcut::Go(View::Focus)),
             "o" => Some(Shortcut::Organize),
             "b" => Some(Shortcut::BookOrganizing),
             "e" if !ev.mods.shift => Some(Shortcut::EditNotes),
+            "r" if !ev.mods.shift => Some(Shortcut::Repeat),
             "g" => Some(Shortcut::JumpToday),
             "[" => Some(Shortcut::ReviewWeek(-1)),
             "]" => Some(Shortcut::ReviewWeek(1)),
@@ -127,6 +132,18 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     let Some(shortcut) = shortcut(ev) else { return false };
+    if s.view == View::Focus
+        && tx.focused().is_some_and(|key| key.starts_with("checklist-"))
+        && matches!(
+            shortcut,
+            Shortcut::Back
+                | Shortcut::Organize
+                | Shortcut::BookOrganizing
+                | Shortcut::Task(TaskKey::StartPause | TaskKey::ToggleDone)
+        )
+    {
+        return true;
+    }
     // With a dialog or sheet open, only the keys that close it act.
     if s.overlay == Overlay::LogWork && shortcut == Shortcut::Task(TaskKey::Complete) {
         s.save_log_work();
@@ -216,6 +233,8 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         Shortcut::Undo => s.undo_latest(),
         Shortcut::EditNotes => return s.edit_notes(tx),
+        Shortcut::Repeat => return repeat(s, tx),
+        Shortcut::DeleteTask => return delete_task(s, tx),
         Shortcut::Pick(picker) => {
             let Some(task) = s.shortcut_task() else { return false };
             task_fields::open(s, Some(task), picker, tx);
@@ -234,11 +253,42 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// T, ⌥⌘I and the header's button: shows or hides the tracked-time column.
 pub fn quick_picker(s: &mut State, picker: Picker, tx: &mut Tx) {
     if s.quick_hosted() {
         task_fields::open(s, None, picker, tx);
     }
+}
+
+pub fn repeat(s: &mut State, tx: &mut Tx) -> bool {
+    if s.overlay != Overlay::None || s.auth.locks_edits() {
+        return false;
+    }
+    let Some(task) = s.task_modal.as_ref().map(|form| form.task).or_else(|| s.shortcut_task()) else {
+        return false;
+    };
+    tx.blur();
+    s.open_repeat_editor(task);
+    true
+}
+
+pub fn delete_task(s: &mut State, tx: &mut Tx) -> bool {
+    if s.overlay != Overlay::None
+        || s.auth.locks_edits()
+        || matches!(tx.focused(), Some("task-modal-title" | "focus-title" | "quick-add" | "quick-add-note"))
+    {
+        return false;
+    }
+    let target = if s.view == View::Focus {
+        s.snap.running_entry().and_then(|e| e.task_id)
+    } else {
+        s.task_modal.as_ref().map(|form| form.task).or_else(|| s.shortcut_task())
+    };
+    let Some(task) = target else { return false };
+    tx.blur();
+    s.hovered_task = None;
+    s.selected_task = None;
+    s.delete(Deletable::Task(task));
+    true
 }
 
 pub fn toggle_tracked(s: &mut State) {
@@ -261,12 +311,6 @@ fn on_task_key(s: &mut State, task: EntityId, key: TaskKey, tx: &mut Tx) {
             let planned_on = quest_view::calendar::QuickDate::NextMonday.date(s.today());
             let at = s.clock.now();
             s.dispatch(Command::MoveTask { id: task, planned_on, position: Position::Bottom, at });
-        }
-        TaskKey::Delete => {
-            tx.blur();
-            s.hovered_task = None;
-            s.selected_task = None;
-            s.delete(Deletable::Task(task));
         }
     }
 }
@@ -318,7 +362,7 @@ mod tests {
         assert_eq!(shortcut(&text("x")), Some(Shortcut::Task(TaskKey::ToggleDone)));
         assert_eq!(shortcut(&text("w")), Some(Shortcut::Task(TaskKey::MoveToNextMonday)));
         let cmd = Mods { cmd: true, ..Mods::default() };
-        assert_eq!(shortcut(&KeyEvent { key: Key::Backspace, mods: cmd }), Some(Shortcut::Task(TaskKey::Delete)));
+        assert_eq!(shortcut(&KeyEvent { key: Key::Backspace, mods: cmd }), Some(Shortcut::DeleteTask));
         assert_eq!(shortcut(&KeyEvent { key: Key::Enter, mods: cmd }), Some(Shortcut::Task(TaskKey::Complete)));
         assert_eq!(shortcut(&KeyEvent { key: Key::Enter, mods: Mods::default() }), Some(Shortcut::Task(TaskKey::Open)));
     }

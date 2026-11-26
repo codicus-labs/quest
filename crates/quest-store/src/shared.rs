@@ -206,11 +206,22 @@ impl Shared {
     /// Like `apply_local` for several commands, all or nothing: each is planned against the state
     /// the ones before it leave, and nothing is applied if one is refused.
     pub fn apply_local_all(&self, commands: &[Command]) -> Result<Vec<FieldChange>, CommandError> {
+        self.apply_local_batch(None, commands)
+    }
+
+    pub fn apply_local_batch(
+        &self,
+        workspace: Option<EntityId>,
+        commands: &[Command],
+    ) -> Result<Vec<FieldChange>, CommandError> {
         let now = self.wall_clock.now_ms();
         let (changes, version, store, workspace) = {
             let mut fields = lock(&self.fields);
-            let PlannedBatch { changes, store, clock } =
-                plan_all(commands, &fields.store, fields.workspace, &fields.clock, now)?;
+            let target = workspace.unwrap_or(fields.workspace);
+            if workspace.is_some() && !Snapshot::is_live_workspace(&fields.store, target) {
+                return Err(CommandError::UnknownWorkspace(target));
+            }
+            let PlannedBatch { changes, store, clock } = plan_all(commands, &fields.store, target, &fields.clock, now)?;
             if changes.is_empty() {
                 return Ok(changes);
             }

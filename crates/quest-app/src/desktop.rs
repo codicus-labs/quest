@@ -61,6 +61,7 @@ struct DesktopData {
     store: Arc<Store>,
     dark: bool,
     main_focused: bool,
+    panel_open: bool,
     locks_edits: bool,
     profile: u64,
 }
@@ -85,6 +86,7 @@ impl MainWindows {
             store,
             dark: true,
             main_focused: false,
+            panel_open: false,
             locks_edits: false,
             profile: 0,
         }));
@@ -128,6 +130,18 @@ pub fn quick_add(s: &mut State, _: &mut Tx) {
     if let Some(windows) = &s.desktop {
         windows.panel.update(panel::Panel::toggle);
     }
+}
+
+// Rune's native keys-first menu dispatch excludes NSPanels.
+pub fn forward_panel_key(s: &State, event: rune::KeyEvent) -> bool {
+    let Some(windows) = &s.desktop else { return false };
+    if !windows.shared.lock().unwrap().panel_open {
+        return false;
+    }
+    windows.panel.update(move |panel, tx| {
+        panel.key(&event, tx);
+    });
+    true
 }
 
 pub fn show_widget(s: &mut State, _: &mut Tx) {

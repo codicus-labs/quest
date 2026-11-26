@@ -146,6 +146,15 @@ pub fn layer<S: QuestHost>(s: &S, p: &Pal, cx: &Cx<S>, layer: &mut Vec<El>) {
         (Some(chip), Some(bounds)) => fit(chip, bounds),
         _ => Fit::DEFAULT,
     };
+    let surface = surface(s, picker, p, &fit);
+    layer.push(popover::anchored(&p.kit, surface, &anchor, fit.placement, GAP));
+}
+
+pub(crate) fn panel_surface<S: QuestHost>(s: &S, p: &Pal) -> Option<El> {
+    Some(surface(s, s.picker()?, p, &Fit::DEFAULT))
+}
+
+fn surface<S: QuestHost>(s: &S, picker: &QuestPicker, p: &Pal, fit: &Fit) -> El {
     let rows = s.picker_rows();
     let active = s.picker_active(&rows);
     let current = s.picked(&picker.target);
@@ -200,8 +209,7 @@ pub fn layer<S: QuestHost>(s: &S, p: &Pal, cx: &Cx<S>, layer: &mut Vec<El>) {
         .modal(true, |s: &mut S| {
             s.picker_mut().take();
         });
-    let surface = popover::raised(&p.kit, surface, 10.0).clip_rounded(10.0);
-    layer.push(popover::anchored(&p.kit, surface, &anchor, fit.placement, GAP));
+    popover::raised(&p.kit, surface, 10.0).clip_rounded(10.0)
 }
 
 fn option<S: QuestHost>(row_data: &PickRow, active: bool, current: bool, p: &Pal) -> El {

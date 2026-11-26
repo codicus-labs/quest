@@ -7,7 +7,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use quest_domain::{EntityId, Position, Snapshot, TaskDates};
 use quest_view::{calendar, quick_add};
 use rune::{
-    Align, App, AppHandle, AppSpec, Cx, DisplayTarget, El, Key, KeyEvent, OverlayPlacement, ScreenEdge, TextEdit, Tx,
+    Align, App, AppHandle, AppSpec, DisplayTarget, El, Key, KeyEvent, OverlayPlacement, ScreenEdge, TextEdit, Tx,
     WindowOptions, WindowSpec, col, icon, row, text,
 };
 
@@ -83,6 +83,7 @@ pub(super) fn windows(
             feedback: feedback_handle,
             main,
             input: TextEdit::default(),
+            note: None,
             fields: quick_add::Fields::default(),
             choice: 0,
             calendar: None,
@@ -113,6 +114,7 @@ pub struct Panel {
     feedback: AppHandle<Feedback>,
     main: AppHandle<State>,
     input: TextEdit,
+    note: Option<TextEdit>,
     fields: quick_add::Fields,
     choice: usize,
     calendar: Option<Calendar>,
@@ -135,6 +137,8 @@ impl Panel {
         self.landed = None;
         self.error = None;
         self.open = true;
+        self.shared.lock().unwrap().panel_open = true;
+        self.resize(tx);
         self.handle.place(DisplayTarget::Primary, POSITION);
         self.handle.show();
         tx.focus_when_shown("quick-add", false);
@@ -142,9 +146,11 @@ impl Panel {
 
     fn close(&mut self, tx: &mut Tx) {
         self.open = false;
+        self.shared.lock().unwrap().panel_open = false;
         self.calendar = None;
         self.picker = None;
         self.input = TextEdit::default();
+        self.note = None;
         self.fields = quick_add::Fields::default();
         self.choice = 0;
         tx.instant();
@@ -152,11 +158,37 @@ impl Panel {
         self.handle.hide();
     }
 
-    fn key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
-        if !self.open || ev.key != Key::Escape {
+    pub(super) fn key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
+        if !self.open {
+            return false;
+        }
+        if task_fields::quick_chord(self, ev, tx) {
+            return true;
+        }
+        if self.calendar.is_some() && task_fields::calendar_keys(self, ev, tx) {
+            return true;
+        }
+        if ev.key != Key::Escape {
             return false;
         }
         self.escape_quick(tx);
+        true
+    }
+
+    fn resize(&mut self, tx: &mut Tx) -> bool {
+        let height = if self.calendar.is_some() || self.picker.is_some() {
+            PICKER_HEIGHT
+        } else {
+            FORM_HEIGHT
+                + 25.0 * task_fields::shown_suggestions(self) as f32
+                + if self.error.is_some() { 24.0 } else { 0.0 }
+        } + if self.note.is_some() { task_fields::NOTE_HEIGHT } else { 0.0 };
+        if self.height == height {
+            return false;
+        }
+        tx.resize_window_instant((WIDTH, height));
+        self.handle.place(DisplayTarget::Primary, POSITION);
+        self.height = height;
         true
     }
 
@@ -186,18 +218,7 @@ impl Panel {
             !Arc::ptr_eq(&self.snap, &snap) || self.dark != dark || clock::local_day(self.now) != clock::local_day(now);
         (self.snap, self.dark, self.profile, self.now) = (snap, dark, profile, now);
         if self.open {
-            let height = if self.calendar.is_some() || self.picker.is_some() {
-                PICKER_HEIGHT
-            } else {
-                let suggestions = task_fields::suggestions(self).map_or(0, |(_, rows)| rows.len().min(6));
-                FORM_HEIGHT + 25.0 * suggestions as f32 + if self.error.is_some() { 24.0 } else { 0.0 }
-            };
-            if self.height != height {
-                tx.resize_window_instant((WIDTH, height));
-                self.handle.place(DisplayTarget::Primary, POSITION);
-                self.height = height;
-                changed = true;
-            }
+            changed |= self.resize(tx);
             tx.wake_after(clock::wake_for(now, clock::next_whole(now, 60)));
         }
         changed
@@ -205,6 +226,20 @@ impl Panel {
 }
 
 impl QuickHost for Panel {
+    fn note(&self) -> &Option<TextEdit> {
+        &self.note
+    }
+    fn note_mut(&mut self) -> &mut Option<TextEdit> {
+        &mut self.note
+    }
+
+    fn open_note(&mut self, tx: &mut Tx) {
+        self.calendar = None;
+        self.picker = None;
+        self.note.get_or_insert_with(TextEdit::default);
+        tx.focus_when_shown("quick-add-note", true);
+        self.resize(tx);
+    }
     fn snapshot(&self) -> &Snapshot {
         &self.snap
     }
@@ -245,6 +280,7 @@ impl QuickHost for Panel {
                 tx.focus_when_shown("task-calendar", true);
             }
         }
+        self.resize(tx);
     }
     fn escape_quick(&mut self, tx: &mut Tx) {
         if self.calendar.is_some() {
@@ -260,9 +296,11 @@ impl QuickHost for Panel {
             return;
         }
         let id = EntityId::new();
-        let Some(command) = self.draft().command(id, Position::Bottom) else {
+        let description = self.note.as_ref().map_or("", |note| note.text.as_str());
+        let commands = self.draft().commands(id, Position::Bottom, description);
+        if commands.is_empty() {
             return;
-        };
+        }
         let data = self.shared.lock().unwrap();
         if data.locks_edits || self.profile != data.profile || self.snap.workspace != data.store.snapshot().workspace {
             self.error = Some("The active workspace or account is changing. Reopen Quick Add to try again.".into());
@@ -270,7 +308,7 @@ impl QuickHost for Panel {
         }
         let store = data.store.clone();
         drop(data);
-        if let Err(error) = store.dispatch_in(self.snap.workspace, command) {
+        if let Err(error) = store.dispatch_all_in(self.snap.workspace, &commands) {
             self.error = Some(format!("Couldn’t add task: {error}."));
             return;
         }
@@ -369,22 +407,21 @@ impl QuestHost for Panel {
     }
 }
 
-fn panel_view(s: &Panel, cx: &mut Cx<Panel>) -> El {
+fn panel_view(s: &Panel, _: &mut rune::Cx<Panel>) -> El {
     let dark = s.appearance_override.unwrap_or(s.dark);
     let p = pal(dark);
     if !s.open {
         return s.landed.as_ref().map_or_else(col, |label| feedback_view(label, dark));
     }
-    let base = col()
+    let picker = task_fields::calendar_surface(s, p).or_else(|| quest_picker::panel_surface(s, p));
+    col()
         .key("app")
         .w_full()
         .h_full()
         .child(task_fields::quick_add_form(s, p, "New to-do…", true))
-        .children(s.error.as_ref().map(|error| text(error.clone()).font(ty::SMALL).color(p.error).fill(p.card)));
-    let mut layer = Vec::new();
-    task_fields::layer(s, p, cx, &mut layer);
-    quest_picker::layer(s, p, cx, &mut layer);
-    rune_kit::root(base, layer).on_background_press_tx(|s: &mut Panel, tx| s.escape_quick(tx))
+        .children(picker.map(|picker| picker.ml(12.0).mt(4.0).transition(rune::Transition::none())))
+        .children(s.error.as_ref().map(|error| text(error.clone()).font(ty::SMALL).color(p.error).fill(p.card)))
+        .on_background_press_tx(|s: &mut Panel, tx| s.escape_quick(tx))
 }
 
 pub(super) struct Feedback {

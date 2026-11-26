@@ -19,23 +19,20 @@ fn cadence(rule: RepeatRule) -> String {
     repeat::cadence(rule.every, rule.frequency)
 }
 
-pub fn task_row(s: &State, task: &Task, p: &Pal) -> El {
+pub(super) fn task_chip(s: &State, task: &Task, p: &Pal) -> El {
     let id = task.id;
-    let label = repeat::summary(&s.snap, task);
-    row()
+    let cadence = repeat::series_of(&s.snap, task).repeat.map(|schedule| self::cadence(schedule.rule));
+    super::task_fields::field_chip(p)
         .key("task-modal-repeat")
         .role("button")
-        .label(format!("Repeat: {label}"))
+        .label(format!("Repeat: {}", cadence.as_deref().unwrap_or("Does not repeat")))
         .focusable(true)
-        .h(26.0)
-        .px(10.0)
-        .gap(10.0)
-        .center_y()
-        .radius(8.0)
+        .min_w(0.0)
+        .max_w(140.0)
         .cursor(Cursor::Pointer)
-        .hover(p.hover)
+        .help("Repeat (R / ⌘⇧R)")
         .child(icon(&icons::REPEAT, 15.0).color(p.muted))
-        .child(text(label).font(ty::BODY).color(p.text))
+        .children(cadence.map(|label| text(label).font(ty::SMALL).color(p.text).min_w(0.0).single_line().truncate()))
         .on_press_tx(move |s: &mut State, tx: &mut Tx| {
             tx.blur();
             s.open_repeat_editor(id);

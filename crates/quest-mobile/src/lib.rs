@@ -123,4 +123,9 @@ pub fn check_server_url(url: String, policy: UrlPolicy) -> Result<(), MobileErro
     guard::guard(|| server_url::parse_server_url(&url, policy).map(drop))
 }
 
+#[uniffi::export]
+pub fn compact_timer(elapsed_ms: i64) -> String {
+    quest_view::format::compact_timer(elapsed_ms)
+}
+
 uniffi::setup_scaffolding!();

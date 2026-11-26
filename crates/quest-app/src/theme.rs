@@ -125,6 +125,7 @@ pub mod ty {
     /// A list group's head ("3 done", a Logbook day).
     pub const GROUP: TextStyle = TextStyle::new(13.0, 700.0).lh(18.0);
     /// The player's clock and the tracked column's totals.
+    pub const TOTAL_COMPACT: TextStyle = TextStyle::new(20.0, 600.0).lh(32.0).tracking(-0.4).features("'tnum' 1");
     pub const TOTAL: TextStyle = TextStyle::new(26.0, 600.0).lh(32.0).tracking(-0.4).features("'tnum' 1");
 }
 

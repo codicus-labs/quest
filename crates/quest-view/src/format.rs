@@ -15,6 +15,15 @@ pub fn timer(ms: i64) -> String {
     if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m:02}:{s:02}") }
 }
 
+/// A compact timer: 59:59 under an hour, then hours and whole minutes.
+pub fn compact_timer(ms: i64) -> String {
+    let minutes = ms.max(0) / 60_000;
+    if minutes < 60 {
+        return timer(ms);
+    }
+    format!("{}h {:02}m", minutes / 60, minutes % 60)
+}
+
 /// "Thursday, October 15".
 pub fn long_day(day: NaiveDate) -> String {
     day.format("%A, %B %-d").to_string()
@@ -50,6 +59,16 @@ mod tests {
         assert_eq!(timer(36 * 60_000), "36:00");
         assert_eq!(timer(90 * 60_000), "1:30:00");
         assert_eq!(timer(-5), "00:00");
+    }
+
+    #[test]
+    fn compact_timer_drops_seconds_from_one_hour() {
+        assert_eq!(compact_timer(-1), "00:00");
+        assert_eq!(compact_timer(3_599_999), "59:59");
+        assert_eq!(compact_timer(3_600_000), "1h 00m");
+        assert_eq!(compact_timer((60 + 5) * 60_000), "1h 05m");
+        assert_eq!(compact_timer((18 * 60 + 38) * 60_000 + 15_000), "18h 38m");
+        assert_eq!(compact_timer((99 * 60 + 59) * 60_000), "99h 59m");
     }
 
     #[test]

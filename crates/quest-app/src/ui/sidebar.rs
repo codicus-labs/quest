@@ -7,7 +7,7 @@ use quest_domain::{EntityId, TaskList};
 use quest_view::lists;
 use quest_view::player::{self, Player};
 use quest_view::tracked::{self, QuestWeek};
-use rune::{Color, Cursor, El, Icon, ScrollSpec, Shape, Tx, canvas, col, el, icon, row, spacer, text};
+use rune::{Color, Cursor, El, Icon, ScrollSpec, Shape, Tx, canvas, col, el, icon, row, text};
 
 use crate::format;
 use crate::icons;
@@ -204,7 +204,7 @@ fn organizing_hint(s: &State, p: &Pal) -> Option<El> {
 
 fn player_card(s: &State, p: &Pal) -> Option<El> {
     let card = col().key("player").w_full().mt(14.0).padding(12.0).radius(12.0).fill(p.card).border(1.0, p.border);
-    let since = |at: chrono::DateTime<chrono::Utc>| format::timer((s.now - at).num_milliseconds());
+    let since = |at: chrono::DateTime<chrono::Utc>| (s.now - at).num_milliseconds();
     Some(match player::player(&s.snap) {
         Player::Empty => return None,
         Player::Resume(task) => card.child(text("Resume").font(ty::SMALL).color(p.muted)).child(
@@ -229,7 +229,7 @@ fn player_card(s: &State, p: &Pal) -> Option<El> {
                         .single_line()
                         .truncate(),
                 );
-            let mut controls = row().w_full().gap(6.0).center_y().child(clock(since(started_at), p)).child(spacer());
+            let mut controls = row().w_full().gap(6.0).center_y().child(clock(since(started_at), p));
             if task.is_some() {
                 controls = controls.child(
                     parts::icon_button("player-focus", "Open focus", &icons::FOCUS, p.muted, p, |s: &mut State, tx| {
@@ -246,12 +246,7 @@ fn player_card(s: &State, p: &Pal) -> Option<El> {
                 .center_y()
                 .child(parts::dot(p.faint, 7.0))
                 .child(text("Organizing").font(ty::SMALL).color(p.muted));
-            let controls = row()
-                .w_full()
-                .center_y()
-                .child(clock(since(started_at), p))
-                .child(spacer())
-                .child(stop_button(false, p));
+            let controls = row().w_full().center_y().child(clock(since(started_at), p)).child(stop_button(false, p));
             let mut card = card.child(label).child(controls.mt(4.0));
             if let Some(task) = back_to {
                 card = card.child(
@@ -295,8 +290,16 @@ fn title(name: &str, p: &Pal) -> El {
         .min_w(0.0)
 }
 
-fn clock(time: String, p: &Pal) -> El {
-    text(time).key("player-time").font(ty::TOTAL).color(p.text)
+fn clock(ms: i64, p: &Pal) -> El {
+    let style = if ms >= 3_600_000 { ty::TOTAL_COMPACT } else { ty::TOTAL };
+    text(format::compact_timer(ms))
+        .key("player-time")
+        .font(style)
+        .color(p.text)
+        .grow(1.0)
+        .min_w(0.0)
+        .single_line()
+        .truncate()
 }
 
 /// Stop: the accent pill for a task's session, a grey one for Organizing.

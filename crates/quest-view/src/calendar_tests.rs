@@ -17,6 +17,25 @@ fn choices_and_navigation_stay_in_the_future() {
 }
 
 #[test]
+fn vim_navigation_and_quick_dates_do_not_overlap() {
+    let today = day(11, 25);
+    let mut cursor = today;
+    for letter in ["l", "l", "j"] {
+        let Some(Selection::Move(next)) = letter_selection(letter, cursor, today) else { panic!("not a move") };
+        cursor = next;
+    }
+    assert_eq!(cursor, day(12, 4));
+    for (letter, expected) in
+        [("h", day(12, 3)), ("k", day(11, 27)), ("[", today), ("]", day(1, 4).with_year(2027).unwrap())]
+    {
+        assert_eq!(letter_selection(letter, cursor, today), Some(Selection::Move(expected)));
+    }
+    for (letter, expected) in [("t", today), ("m", day(11, 26)), ("n", day(11, 30)), ("w", day(11, 30))] {
+        assert_eq!(letter_selection(letter, cursor, today), Some(Selection::Apply(Some(expected))));
+    }
+}
+
+#[test]
 fn weeks_start_monday_and_mark_the_other_boundary() {
     let today = day(11, 20);
     let dates = TaskDates { planned_on: Some(day(11, 21)), due_on: Some(day(11, 25)) };

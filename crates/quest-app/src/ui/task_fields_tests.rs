@@ -46,6 +46,49 @@ fn quick_add_keyboard_pickers_keep_the_draft_and_reset_after_submit() {
 }
 
 #[test]
+fn quick_add_fields_work_from_every_list() {
+    for (view, day_plus) in [('2', false), ('3', false), ('3', true), ('1', false), ('6', false)] {
+        let (mut rt, _dir) = demo_app();
+        command(&mut rt, view);
+        let date = rt.state.today().succ_opt().unwrap();
+        if day_plus {
+            click(&mut rt, &format!("plan-add-{date}"));
+        } else {
+            type_text(&mut rt, "n");
+        }
+        assert!(focused(&rt, "quick-add"), "view {view}, day plus: {day_plus}");
+        if day_plus {
+            assert_eq!(rt.state.quick_draft().fields.dates.planned_on, Some(date));
+        }
+        for (letter, popup) in [('l', "quest-picker-search"), ('p', "task-calendar"), ('d', "task-calendar")] {
+            press(&mut rt, Key::Command(letter), Mods { cmd: true, shift: true, ..Mods::default() });
+            assert!(focused(&rt, popup), "view {view}, day plus: {day_plus}, chord {letter}");
+            press(&mut rt, Key::Escape, Mods::default());
+            assert!(focused(&rt, "quick-add"));
+        }
+    }
+}
+
+#[test]
+fn quick_add_saves_markdown_with_a_multiline_editor() {
+    let (mut rt, _dir) = demo_app();
+    type_text(&mut rt, "n");
+    type_text(&mut rt, "With a note");
+    let mods = Mods { cmd: true, shift: true, ..Mods::default() };
+    press(&mut rt, Key::Command('n'), mods);
+    assert!(focused(&rt, "quick-add-note"));
+    type_text(&mut rt, "## Heading");
+    press(&mut rt, Key::Enter, Mods::default());
+    type_text(&mut rt, "Body");
+    press(&mut rt, Key::Escape, Mods::default());
+    assert!(focused(&rt, "quick-add"));
+    press(&mut rt, Key::Command('n'), mods);
+    press(&mut rt, Key::Enter, Mods { cmd: true, ..Mods::default() });
+    assert_eq!(task(&rt, "With a note").description, "## Heading\nBody");
+    assert!(rt.state.quick_note.is_none());
+}
+
+#[test]
 fn quick_add_autocompletes_a_quest_and_applies_dates_in_typing_order() {
     let (mut rt, _dir) = demo_app();
     command(&mut rt, '1');

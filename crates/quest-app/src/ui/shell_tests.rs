@@ -6,7 +6,7 @@ use quest_domain::{Command, EntityId, EntryKind, TimeEntry};
 use quest_view::tracked;
 use rune::{Key, Mods, Runtime};
 
-use super::dnd_tests::{settle, task};
+use super::dnd_tests::{rect, settle, task};
 use super::log_work_tests::{fill, text_of};
 use super::tests::{TempDir, click, demo_app, press, type_text};
 use crate::clock;
@@ -59,6 +59,20 @@ fn the_player_stops_resumes_and_opens_focus() {
     assert!(rt.state.snap.running_entry().is_none());
     click(&mut rt, "player-resume");
     assert_eq!(rt.state.snap.running_entry().and_then(|e| e.task_id), Some(design), "Resume picks it up again");
+}
+
+#[test]
+fn long_timer_keeps_the_stop_button_inside_the_player() {
+    let (mut rt, _dir) = app();
+    let start = rt.state.snap.running_entry().unwrap().started_at;
+    rt.state.clock = clock::Clock::Fixed(start + Duration::minutes(99 * 60 + 59));
+    settle(&mut rt);
+    assert_eq!(text_of(&rt, "player-time"), "99h 59m");
+    let [x, _, w, _] = rect(&rt, "player");
+    let [stop_x, _, stop_w, _] = rect(&rt, "player-stop");
+    assert!(stop_x + stop_w <= x + w - 11.0, "Stop overflows the card padding");
+    click(&mut rt, "player-stop");
+    assert!(rt.state.snap.running_entry().is_none());
 }
 
 #[test]

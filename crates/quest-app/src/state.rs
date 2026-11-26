@@ -21,6 +21,7 @@ pub mod capture_draft;
 #[cfg(test)]
 mod capture_tests;
 mod checklist;
+pub use checklist::ChecklistEdits;
 pub mod entry_editor;
 mod focus;
 mod log_work;
@@ -114,6 +115,7 @@ pub struct State {
     pub account_form: AccountForm,
     /// The quick-add field above Today, Inbox and a quest's list.
     pub quick_add: TextEdit,
+    pub quick_note: Option<TextEdit>,
     /// The quest picked on Today's quick-add chip; none files the task without a quest.
     pub quick_fields: Option<quest_view::quick_add::Fields>,
     pub quick_choice: usize,
@@ -201,6 +203,7 @@ impl State {
             palette: PaletteState { mode: Mode::Commands, query: TextEdit::new(""), picked: 0 },
             account_form: AccountForm { server: TextEdit::new("") },
             quick_add: TextEdit::new(""),
+            quick_note: None,
             quick_fields: None,
             quick_choice: 0,
             task_calendar: None,

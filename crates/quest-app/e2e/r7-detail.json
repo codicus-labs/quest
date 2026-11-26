@@ -1,0 +1,14 @@
+[
+  {"t":0.1,"type":"key","name":"j"},
+  {"t":0.35,"type":"key","name":"r"},
+  {"t":0.65,"type":"mark","name":"repeat"},
+  {"t":0.85,"type":"key","name":"Escape"},
+  {"t":1.1,"type":"tap","key":"row-title-__TASK_ID__"},
+  {"t":1.4,"type":"mark","name":"detail"},
+  {"t":1.6,"type":"tap","key":"task-__TASK_ID__-plan"},
+  {"t":1.85,"type":"key","name":"Escape"},
+  {"t":2.1,"type":"key","name":"Backspace","cmd":true},
+  {"t":2.5,"type":"mark","name":"deleted"},
+  {"t":2.7,"type":"key","name":"z","cmd":true},
+  {"t":3.1,"type":"mark","name":"restored"}
+]

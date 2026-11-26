@@ -4,7 +4,7 @@ use quest_domain::{Command, EntityId, Position};
 use quest_view::{checklist, undo::UndoEvent};
 use rune::TextEdit;
 
-use super::State;
+use super::{State, View};
 
 #[derive(Default)]
 pub struct ChecklistEdits {
@@ -13,9 +13,17 @@ pub struct ChecklistEdits {
 }
 
 impl State {
+    pub fn checklist_fields(&mut self) -> &mut ChecklistEdits {
+        if self.view == View::Focus {
+            &mut self.focus_fields().checklist
+        } else {
+            &mut self.task_modal_fields().checklist
+        }
+    }
+
     pub fn checklist_edit(&mut self, id: EntityId) -> &mut TextEdit {
         let current = self.snap.checklist_item(id).map(|item| item.text.clone()).unwrap_or_default();
-        let edit = self.task_modal_fields().checklist.items.entry(id).or_insert_with(|| TextEdit::new(&current));
+        let edit = self.checklist_fields().items.entry(id).or_insert_with(|| TextEdit::new(&current));
         if !edit.focused && edit.text != current {
             *edit = TextEdit::new(current);
         }
@@ -23,7 +31,14 @@ impl State {
     }
 
     pub fn save_checklist_text(&mut self, id: EntityId) {
-        let Some(edit) = self.task_modal.as_ref().and_then(|form| form.checklist.items.get(&id)) else { return };
+        let Some(edit) = (if self.view == View::Focus {
+            self.focus_draft.as_ref().map(|form| &form.checklist)
+        } else {
+            self.task_modal.as_ref().map(|form| &form.checklist)
+        })
+        .and_then(|form| form.items.get(&id)) else {
+            return;
+        };
         if self.snap.checklist_item(id).is_some_and(|item| item.text != edit.text) {
             self.dispatch(Command::RenameChecklistItem { id, text: edit.text.clone() });
         }

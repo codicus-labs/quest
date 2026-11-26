@@ -349,6 +349,64 @@ check r6-organizing "r6 Organizing offers Back to Task" key widget-back
 check r6-back "r6 Back to Task runs the original task" shows "Design the next chapter"
 check r6-back "r6 Back to Task removes the Back button" no-live-key widget-back
 
+r7_time=2026-11-25T14:40
+for stage in quest calendar saved; do
+  run anna "$root/r7-plan-$stage" r7-plan-add "r7-plan-$stage" --demo --now "$r7_time" --at "mark:$stage" \
+    || fail "r7 Plan quick-add $stage"
+done
+check r7-plan-quest "r7 Plan N then Cmd+Shift+L focuses Quest" focused quest-picker-search
+check r7-plan-calendar "r7 Plan quick-add shows the keyboard calendar" key calendar-day-2026-12-04
+check r7-plan-saved "r7 l l j Enter places the task on December 4" under "R7 planned task" 2026-12-04
+
+run anna "$root/r7-focus" r7-focus r7-focus --demo --now "$r7_time" --at mark:renamed
+check r7-focus "r7 editing and Esc leave the timer in Focus" key focus-timer
+check r7-focus "r7 checklist item renamed in Focus" shows "X O B final"
+run anna "$root/r7-focus" r2c-inspect r7-focus-restart --now "$r7_time" --scene focus
+check r7-focus-restart "r7 renamed checklist item survived restart" shows "X O B final"
+
+for stage in repeat deleted restored; do
+  dir="$root/r7-detail-$stage"
+  run anna "$dir" r2c-inspect "r7-seed-$stage" --demo --now "$r7_time" --scene home
+  task_id=$(tree "$out/r7-seed-$stage.json" id "$anchor" 2>/dev/null)
+  run anna "$dir" r7-detail "r7-detail-$stage" --now "$r7_time" --scene home --at "mark:$stage" \
+    || fail "r7 detail $stage"
+done
+check r7-detail-repeat "r7 R opens the repeat editor" key repeat-editor-dialog
+absent r7-detail-deleted "r7 Cmd+Backspace in detail deletes the task" "$anchor"
+check r7-detail-deleted "r7 deleting offers Undo" key toast-action
+check r7-detail-restored "r7 Cmd+Z restores deleted task" has "$anchor"
+
+for stage in quest-first quest plan-first plan deadline-first deadline date-applied today note-escaped saved; do
+  dir="$root/r7-panel-$stage"
+  run anna "$dir" r7-panel "r7-panel-$stage" --window quick-add --demo --now "$r7_time" --at "mark:$stage" \
+    || fail "r7 panel $stage"
+done
+check r7-panel-quest "r7 panel Cmd+Shift+L focuses Quest" focused quest-picker-search
+check r7-panel-plan "r7 panel Cmd+Shift+P focuses the Plan calendar" focused task-calendar
+run anna "$root/r7-panel-menu" r7-panel-menu r7-panel-menu --window quick-add --demo --now "$r7_time" \
+  --desktop "$out/r7-seed-restored.png" --at mark:end
+check r7-panel-menu "r7 the main menu forwards Quest to the key panel" focused quest-picker-search
+check r7-panel-deadline "r7 panel Cmd+Shift+D focuses the Deadline calendar" focused task-calendar
+for stage in quest plan deadline; do
+  key=task-calendar
+  [ "$stage" != quest ] || key=quest-picker
+  check "r7-panel-$stage-first" "r7 $stage picker is full-size and below the title on its first frame" \
+    stable-picker "$key" "$out/r7-panel-$stage.json"
+done
+check r7-panel-date-applied "r7 Vim navigation applies a date in the panel" shows "Fri 4 Dec"
+check r7-panel-today "r7 T applies a quick date in the panel" no-live-key task-calendar
+check r7-panel-note-escaped "r7 note Esc returns focus to the panel title" focused quick-add
+check r7-panel-saved "r7 note Cmd+Enter submits the panel" key quick-add-feedback
+run anna "$root/r7-panel-saved" r2c-inspect r7-note-seed --now "$r7_time" --scene home
+task_id=$(tree "$out/r7-note-seed.json" id "R7 panel note" 2>/dev/null)
+if [ -n "$task_id" ]; then
+  run anna "$root/r7-panel-saved" r7-open r7-note-open --now "$r7_time" --scene home
+  check r7-note-open "r7 the Markdown source and its newline survived restart" \
+    keytext task-modal-description-source "$(printf '## R7 saved Markdown\nSecond line')"
+else
+  fail "r7 panel task with note not found after restart"
+fi
+
 echo "$summary"
 echo "PNGs: $out"
 if [ "$failures" -gt 0 ]; then

@@ -1,19 +1,18 @@
 use quest_domain::{ChecklistItem, EntityId, Task};
 use rune::{
-    Chord, ChordKey, ChordMod, Color, Cursor, El, Key, KeyEvent, Mods, TextEdit, Tx, col, el, icon, row, text,
-    text_input,
+    Chord, ChordKey, ChordMod, Color, Cursor, El, Key, KeyEvent, Mods, TextEdit, Tx, col, el, icon, row, text_input,
 };
 
 use crate::icons;
 use crate::state::notes::NoteHost;
-use crate::state::{State, TaskModal};
+use crate::state::{ChecklistEdits, State};
 use crate::theme::{self, Pal, ty};
 use crate::undo::Deletable;
 
-pub(super) fn detail(s: &State, task: &Task, form: &TaskModal, p: &Pal) -> El {
+pub(super) fn editor(s: &State, task: &Task, form: &ChecklistEdits, host: NoteHost, p: &Pal) -> El {
     let id = task.id;
     let items = s.snap.checklist_of(id).map(|item| {
-        let edit = form.checklist.items.get(&item.id).filter(|edit| edit.text == item.text || edit.focused);
+        let edit = form.items.get(&item.id).filter(|edit| edit.text == item.text || edit.focused);
         let default;
         let edit = match edit {
             Some(edit) => edit,
@@ -33,34 +32,26 @@ pub(super) fn detail(s: &State, task: &Task, form: &TaskModal, p: &Pal) -> El {
             .placeholder("Item", p.faint)
             .on_edit(move |s: &mut State| s.checklist_edit(item_id))
             .on_input_change(move |s: &mut State, _: &mut Tx| s.save_checklist_text(item_id))
-            .on_input_key(move |s: &mut State, event, tx| item_keypress(s, id, Some(item_id), event, tx));
+            .on_input_key(move |s: &mut State, event, tx| item_keypress(s, host, id, Some(item_id), event, tx));
         let field = if item.done { field.strike(0, edit.text.len(), None) } else { field };
-        line().child(item_box(item, false, p)).child(field)
+        line().child(item_box(item, host == NoteHost::Focus, p)).child(field)
     });
-    let add = text_input(&form.checklist.add, ty::BODY)
+    let add = text_input(&form.add, ty::BODY)
         .key("checklist-add")
         .label("Add checklist item")
         .grow(1.0)
         .min_w(0.0)
         .single_line()
         .color(p.text)
-        .placeholder("Add checklist item", p.faint)
-        .on_edit(|s: &mut State| &mut s.task_modal_fields().checklist.add)
-        .on_input_key(move |s: &mut State, event, tx| item_keypress(s, id, None, event, tx));
+        .placeholder("Add item", p.faint)
+        .on_edit(|s: &mut State| &mut s.checklist_fields().add)
+        .on_input_key(move |s: &mut State, event, tx| item_keypress(s, host, id, None, event, tx));
     col()
-        .key("checklist")
+        .key(if host == NoteHost::Focus { "focus-checklist" } else { "checklist" })
         .w_full()
         .gap(3.0)
         .children(items)
         .child(line().child(icon(&icons::PLUS, 16.0).color(p.faint)).child(add))
-}
-
-pub(super) fn focus(s: &State, task: &Task, p: &Pal) -> El {
-    col().key("focus-checklist").w_full().gap(3.0).children(s.snap.checklist_of(task.id).map(|item| {
-        let label = text(item.text.clone()).font(ty::BODY).color(if item.done { p.faint } else { p.text }).wrap();
-        let label = if item.done { label.strike(0, item.text.len(), None) } else { label };
-        line().child(item_box(item, true, p)).child(label.grow(1.0).min_w(0.0))
-    }))
 }
 
 fn line() -> El {
@@ -114,12 +105,19 @@ pub(super) fn checkbox(
         })
 }
 
-fn item_keypress(s: &mut State, task: EntityId, item: Option<EntityId>, event: &KeyEvent, tx: &mut Tx) -> bool {
+fn item_keypress(
+    s: &mut State,
+    host: NoteHost,
+    task: EntityId,
+    item: Option<EntityId>,
+    event: &KeyEvent,
+    tx: &mut Tx,
+) -> bool {
     let plain = event.mods == Mods::default();
     let ids: Vec<_> = s.snap.checklist_of(task).map(|item| item.id).collect();
     let index = item.and_then(|id| ids.iter().position(|candidate| *candidate == id)).unwrap_or(ids.len());
     match (&event.key, item) {
-        (Key::Escape, _) => tx.focus_when_shown(NoteHost::Detail.preview(), true),
+        (Key::Escape, _) => tx.focus_when_shown(host.preview(), true),
         (Key::Up, _) if plain => {
             if let Some(previous) = index.checked_sub(1).and_then(|i| ids.get(i)) {
                 focus_item(s, Some(*previous), tx);
@@ -144,16 +142,16 @@ fn item_keypress(s: &mut State, task: EntityId, item: Option<EntityId>, event: &
             }
         }
         (Key::Enter, None) if plain => {
-            let value = s.task_modal_fields().checklist.add.text.trim().to_owned();
+            let value = s.checklist_fields().add.text.trim().to_owned();
             if !value.is_empty() && s.insert_checklist_item(task, None, value).is_some() {
-                let edit = &mut s.task_modal_fields().checklist.add;
+                let edit = &mut s.checklist_fields().add;
                 *edit = TextEdit::default();
                 edit.focused = true;
             }
         }
         (Key::Backspace, Some(id)) if plain && s.checklist_edit(id).text.is_empty() => {
             s.delete(Deletable::ChecklistItem(id));
-            s.task_modal_fields().checklist.items.remove(&id);
+            s.checklist_fields().items.remove(&id);
             let neighbor = index.checked_sub(1).or(Some(index + 1)).and_then(|i| ids.get(i)).copied();
             focus_item(s, neighbor, tx);
         }

@@ -1,11 +1,11 @@
 //! Task details and their editing controls.
 
 use quest_domain::{EntityId, Task, TimeEntry};
-use rune::{Cursor, El, Key, KeyEvent, Tx, col, icon, row, spacer, text, text_input};
+use rune::{Cursor, El, Key, KeyEvent, Tx, col, row, spacer, text, text_input};
 
 use crate::state::State;
 use crate::theme::{Pal, ty};
-use crate::{clock, format, icons};
+use crate::{clock, format};
 
 pub fn title(form: &crate::state::TaskModal, p: &Pal) -> El {
     text_input(&form.title, ty::BODY)
@@ -23,18 +23,19 @@ pub fn title(form: &crate::state::TaskModal, p: &Pal) -> El {
 
 pub fn inline(s: &State, task: &Task, p: &Pal) -> El {
     let form = s.task_modal.as_ref().expect("an expanded row owns the detail");
-    let note = super::notes::field(s, task, crate::state::notes::NoteHost::Detail, p);
+    let host = crate::state::notes::NoteHost::Detail;
+    let note = super::notes::field(s, task, host, p);
     let mut detail = col()
         .key("task-modal")
         .w_full()
-        .gap(8.0)
+        .gap(5.0)
         .pl(42.0)
         .pr(10.0)
         .pb(10.0)
         .on_background_press(|_: &mut State| {})
         .child(note)
-        .child(super::checklist::detail(s, task, form, p))
-        .child(super::task_fields::fields(s, Some(task), p, false));
+        .child(super::checklist::editor(s, task, &form.checklist, host, p))
+        .child(super::task_fields::detail_fields(s, task, p));
     let total = s.snap.task_tracked_ms(task.id, s.now);
     if total > 0 {
         let chevron = if s.show_task_time { "⌄" } else { "›" };
@@ -82,10 +83,15 @@ pub fn inline(s: &State, task: &Task, p: &Pal) -> El {
             }
         }
     }
-    detail.child(super::recurrence::task_row(s, task, p)).child(delete(p))
+    detail
 }
 
 fn inline_keys(s: &mut State, event: &KeyEvent, tx: &mut Tx) -> bool {
+    if event.key == Key::Backspace && event.mods.cmd && !event.mods.alt && !event.mods.ctrl && !event.mods.shift {
+        s.task_modal_fields().title.key(event, None);
+        s.save_task_title();
+        return true;
+    }
     if event.key != Key::Escape {
         return false;
     }
@@ -117,25 +123,4 @@ fn entry_row(s: &State, entry: &TimeEntry, p: &Pal) -> El {
         .child(text(when).font(ty::SMALL).color(p.muted))
         .child(spacer())
         .child(text(format::timer(entry.tracked_ms(s.now))).font(ty::SMALL).color(p.faint))
-}
-
-fn delete(p: &Pal) -> El {
-    row()
-        .key("task-modal-delete")
-        .role("button")
-        .label("Delete task")
-        .focusable(true)
-        .h(26.0)
-        .px(10.0)
-        .gap(10.0)
-        .center_y()
-        .radius(8.0)
-        .cursor(Cursor::Pointer)
-        .hover(p.hover)
-        .child(icon(&icons::TRASH, 15.0).color(p.muted))
-        .child(text("Delete task").font(ty::BODY).color(p.muted))
-        .on_press_tx(|s: &mut State, tx: &mut Tx| {
-            tx.blur();
-            s.delete_modal_task();
-        })
 }

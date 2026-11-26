@@ -124,7 +124,7 @@ impl State {
         }
         if !has_focus && !picker && self.quick_add.text.trim().is_empty() {
             let was_open = self.plan_quick_day.take().is_some();
-            if was_open || self.quick_fields.is_some() {
+            if was_open || self.quick_fields.is_some() || self.quick_note.is_some() {
                 self.reset_quick_add();
                 changed = true;
             }
@@ -134,6 +134,7 @@ impl State {
 
     pub fn reset_quick_add(&mut self) {
         self.quick_add.clear();
+        self.quick_note = None;
         self.quick_fields = None;
         self.quick_choice = 0;
     }
@@ -160,12 +161,22 @@ impl State {
     }
 
     pub fn save_quick_add(&mut self) {
-        if let Some(command) = self.quick_draft().command(EntityId::new(), Position::Bottom) {
-            self.dispatch(command);
-            if self.notice.is_none() {
-                self.reset_quick_add();
-            }
+        if self.auth.locks_edits() {
+            self.notice = Some("Signing out; the task wasn’t added.".into());
+            return;
         }
+        let description = self.quick_note.as_ref().map_or("", |note| note.text.as_str());
+        let commands = self.quick_draft().commands(EntityId::new(), Position::Bottom, description);
+        if commands.is_empty() {
+            return;
+        }
+        if let Err(error) = self.store.dispatch_all(&commands) {
+            self.notice = Some(format!("Couldn’t add task: {error}."));
+            return;
+        }
+        self.adopt_snapshot();
+        self.notice = None;
+        self.reset_quick_add();
     }
 
     pub fn field_dates(&self, task: Option<EntityId>) -> Option<TaskDates> {
@@ -224,6 +235,8 @@ impl State {
     }
 
     pub fn quick_hosted(&self) -> bool {
-        self.overlay == Overlay::None && matches!(self.view, View::Today | View::Inbox | View::Quest(_))
+        self.overlay == Overlay::None
+            && (matches!(self.view, View::Today | View::Inbox | View::Quest(_))
+                || self.view == View::Plan && self.plan_quick_day.is_some())
     }
 }

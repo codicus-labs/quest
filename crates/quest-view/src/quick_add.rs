@@ -25,6 +25,15 @@ pub struct Draft {
 }
 
 impl Draft {
+    pub fn commands(self, id: EntityId, position: Position, description: &str) -> Vec<Command> {
+        let Some(create) = self.command(id, position) else { return Vec::new() };
+        let mut commands = vec![create];
+        if !description.trim().is_empty() {
+            commands.push(Command::SetTaskDescription { id, description: description.to_owned() });
+        }
+        commands
+    }
+
     pub fn command(self, id: EntityId, position: Position) -> Option<Command> {
         (!self.title.is_empty()).then_some(Command::CreateTask {
             id,

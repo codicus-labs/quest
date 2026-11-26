@@ -59,7 +59,7 @@ pub fn view(s: &State, p: &Pal, leading: f32) -> El {
         .radius(10.0)
         .border(1.0, p.border)
         .child(notes)
-        .child(super::checklist::focus(s, task, p));
+        .child(super::checklist::editor(s, task, &draft.checklist, crate::state::notes::NoteHost::Focus, p));
     let today = tracked::task_today_ms(&s.snap, id, s.today(), &Local, s.now);
     let mut summary = format!("{} today", quest_view::entry_editor::duration_label(today));
     if let Some(quest) = quest {

@@ -44,6 +44,13 @@ Jetpack Compose (apps/android)          Screens, StateFlow, Threading der Plattf
 - `quest-app` bindet die Module per `use quest_view::{…}` ein, Verhalten unverändert (Snapshots
   byte-identisch). `quest-mobile` baut daraus ab Phase 1 seine UI-Records; Kotlin rechnet keine Labels.
 
+## Kompakte Timer (R7)
+
+`compactTimer(elapsedMs: Long): String` formatiert eine Dauer in Millisekunden für Widgets
+und Mini-Player. Negative Werte ergeben `00:00`; unter einer Stunde gilt `mm:ss`,
+ab einer Stunde z. B. `1h 05m` (Sekunden entfallen). Die bestehenden Focus- und
+Listenmodelle behalten ihr bisheriges Zeitformat.
+
 ## Markdown-Notizen und Checkliste (R4)
 
 - Notizquelle bleibt `TaskDetail.description` (ein synchronisiertes Markdown-Feld). Speichern über
