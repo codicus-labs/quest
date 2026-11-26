@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -76,8 +78,8 @@ internal fun Shell(
 )
 
 @Composable
-private fun TodayList(list: TaskList, player: PlayerCard, draft: String = "") =
-    Shell(Tab.Today, player, leading = { TodaySegment(showPlan = false, onChange = {}) }) { ListScreen(ListUiState.Ready(list, draft), noListActions) }
+private fun TodayList(list: TaskList, player: PlayerCard) =
+    Shell(Tab.Today, player, leading = { TodaySegment(showPlan = false, onChange = {}) }) { ListScreen(ListUiState.Ready(list, ""), noListActions) }
 
 @Composable
 private fun QuestsList(list: TaskList, editable: Boolean) = Shell(Tab.Quests, ListSamples.playerResume, leading = { BackToQuests {} }) {
@@ -92,7 +94,11 @@ val shellScenes = listOf(
         liftAndDrag("row:Draft this week’s essay", "row:Sketch a pricing page")
     }) { TodayList(ListSamples.todayIdle, PlayerCard.Empty) },
     Scene("today-timer", SceneKind.Screen) { TodayList(ListSamples.today, ListSamples.playerRunning) },
-    Scene("today-add-draft", SceneKind.Screen) { TodayList(ListSamples.todayIdle, ListSamples.playerResume, draft = "Book the train") },
+    Scene("today-add-draft", SceneKind.Window, interact = { onNodeWithTag("list-add-open").performClick() }) {
+        Shell(Tab.Today, ListSamples.playerResume, leading = { TodaySegment(showPlan = false, onChange = {}) }) {
+            ListScreen(ListUiState.Ready(ListSamples.todayIdle, "Book the train"), noListActions)
+        }
+    },
     Scene("player-organizing", SceneKind.Screen) { TodayList(ListSamples.todayIdle, ListSamples.playerOrganizing) },
     Scene("inbox", SceneKind.Screen) { Shell(Tab.Inbox, ListSamples.playerRunning) { ListScreen(ListUiState.Ready(ListSamples.inbox, ""), noListActions) } },
     Scene("inbox-empty", SceneKind.Screen) { Shell(Tab.Inbox) { ListScreen(ListUiState.Ready(ListSamples.emptyInbox, ""), noListActions) } },

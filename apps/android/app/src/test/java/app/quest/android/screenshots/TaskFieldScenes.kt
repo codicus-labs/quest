@@ -1,6 +1,8 @@
 package app.quest.android.screenshots
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import app.quest.android.ListSamples
 import app.quest.android.Samples
 import app.quest.android.ui.components.QuestBottomSheet
@@ -85,7 +87,7 @@ val taskFieldScenes = listOf(
     },
     Scene("r3-task-plan", SceneKind.Window) { Calendar("Plan", DateTarget.PLAN) },
     Scene("r3-task-deadline", SceneKind.Window) { Calendar("Deadline", DateTarget.DEADLINE) },
-    Scene("r3-quick-add", SceneKind.Screen) {
+    Scene("r3-quick-add", SceneKind.Window, interact = { onNodeWithTag("list-add-open").performClick() }) {
         val fields = QuickAddFields(
             QuickFields(Samples.writing.id, "2026-11-25", "2026-11-27"),
             Samples.writing, "Nov 25", "Nov 27",

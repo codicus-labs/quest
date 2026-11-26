@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -138,6 +140,9 @@ fun StopPill(timer: String, title: String, onStop: () -> Unit, modifier: Modifie
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(QuestIcons.Stop, contentDescription = null, tint = foreground, modifier = Modifier.size(14.dp))
-        Text(timer, style = QuestType.monoTime, color = foreground)
+        Text(
+            timer, style = QuestType.monoTime, color = foreground, maxLines = 1,
+            autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = QuestType.monoTime.fontSize),
+        )
     }
 }

@@ -31,6 +31,7 @@ import app.quest.android.ui.lists.ListActions
 import app.quest.android.ui.lists.QuickAddActions
 import app.quest.android.ui.lists.ListScreen
 import app.quest.android.ui.lists.ListUiState
+import app.quest.android.ui.lists.ListViewModel
 import app.quest.android.ui.lists.RowActions
 import app.quest.android.ui.quests.QuestEditorActions
 import app.quest.android.ui.quests.QuestEditorSheet
@@ -55,6 +56,7 @@ internal fun ListDestination(
     snackbar: SnackbarHostState,
     timerStarted: () -> Unit,
     onGone: () -> Unit = {},
+    showQuickAdd: Boolean = true,
     headerActions: @Composable () -> Unit = {},
 ) {
     val vm = viewModels.list
@@ -77,11 +79,18 @@ internal fun ListDestination(
         },
         stopTimer = vm::stopTimer,
     )
-    val quick = QuickAddActions(
-        vm::questOptions, vm::suggestions, vm::setQuest, vm::setDate, vm::calendar, vm::shiftMonth,
+    val quickError by vm.quickError.collectAsStateWithLifecycle()
+    ListScreen(
+        state, vm.listActions(rows), headerActions = headerActions, showQuickAdd = showQuickAdd,
+        quickError = quickError, dismissQuickError = vm::dismissQuickError,
     )
-    ListScreen(state, ListActions(rows, vm::editDraft, vm::add, vm::undo, vm::dismissToast, quick, vm::placeTask), headerActions = headerActions)
 }
+
+internal fun ListViewModel.listActions(rows: RowActions) = ListActions(
+    rows, ::editDraft, ::add, ::undo, ::dismissToast,
+    QuickAddActions(::questOptions, ::suggestions, ::setQuest, ::setDate, ::calendar, ::shiftMonth, ::editNote),
+    ::placeTask,
+)
 
 /** "‹ Quests" above a quest's list or the Logbook. */
 @Composable

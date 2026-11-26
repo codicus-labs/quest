@@ -198,4 +198,4 @@ val scenes = listOf(
     Scene("settings", SceneKind.Screen) {
         DetailScaffold("Settings", onBack = {}) { SettingsScreen(SettingsUiState(Samples.settings, Appearance.Dark), noSettingsActions) }
     },
-) + shellScenes + questPickerScenes + questScenes + workspaceScenes + platformScenes + captureScenes + settingsScenes + accountScenes + taskFieldScenes
+) + shellScenes + questPickerScenes + questScenes + workspaceScenes + platformScenes + captureScenes + settingsScenes + accountScenes + taskFieldScenes + r7Scenes

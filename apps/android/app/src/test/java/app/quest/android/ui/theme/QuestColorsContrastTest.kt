@@ -43,7 +43,7 @@ class QuestColorsContrastTest {
         for ((name, background) in listOf("bg" to c.bg, "card" to c.card)) {
             put("inline code on $name", contrast(c.text, c.textMuted.copy(alpha = 0.12f).compositeOver(background)))
         }
-        put("Focus Done", contrast(OnAccentFill, c.accentFill))
+        put("Focus Done, timer Stop and Quick-Add plus", contrast(OnAccentFill, c.accentFill))
         put("Organizing Stop", contrast(c.text, c.barTrack))
         val darkestTimeline = Color.Black.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)
         val lightestTimeline = Color.White.copy(alpha = TIMELINE_TINT).compositeOver(c.bg)

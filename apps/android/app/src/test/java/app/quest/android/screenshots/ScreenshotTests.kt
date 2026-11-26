@@ -82,7 +82,7 @@ private val largeFontScenes = setOf(
     "quests", "workspaces-manage", "quest-editor", "review", "archive", "search", "account-signed-out", "account-signed-in",
     "settings", "quick-add-shared", "capture-dictate", "capture-listening", "capture-offline", "capture-proposal",
     "capture-proposal-task", "capture-proposal-work", "capture-applied", "settings-connections", "settings-connections-offline",
-    "account-import-guest", "account-sign-out-warning", "settings-ai-privacy",
+    "account-import-guest", "account-sign-out-warning", "settings-ai-privacy", "r7-quick-add-ime", "r7-player-long",
 )
 
 /** Compact width: bottom bar. */

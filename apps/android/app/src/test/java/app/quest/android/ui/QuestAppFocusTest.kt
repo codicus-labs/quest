@@ -4,6 +4,11 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -111,6 +116,39 @@ class QuestAppFocusTest {
 
         compose.onNodeWithText("Booked as Organizing").assertDoesNotExist()
         assertEquals(listOf("book focus time", "undo"), core.calls)
+    }
+
+    @Test
+    @Config(fontScale = 2f)
+    fun longCompactTimesStayVisibleWithLargeText() {
+        core.player = ListSamples.playerOrganizing.copy(timer = "99h 59m")
+        core.tracked = ListSamples.tracked.copy(total = "18h 38m")
+        showApp()
+
+        compose.onNodeWithText("99h 59m", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("player-stop", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("tab-tracked").performClick()
+        compose.onNodeWithText("18h 38m today").assertIsDisplayed()
+    }
+
+    @Test
+    fun addsAndRenamesAChecklistItemInFocus() {
+        showApp()
+        compose.onNodeWithTag("player").performClick()
+        compose.onNodeWithTag("list-add-open").assertDoesNotExist()
+        val add = compose.onNodeWithTag("checklist-add").performScrollTo()
+        add.performTextInput("Draft an outline")
+        add.performImeAction()
+        val item = compose.onNodeWithTag("checklist-text-new-item").performScrollTo()
+        item.performTextReplacement("Outline chapter one")
+        add.performClick()
+
+        compose.runOnIdle {
+            assertEquals(
+                listOf("add checklist ${app.quest.android.Samples.focusSession.taskId} Draft an outline", "rename checklist new-item Outline chapter one"),
+                core.calls,
+            )
+        }
     }
 
     @Test

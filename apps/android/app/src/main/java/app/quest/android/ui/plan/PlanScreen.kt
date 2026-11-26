@@ -48,8 +48,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.quest.android.R
 import app.quest.android.core.PlanPage
-import app.quest.android.ui.components.UndoSnackbar
 import app.quest.android.ui.lists.ListMaxWidth
+import app.quest.android.ui.lists.ListFooter
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.Dp
 import app.quest.android.ui.lists.ListSectionLabel
 import app.quest.android.ui.lists.PlaceTask
 import app.quest.android.ui.lists.RowActions
@@ -81,29 +83,27 @@ internal class PlanActions(
 )
 
 @Composable
-internal fun PlanScreen(state: PlanUiState, actions: PlanActions) {
+internal fun PlanScreen(state: PlanUiState, actions: PlanActions, showQuickAdd: Boolean = true) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         when (state) {
             PlanUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
             is PlanUiState.Failed -> Text(state.message, Modifier.align(Alignment.Center), color = QuestTheme.colors.textMuted)
             is PlanUiState.Ready -> {
-                PlanContent(state.page, actions)
-                state.page.today.toast?.let { toast ->
-                    UndoSnackbar(
-                        toast.text,
-                        onUndo = actions.undo,
-                        actionLabel = toast.actionLabel,
-                        onDismiss = actions.dismissToast,
-                        modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 560.dp),
-                    )
-                }
+                var footerHeight by remember { mutableStateOf(0.dp) }
+                PlanContent(state.page, actions, maxOf(88.dp, footerHeight + QuestSpacing.small))
+                ListFooter(
+                    state.page.today.toast, actions.undo, actions.dismissToast,
+                    add = state.page.sections.days.firstOrNull()?.takeIf { showQuickAdd }?.let { today -> { actions.add(today.date) } },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    onHeightChanged = { footerHeight = it },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun PlanContent(page: PlanPage, actions: PlanActions) {
+private fun PlanContent(page: PlanPage, actions: PlanActions, bottomPadding: Dp) {
     val plan = page.sections
     val today = plan.days.firstOrNull()?.date ?: return
     val tomorrow = plan.days.getOrNull(1)?.date
@@ -165,7 +165,7 @@ private fun PlanContent(page: PlanPage, actions: PlanActions) {
             LazyColumn(
                 Modifier.fillMaxSize().testTag("plan-sections"),
                 state = scroll,
-                contentPadding = PaddingValues(bottom = 88.dp),
+                contentPadding = PaddingValues(bottom = bottomPadding),
             ) { sortItems(placed, draw) }
         }
     }

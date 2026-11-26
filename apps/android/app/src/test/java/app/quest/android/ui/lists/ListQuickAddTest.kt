@@ -49,9 +49,7 @@ class ListQuickAddTest {
         )
         compose.setContent { QuestTheme(false) { ListQuickAdd(draft, fields, actions) } }
 
-        compose.onNodeWithTag("field-plan").assertDoesNotExist()
-        val input = compose.onNodeWithTag("list-add")
-        input.performClick()
+        val input = compose.onNodeWithTag("list-add").assertIsFocused()
         compose.onNodeWithTag("field-plan").assertIsDisplayed()
         input.performTextInput("Review #wri")
         compose.onNodeWithText(Samples.writing.name).performClick()

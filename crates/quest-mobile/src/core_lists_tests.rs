@@ -78,6 +78,24 @@ fn the_player_and_the_row_show_the_running_timer() {
 }
 
 #[test]
+fn compact_timers_use_hours_and_minutes_for_both_player_modes_and_tracked() {
+    let (_dir, core) = open();
+    let start = moment("2026-11-25T00:00:00+01:00");
+    let later = moment("2026-11-25T18:38:42+01:00");
+    let task = core.add_to_list(ListKind::Today, "Write".into(), start.clone()).unwrap();
+    core.start_timer(task, start).unwrap();
+    assert!(
+        matches!(core.compact_player(later.clone()).unwrap(), PlayerCard::Running { timer, .. } if timer == "18h 38m")
+    );
+    assert_eq!(core.compact_tracked(later).unwrap().total, "18h 38m");
+
+    let start = moment("2026-11-25T19:00:00+01:00");
+    core.start_organizing(None, start).unwrap();
+    let later = moment("2026-11-26T13:38:42+01:00");
+    assert!(matches!(core.compact_player(later).unwrap(), PlayerCard::Organizing { timer, .. } if timer == "18h 38m"));
+}
+
+#[test]
 fn list_completion_lingers_in_place_and_undo_outlives_the_toast() {
     let (_dir, core) = open();
     core.add_to_list(ListKind::Today, "First".into(), now()).unwrap();

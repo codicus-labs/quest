@@ -41,7 +41,7 @@ class FocusViewModelTest {
         vm.open()
 
         assertEquals(FocusUiState.Session(Samples.focusSession, Samples.focusSession.title, Samples.focusSession.description, Samples.home.quests), vm.state.value)
-        assertEquals(listOf<String?>(null), core.focusTasks)
+        assertEquals(null, core.focusTasks.last())
     }
 
     @Test

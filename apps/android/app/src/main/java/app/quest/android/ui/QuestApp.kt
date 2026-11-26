@@ -32,7 +32,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.quest.android.R
-import app.quest.android.quickadd.QuickAddActivity
+import app.quest.android.ui.lists.ListQuickAddSheet
+import app.quest.android.ui.lists.ListUiState
 import app.quest.android.ui.lists.RowActions
 import app.quest.android.settings.FocusPreferences
 import app.quest.android.settings.FocusPrefs
@@ -78,6 +79,7 @@ import app.quest.android.ui.shell.PlayerViewModel
 import app.quest.android.ui.shell.TodaySegment
 import app.quest.android.ui.task.TaskSheet
 import app.quest.android.ui.task.TaskSheetActions
+import app.quest.android.ui.task.TaskSheetState
 import app.quest.android.ui.task.TaskSheetViewModel
 import app.quest.android.ui.theme.QuestTheme
 import app.quest.android.ui.tracked.EntryActions
@@ -294,7 +296,11 @@ fun QuestApp(
                         },
                         snackbarHost = { QuestSnackbarHost(snackbar) },
                     ) {
-                        TabContent(tab, showPlan, questsPage, viewModels, snackbar, timerStarted, openQuest, openPage = { questsPage = it }, openReview = { open(Detail.Review) })
+                        TabContent(
+                            tab, showPlan, questsPage, viewModels, snackbar, timerStarted, openQuest,
+                            openPage = { questsPage = it }, openReview = { open(Detail.Review) },
+                            showQuickAdd = sheetState == TaskSheetState.Closed,
+                        )
                     }
                     else -> DetailPage(detail, viewModels, snackbar, DetailNavigation(open, back = { details = details.dropLast(1) }, searchNavigation, timerStarted, captureEntries, openQuest))
                 }
@@ -337,10 +343,15 @@ private fun TabContent(
     openQuest: (String) -> Unit,
     openPage: (QuestsPage) -> Unit,
     openReview: () -> Unit,
+    showQuickAdd: Boolean,
 ) {
     when (tab) {
-        Tab.Today -> if (showPlan) PlanDestination(viewModels, snackbar, timerStarted) else ListDestination(ListKind.Today, viewModels, snackbar, timerStarted)
-        Tab.Inbox -> ListDestination(ListKind.Inbox, viewModels, snackbar, timerStarted)
+        Tab.Today -> if (showPlan) {
+            PlanDestination(viewModels, snackbar, timerStarted, showQuickAdd)
+        } else {
+            ListDestination(ListKind.Today, viewModels, snackbar, timerStarted, showQuickAdd = showQuickAdd)
+        }
+        Tab.Inbox -> ListDestination(ListKind.Inbox, viewModels, snackbar, timerStarted, showQuickAdd = showQuickAdd)
         Tab.Quests -> {
             when (questsPage) {
                 QuestsPage.Nav -> QuestNavDestination(viewModels, openQuest, openLogbook = { openPage(QuestsPage.Logbook) })
@@ -351,6 +362,7 @@ private fun TabContent(
                     snackbar,
                     timerStarted,
                     onGone = { openPage(QuestsPage.Nav) },
+                    showQuickAdd = showQuickAdd,
                     headerActions = { EditQuestButton { viewModels.questEditor.open(questsPage.questId) } },
                 )
             }
@@ -441,7 +453,7 @@ private fun focusActions(vm: FocusViewModel, timerStarted: () -> Unit) = FocusAc
 
 /** The plan; the core builds its days only while it is composed (the task sheet over it keeps it). */
 @Composable
-private fun PlanDestination(viewModels: AppViewModels, snackbar: SnackbarHostState, timerStarted: () -> Unit) {
+private fun PlanDestination(viewModels: AppViewModels, snackbar: SnackbarHostState, timerStarted: () -> Unit, showQuickAdd: Boolean) {
     val plan = viewModels.plan
     DisposableEffect(plan) {
         plan.setShown(true)
@@ -449,27 +461,43 @@ private fun PlanDestination(viewModels: AppViewModels, snackbar: SnackbarHostSta
     }
     val state by plan.state.collectAsStateWithLifecycle()
     ShowMessages(plan.message, plan::dismissMessage, snackbar)
-    val context = LocalContext.current
+    val list = viewModels.list
+    var quickDay by rememberSaveable { mutableStateOf<String?>(null) }
+    DisposableEffect(list, quickDay) {
+        list.showPlanDay(quickDay)
+        onDispose { list.showPlanDay(null) }
+    }
+    val quickState by list.state.collectAsStateWithLifecycle()
+    val quickError by list.quickError.collectAsStateWithLifecycle()
+    val rows = RowActions(
+        toggle = plan::toggleTask,
+        open = viewModels.taskSheet::open,
+        startTimer = { taskId ->
+            if (plan.startTimer(taskId)) {
+                viewModels.focus.open(taskId)
+                timerStarted()
+            }
+        },
+        stopTimer = plan::stopTimer,
+    )
     PlanScreen(
         state,
         PlanActions(
-            rows = RowActions(
-                toggle = plan::toggleTask,
-                open = viewModels.taskSheet::open,
-                startTimer = { taskId ->
-                    if (plan.startTimer(taskId)) {
-                        viewModels.focus.open(taskId)
-                        timerStarted()
-                    }
-                },
-                stopTimer = plan::stopTimer,
-            ),
-            add = { context.startActivity(QuickAddActivity.forDay(context, it)) },
+            rows = rows,
+            add = { quickDay = it },
             place = plan::placeTask,
             undo = plan::undo,
             dismissToast = plan::dismissToast,
         ),
+        showQuickAdd = showQuickAdd,
     )
+    val ready = quickState as? ListUiState.Ready
+    if (showQuickAdd && quickDay != null && ready != null) {
+        ListQuickAddSheet(ready, list.listActions(rows), close = {
+            quickDay = null
+            list.dismissQuickError()
+        }, error = quickError)
+    }
 }
 
 internal fun logWorkActions(vm: LogWorkViewModel) = LogWorkActions(

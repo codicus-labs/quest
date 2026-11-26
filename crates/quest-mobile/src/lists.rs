@@ -210,6 +210,15 @@ fn nav_row(quest: &Quest, week: &WeekBalance) -> QuestNavRow {
 }
 
 pub(crate) fn tracked(snapshot: &Snapshot, now: Now, focus_exit: &quest_view::focus_exit::FocusExit) -> TrackedData {
+    tracked_with_total(snapshot, now, focus_exit, format::hours)
+}
+
+pub(crate) fn tracked_with_total(
+    snapshot: &Snapshot,
+    now: Now,
+    focus_exit: &quest_view::focus_exit::FocusExit,
+    total: fn(i64) -> String,
+) -> TrackedData {
     let today = now.today();
     let day = tracked::day_timeline_with_focus(snapshot, today, &now.tz, now.at, focus_exit);
     let week = tracked::week_balance(snapshot, today, &now.tz, now.at);
@@ -235,7 +244,7 @@ pub(crate) fn tracked(snapshot: &Snapshot, now: Now, focus_exit: &quest_view::fo
         })
         .collect();
     TrackedData {
-        total: format::hours(day.tracked_ms),
+        total: total(day.tracked_ms),
         first_hour: day.first_hour,
         last_hour: day.last_hour,
         blocks,
@@ -265,7 +274,11 @@ fn week_summary(week: &WeekBalance) -> WeekSummary {
 }
 
 pub(crate) fn player(snapshot: &Snapshot, now: Now) -> PlayerCard {
-    let timer = |since: DateTime<Utc>| format::timer((now.at - since).num_milliseconds());
+    player_with_timer(snapshot, now, format::timer)
+}
+
+pub(crate) fn player_with_timer(snapshot: &Snapshot, now: Now, format: fn(i64) -> String) -> PlayerCard {
+    let timer = |since: DateTime<Utc>| format((now.at - since).num_milliseconds());
     let quest_of = |id: Option<EntityId>| id.and_then(|q| snapshot.quest(q)).map(chip);
     match quest_view::player::player(snapshot) {
         Player::Running { task: Some(task), title, quest, started_at } => {

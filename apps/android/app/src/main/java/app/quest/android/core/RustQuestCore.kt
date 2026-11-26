@@ -86,9 +86,9 @@ class RustQuestCore private constructor(private val core: QuestCore) : QuestCore
 
     override fun questNav(now: Moment): QuestNav = core.questNav(now)
 
-    override fun tracked(now: Moment): TrackedData = core.tracked(now)
+    override fun tracked(now: Moment): TrackedData = core.compactTracked(now)
 
-    override fun player(now: Moment): PlayerCard = core.player(now)
+    override fun player(now: Moment): PlayerCard = core.compactPlayer(now)
 
     override fun entryDraft(entryId: String, now: Moment): EntryDraft = core.entryDraft(entryId, now)
 

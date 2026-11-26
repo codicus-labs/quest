@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uniffi.quest_mobile.FocusPickTask
@@ -74,9 +75,10 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
 
     private var noteSave: Job? = null
 
-    /** Re-read on every core change and tick, so the timer counts every second while it runs. */
-    val state: StateFlow<FocusUiState> = combine(core.state, inputs, ::focusState)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, focusState(core.state.value, inputs.value))
+    // Checklist edits can leave the shell's CoreState unchanged.
+    val state: StateFlow<FocusUiState> = combine(core.state, inputs, core.changes.onStart { emit(Unit) }) { state, inputs, _ ->
+        focusState(state, inputs)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, focusState(core.state.value, inputs.value))
 
     private val _message = MutableStateFlow<String?>(null)
 
@@ -233,7 +235,17 @@ class FocusViewModel(private val core: CoreHolder, private val savedState: Saved
 
     val checklist = ChecklistActions(
         toggle = { id, done -> report(core.perform { c, now -> c.setChecklistItemDoneWithUndo(id, done, now) }) },
+        add = { text -> sessionTask()?.let { id -> itemId(core.perform { c, _ -> c.addChecklistItem(id, text) }) } },
+        insertAfter = { id -> itemId(core.perform { c, _ -> c.insertChecklistItemAfter(id) }) },
+        rename = { id, text -> report(core.perform { c, _ -> c.renameChecklistItem(id, text) }) },
+        delete = { id -> report(core.perform { c, now -> c.deleteChecklistItem(id, now) }) },
+        move = { id, before -> report(core.perform { c, _ -> c.moveChecklistItem(id, before) }) },
     )
+
+    private fun itemId(outcome: Outcome<String>): String? {
+        report(outcome)
+        return (outcome as? Outcome.Done)?.value
+    }
 
     fun undo() = report(core.perform { c, now -> c.undo(now) })
 

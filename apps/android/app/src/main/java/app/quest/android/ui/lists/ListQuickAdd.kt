@@ -1,6 +1,11 @@
 package app.quest.android.ui.lists
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,7 +14,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import app.quest.android.ui.components.OnAccentFill
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,23 +74,59 @@ class QuickAddActions(
     val setDate: (DateTarget, String?) -> Unit = { _, _ -> },
     val calendar: (String?, QuickFields, DateTarget) -> CalendarMonth? = { _, _, _ -> null },
     val shiftMonth: (String, Boolean) -> String? = { _, _ -> null },
+    val editNote: (String) -> Unit = {},
 )
 
 @Composable
-internal fun ListQuickAdd(draft: String, fields: QuickAddFields?, actions: ListActions) {
+internal fun QuickAddFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    FloatingActionButton(
+        onClick = onClick,
+        modifier = modifier.testTag("list-add-open"),
+        shape = CircleShape,
+        containerColor = QuestTheme.colors.accentFill,
+        contentColor = OnAccentFill,
+    ) {
+        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.quick_add_title))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
+@Composable
+internal fun ListQuickAddSheet(state: ListUiState.Ready, actions: ListActions, close: () -> Unit, error: String? = null) {
+    ModalBottomSheet(
+        onDismissRequest = close,
+        sheetState = rememberBottomSheetState(SheetValue.Hidden, setOf(SheetValue.Hidden, SheetValue.Expanded)),
+        containerColor = QuestTheme.colors.card,
+        modifier = Modifier.semantics { testTagsAsResourceId = true }.testTag("list-add-sheet"),
+    ) {
+        ListQuickAdd(state.draft, state.quick, actions, state.note, error)
+    }
+}
+
+@Composable
+internal fun ListQuickAdd(draft: String, fields: QuickAddFields?, actions: ListActions, note: String = "", error: String? = null) {
     val colors = QuestTheme.colors
     var focused by remember { mutableStateOf(false) }
     var input by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
     val value = if (input.text == draft) input else TextFieldValue(draft, TextRange(draft.length))
     val focus = remember { FocusRequester() }
     var picker by rememberSaveable { mutableStateOf<FieldPicker?>(null) }
-    val expanded = focused || draft.isNotEmpty() || picker != null
+    var showNote by rememberSaveable { mutableStateOf(note.isNotEmpty()) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        focus.requestFocus()
+        keyboard?.show()
+    }
     val quick = actions.quick
     fun submit() {
         focus.requestFocus()
         actions.add()
     }
-    Column(Modifier.padding(bottom = QuestSpacing.small)) {
+    Column(
+        Modifier.fillMaxWidth().imePadding().navigationBarsPadding()
+            .verticalScroll(rememberScrollState()).padding(horizontal = QuestSpacing.screen)
+            .padding(bottom = QuestSpacing.medium),
+    ) {
         TextField(
             value = value,
             onValueChange = {
@@ -85,12 +137,14 @@ internal fun ListQuickAdd(draft: String, fields: QuickAddFields?, actions: ListA
                 .onFocusChanged { focused = it.isFocused }.testTag("list-add"),
             placeholder = { Text(stringResource(R.string.list_add), maxLines = 1) },
             leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null, tint = colors.textMuted) },
-            trailingIcon = if (expanded && draft.isNotBlank()) ({
+            trailingIcon = if (draft.isNotBlank()) ({
                 IconButton(onClick = ::submit, modifier = Modifier.testTag("list-add-send")) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.quick_add_save), tint = colors.text)
                 }
             }) else null,
             singleLine = true,
+            isError = error != null,
+            supportingText = error?.let { { Text(it) } },
             shape = RoundedCornerShape(QuestSpacing.cardRadius),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = colors.card,
@@ -102,8 +156,11 @@ internal fun ListQuickAdd(draft: String, fields: QuickAddFields?, actions: ListA
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }),
         )
-        if (expanded && fields != null) {
-            TaskFields(fields.quest, fields.plan, fields.deadline, onOpen = { picker = it })
+        if (fields != null) {
+            TaskFields(fields.quest, fields.plan, fields.deadline, onOpen = {
+                keyboard?.hide()
+                picker = it
+            })
         }
         if (focused && picker == null) {
             val caret = value.selection.end
@@ -119,6 +176,19 @@ internal fun ListQuickAdd(draft: String, fields: QuickAddFields?, actions: ListA
                     }
                 }
             }
+        }
+        TextButton(onClick = { showNote = !showNote }, modifier = Modifier.testTag("list-add-note-toggle")) {
+            Text(stringResource(if (showNote) R.string.quick_add_hide_note else R.string.quick_add_note))
+        }
+        if (showNote) {
+            OutlinedTextField(
+                value = note,
+                onValueChange = quick.editNote,
+                label = { Text(stringResource(R.string.task_description)) },
+                minLines = 2,
+                maxLines = 4,
+                modifier = Modifier.fillMaxWidth().testTag("list-add-note"),
+            )
         }
     }
     val active = picker ?: return

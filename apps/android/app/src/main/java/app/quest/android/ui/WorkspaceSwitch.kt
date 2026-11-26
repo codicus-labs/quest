@@ -12,6 +12,7 @@ package app.quest.android.ui
  * core shows another workspace (also when another device deleted the shown one).
  */
 internal fun AppViewModels.leaveWorkspace() {
+    list.clearDraft()
     taskSheet.close()
     questEditor.close()
     logWork.close()

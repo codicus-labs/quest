@@ -419,10 +419,12 @@ class FakeCore(
         record("toggle marker $offset")
         return source
     }
-    override fun checklist(taskId: String) = emptyList<uniffi.quest_mobile.ChecklistRow>()
+    var checklistRows = emptyList<uniffi.quest_mobile.ChecklistRow>()
+    override fun checklist(taskId: String) = checklistRows
     override fun checklistProgress(taskId: String): uniffi.quest_mobile.ChecklistProgress? = null
     override fun addChecklistItem(taskId: String, text: String): String {
         record("add checklist $taskId $text")
+        checklistRows = checklistRows + uniffi.quest_mobile.ChecklistRow("new-item", text, false)
         return "new-item"
     }
     override fun insertChecklistItemAfter(itemId: String): String {

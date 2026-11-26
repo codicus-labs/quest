@@ -17,12 +17,21 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.runtime.remember
+import uniffi.quest_mobile.UndoToast
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -54,7 +63,7 @@ class ListActions(
 )
 
 /**
- * One list: [top] (Today's segment, a quest's way back), the header, quick add (not on the Logbook),
+ * One list: [top] (Today's segment, a quest's way back), the header,
  * the open rows, then "n done". The core's undo toast floats at the bottom.
  */
 @Composable
@@ -64,28 +73,61 @@ fun ListScreen(
     modifier: Modifier = Modifier,
     top: @Composable () -> Unit = {},
     headerActions: @Composable () -> Unit = {},
+    showQuickAdd: Boolean = true,
+    quickError: String? = null,
+    dismissQuickError: () -> Unit = {},
 ) {
     when (state) {
         ListUiState.Loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         ListUiState.Gone -> Note(stringResource(R.string.list_gone), modifier)
         is ListUiState.Failed -> Note(state.message, modifier)
         is ListUiState.Ready -> Box(modifier.fillMaxSize()) {
-            ListContent(state, actions, top, headerActions)
-            state.list.toast?.let { toast ->
-                UndoSnackbar(
-                    toast.text,
-                    onUndo = actions.undo,
-                    actionLabel = toast.actionLabel,
-                    onDismiss = actions.dismissToast,
-                    modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 560.dp),
-                )
-            }
+            var footerHeight by remember { mutableStateOf(0.dp) }
+            ListContent(state, actions, top, headerActions, maxOf(88.dp, footerHeight + QuestSpacing.small))
+            val canAdd = showQuickAdd && state.list.kind != ListKind.Logbook
+            var adding by rememberSaveable { mutableStateOf(false) }
+            ListFooter(
+                state.list.toast, actions.undo, actions.dismissToast,
+                add = if (canAdd) ({ adding = true }) else null,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                onHeightChanged = { footerHeight = it },
+            )
+            if (canAdd && adding) ListQuickAddSheet(state, actions, close = {
+                adding = false
+                dismissQuickError()
+            }, error = quickError)
         }
     }
 }
 
 @Composable
-private fun ListContent(state: ListUiState.Ready, actions: ListActions, top: @Composable () -> Unit, headerActions: @Composable () -> Unit) {
+internal fun ListFooter(
+    toast: UndoToast?,
+    undo: () -> Unit,
+    dismissToast: () -> Unit,
+    add: (() -> Unit)?,
+    modifier: Modifier,
+    onHeightChanged: (Dp) -> Unit,
+) {
+    val density = LocalDensity.current
+    Column(modifier.fillMaxWidth().onSizeChanged { onHeightChanged(with(density) { it.height.toDp() }) }) {
+        if (add != null) {
+            QuickAddFab(add, Modifier.align(Alignment.End).padding(end = QuestSpacing.screen, bottom = QuestSpacing.medium))
+        }
+        toast?.let {
+            UndoSnackbar(it.text, undo, Modifier.align(Alignment.CenterHorizontally).widthIn(max = 560.dp), it.actionLabel, dismissToast)
+        }
+    }
+}
+
+@Composable
+private fun ListContent(
+    state: ListUiState.Ready,
+    actions: ListActions,
+    top: @Composable () -> Unit,
+    headerActions: @Composable () -> Unit,
+    bottomPadding: Dp,
+) {
     val list = state.list
     val placementList = when (val kind = list.kind) {
         ListKind.Today -> PlanTaskList.Today
@@ -96,7 +138,6 @@ private fun ListContent(state: ListUiState.Ready, actions: ListActions, top: @Co
     val entries = buildList {
         add(SortItem.Decoration("top") { Box(Modifier.padding(horizontal = QuestSpacing.small)) { top() } })
         add(SortItem.Decoration("header") { ListHeader(list, headerActions) })
-        if (placementList != null) add(SortItem.Decoration("add") { ListQuickAdd(state.draft, state.quick, actions) })
         if (list.empty) add(SortItem.Decoration("empty") { EmptyList(list.kind) })
         list.sections.forEachIndexed { index, section ->
             section.label?.let { label -> add(SortItem.Decoration("label-$index", placementList) { ListSectionLabel(label) }) }
@@ -111,7 +152,7 @@ private fun ListContent(state: ListUiState.Ready, actions: ListActions, top: @Co
         LazyColumn(
             Modifier.fillMaxSize().testTag("list-${list.kind.tag}"),
             state = scroll,
-            contentPadding = PaddingValues(bottom = 88.dp),
+            contentPadding = PaddingValues(bottom = bottomPadding),
         ) { sortItems(placed, draw) }
     }
 }

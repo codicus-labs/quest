@@ -49,10 +49,15 @@ Jetpack Compose (apps/android)          Screens, StateFlow, Threading der Plattf
 `compactTimer(elapsedMs: Long): String` formatiert eine Dauer in Millisekunden für Widgets
 und Mini-Player. Negative Werte ergeben `00:00`; unter einer Stunde gilt `mm:ss`,
 ab einer Stunde z. B. `1h 05m` (Sekunden entfallen). Die bestehenden Focus- und
-Listenmodelle behalten ihr bisheriges Zeitformat.
+Listenmodelle behalten ihr bisheriges Zeitformat. Android verwendet `compactPlayer(now)`
+für beide Mini-Player und `compactTracked(now)` für die Tagessumme im Tracked-Tab.
+Wochenstunden und Uhrzeitbereiche bleiben unverändert; `player` und `tracked`
+liefern weiterhin die bisherigen Labels.
 
 ## Markdown-Notizen und Checkliste (R4)
 
+- In-App-Quick-Add: `addQuickDraft(text, description, defaults, now)` speichert Titel und
+  optionale Markdown-Notiz als Batch. Schließen des Sheets behält den Entwurf für dieselbe Liste bzw. denselben Plan-Tag.
 - Notizquelle bleibt `TaskDetail.description` (ein synchronisiertes Markdown-Feld). Speichern über
   `QuestCore.setTaskDescription`, nach Eingaben entprellt und beim Verlassen des Editors sofort.
 - `parseMarkdown(text): List<MarkdownBlock>`: `Heading(level, content)` (1–3),

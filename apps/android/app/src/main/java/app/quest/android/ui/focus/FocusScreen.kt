@@ -226,9 +226,7 @@ private fun SessionContent(state: FocusUiState.Session, actions: FocusActions, n
                     modifier = Modifier.padding(top = QuestSpacing.small),
                 )
                 TaskNote(session.taskId, state.description, actions.notes, "focus-description", Modifier.padding(top = QuestSpacing.medium))
-                if (state.checklist.isNotEmpty()) {
-                    TaskChecklist(session.taskId, state.checklist, actions.checklist, editable = false)
-                }
+                TaskChecklist(session.taskId, state.checklist, actions.checklist, editable = true)
                 FlowRow(Modifier.padding(top = QuestSpacing.medium), horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)) {
                     if (session.running) {
                         FocusButton(stringResource(R.string.focus_stop), "focus-stop", actions.stop) { Icon(QuestIcons.Stop, null, Modifier.size(18.dp)) }

@@ -61,6 +61,19 @@ impl QuestCore {
         })
     }
 
+    /// Tracked, with today's total formatted like the compact timer.
+    pub fn compact_tracked(&self, now: Moment) -> Result<TrackedData, MobileError> {
+        guard(|| {
+            let snapshot = self.store().snapshot();
+            Ok(lists::tracked_with_total(&snapshot, Now::parse(&now)?, &self.focus_exit_state(), crate::compact_timer))
+        })
+    }
+
+    /// The mini player with compact elapsed time for a running timer.
+    pub fn compact_player(&self, now: Moment) -> Result<PlayerCard, MobileError> {
+        guard(|| Ok(lists::player_with_timer(&self.store().snapshot(), Now::parse(&now)?, crate::compact_timer)))
+    }
+
     /// The mini player above the tabs.
     pub fn player(&self, now: Moment) -> Result<PlayerCard, MobileError> {
         guard(|| Ok(lists::player(&self.store().snapshot(), Now::parse(&now)?)))
