@@ -13,29 +13,45 @@ pub(crate) struct Picker {
     month: NaiveDate,
 }
 
+pub(crate) trait DateHost: 'static {
+    fn date_today(&self) -> NaiveDate;
+    fn date_picker(&self) -> Option<Picker>;
+    fn date_picker_mut(&mut self) -> &mut Option<Picker>;
+}
+
+impl DateHost for State {
+    fn date_today(&self) -> NaiveDate {
+        self.today()
+    }
+    fn date_picker(&self) -> Option<Picker> {
+        self.date_picker
+    }
+    fn date_picker_mut(&mut self) -> &mut Option<Picker> {
+        &mut self.date_picker
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn field(
+pub(crate) fn field<S: DateHost>(
     input: El,
     key: &'static str,
     label: &'static str,
     selected: Option<NaiveDate>,
     latest: Option<NaiveDate>,
-    s: &State,
+    s: &S,
     p: &Pal,
-    pick: fn(&mut State, NaiveDate),
+    pick: fn(&mut S, NaiveDate),
     popups: &mut Vec<El>,
 ) -> El {
-    let picker = s.date_picker.filter(|picker| picker.key == key);
-    let month = picker.map_or_else(|| first(selected.unwrap_or_else(|| s.today())), |picker| picker.month);
-    let trigger = parts::icon_button(
-        format!("{key}-button"),
-        label,
-        &icons::DATE,
-        p.muted,
-        p,
-        move |s: &mut State, tx: &mut Tx| {
-            s.date_picker =
-                if s.date_picker.is_some_and(|picker| picker.key == key) { None } else { Some(Picker { key, month }) };
+    let picker = s.date_picker().filter(|picker| picker.key == key);
+    let month = picker.map_or_else(|| first(selected.unwrap_or_else(|| s.date_today())), |picker| picker.month);
+    let trigger = parts::icon_control(format!("{key}-button"), label, &icons::DATE, p.muted, p).on_press_tx(
+        move |s: &mut S, tx: &mut Tx| {
+            *s.date_picker_mut() = if s.date_picker().is_some_and(|picker| picker.key == key) {
+                None
+            } else {
+                Some(Picker { key, month })
+            };
             tx.blur();
         },
     );
@@ -44,9 +60,9 @@ pub(crate) fn field(
         .label(label)
         .placement(Placement::BottomEnd)
         .open(picker.is_some())
-        .on_close(|s: &mut State| s.date_picker = None);
+        .on_close(|s: &mut S| *s.date_picker_mut() = None);
     if picker.is_some() {
-        popup = popup.child(grid(key, month, selected, latest, s.today(), pick, p));
+        popup = popup.child(grid(key, month, selected, latest, s.date_today(), pick, p));
     }
     let trigger = popup.build(&p.kit, popups);
     row()
@@ -67,23 +83,24 @@ fn first(day: NaiveDate) -> NaiveDate {
     day.with_day(1).unwrap_or(day)
 }
 
-fn grid(
+fn grid<S: DateHost>(
     key: &'static str,
     month: NaiveDate,
     selected: Option<NaiveDate>,
     latest: Option<NaiveDate>,
     today: NaiveDate,
-    pick: fn(&mut State, NaiveDate),
+    pick: fn(&mut S, NaiveDate),
     p: &Pal,
 ) -> El {
     let shift = |label, glyph, to: Option<NaiveDate>| {
         let id = format!("{key}-{label}");
-        parts::icon_button(&id, label, glyph, p.muted, p, move |s: &mut State, _: &mut Tx| {
-            if let Some(month) = to {
-                s.date_picker = Some(Picker { key, month });
-            }
-        })
-        .disabled(to.is_none())
+        parts::icon_control(&id, label, glyph, p.muted, p)
+            .on_press(move |s: &mut S| {
+                if let Some(month) = to {
+                    *s.date_picker_mut() = Some(Picker { key, month });
+                }
+            })
+            .disabled(to.is_none())
     };
     let prev = month.checked_sub_months(Months::new(1));
     let next = month.checked_add_months(Months::new(1)).filter(|day| latest.is_none_or(|max| *day <= max));
@@ -136,11 +153,10 @@ fn grid(
             }
             cell = cell.child(text(day.day().to_string()).font(ty::SMALL).color(color));
             if !disabled {
-                cell =
-                    cell.focusable(true).cursor(rune::Cursor::Pointer).hover(p.hover).on_press(move |s: &mut State| {
-                        s.date_picker = None;
-                        pick(s, day);
-                    });
+                cell = cell.focusable(true).cursor(rune::Cursor::Pointer).hover(p.hover).on_press(move |s: &mut S| {
+                    *s.date_picker_mut() = None;
+                    pick(s, day);
+                });
             }
             line = line.child(cell);
         }
@@ -149,9 +165,9 @@ fn grid(
     grid.child(
         Button::new("Today")
             .variant(ButtonVariant::Ghost)
-            .on_press(move |s: &mut State| {
-                let today = s.today();
-                s.date_picker = None;
+            .on_press(move |s: &mut S| {
+                let today = s.date_today();
+                *s.date_picker_mut() = None;
                 pick(s, today);
             })
             .disabled(latest.is_some_and(|day| today > day))

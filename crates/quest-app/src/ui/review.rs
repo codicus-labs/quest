@@ -183,7 +183,7 @@ fn actions(task: &Task, p: &Pal) -> El {
     let id = task.id;
     let date = |field, label, glyph: &'static rune::Icon| {
         parts::icon_button(format!("review-{}", field_key(Some(id), field)), label, glyph, p.muted, p, move |s, tx| {
-            s.open_calendar(Some(id), field, tx);
+            s.open_calendar(id, field, tx);
             if let Some(calendar) = &mut s.task_calendar {
                 calendar.review = true;
             }

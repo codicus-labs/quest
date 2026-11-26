@@ -201,7 +201,7 @@ fn keyboard_sort_and_day_quick_add() {
     rt.pointer_move(x, y);
     settle(&mut rt);
     click(&mut rt, &format!("plan-add-{date}"));
-    assert_eq!(rt.state.quick_defaults().dates.planned_on, Some(date));
+    assert_eq!(super::quick_add::defaults(&rt.state).dates.planned_on, Some(date));
     type_text(&mut rt, "From the day header");
     press(&mut rt, Key::Enter, Mods::default());
     assert_eq!(task(&rt, "From the day header").planned_on, Some(date));

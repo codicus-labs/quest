@@ -1,17 +1,20 @@
 use chrono::{Datelike, Days, Weekday};
 use quest_domain::{Frequency, RepeatPin, RepeatRule, Task};
 use quest_view::repeat::{self, unit};
-use rune::{Cursor, El, ScrollSpec, Shadow, TextEdit, Tx, col, icon, row, spacer, text};
+use rune::{Cursor, El, Key, ScrollSpec, Shadow, TextEdit, Tx, col, icon, row, spacer, text};
 use rune_kit::{Button, ButtonVariant, Dialog, Kit, Select, SelectAppearance};
 
 use crate::icons;
 use crate::log_work::{date_label, parse_day};
-use crate::state::recurrence::RepeatChoice;
+use crate::state::recurrence::{RepeatChoice, RepeatEditor};
 use crate::state::{Overlay, State};
 use crate::theme::{Pal, ty};
 
-use super::date_picker;
 use super::log_work::{boxed, plain_field};
+use super::{
+    date_picker::{self, DateHost},
+    quick_add::{self, Host},
+};
 
 const FREQUENCIES: [Frequency; 4] = [Frequency::Day, Frequency::Week, Frequency::Month, Frequency::Year];
 
@@ -22,21 +25,24 @@ fn cadence(rule: RepeatRule) -> String {
 pub(super) fn task_chip(s: &State, task: &Task, p: &Pal) -> El {
     let id = task.id;
     let cadence = repeat::series_of(&s.snap, task).repeat.map(|schedule| self::cadence(schedule.rule));
-    super::task_fields::field_chip(p)
-        .key("task-modal-repeat")
-        .role("button")
-        .label(format!("Repeat: {}", cadence.as_deref().unwrap_or("Does not repeat")))
-        .focusable(true)
-        .min_w(0.0)
-        .max_w(140.0)
-        .cursor(Cursor::Pointer)
-        .help("Repeat (R / ⌘⇧R)")
-        .child(icon(&icons::REPEAT, 15.0).color(p.muted))
-        .children(cadence.map(|label| text(label).font(ty::SMALL).color(p.text).min_w(0.0).single_line().truncate()))
-        .on_press_tx(move |s: &mut State, tx: &mut Tx| {
-            tx.blur();
-            s.open_repeat_editor(id);
-        })
+    super::task_fields::active_chip(
+        p,
+        s.overlay == Overlay::RepeatEditor && s.repeat_editor.series == Some(s.series_of(task).id),
+    )
+    .key("task-modal-repeat")
+    .role("button")
+    .label(format!("Repeat: {}", cadence.as_deref().unwrap_or("Does not repeat")))
+    .focusable(true)
+    .min_w(0.0)
+    .max_w(140.0)
+    .cursor(Cursor::Pointer)
+    .help("Repeat (R / ⌘⇧R)")
+    .child(icon(&icons::REPEAT, 15.0).color(p.muted))
+    .children(cadence.map(|label| text(label).font(ty::SMALL).color(p.text).min_w(0.0).single_line().truncate()))
+    .on_press_tx(move |s: &mut State, tx: &mut Tx| {
+        tx.blur();
+        s.open_repeat_editor(id);
+    })
 }
 
 pub fn editor_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
@@ -50,6 +56,107 @@ pub fn editor_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
             .build(&p.kit, layer);
         return;
     };
+    let (body, popups) = editor(
+        s,
+        p,
+        task.title.clone(),
+        task.repeat.is_some(),
+        |s, _| s.save_repeat_editor(),
+        |s, _| s.stop_repeating(),
+        |s, _| s.close_repeat_editor(),
+    );
+    dialog(
+        "repeat-editor",
+        "⟳ Repeat",
+        body,
+        |s| {
+            if s.date_picker.take().is_none() {
+                s.close_repeat_editor();
+            }
+        },
+        p,
+        layer,
+    );
+    layer.extend(popups);
+}
+
+pub(crate) trait RepeatHost: DateHost {
+    fn repeat_form(&self) -> &RepeatEditor;
+    fn repeat_form_mut(&mut self) -> &mut RepeatEditor;
+}
+
+impl RepeatHost for State {
+    fn repeat_form(&self) -> &RepeatEditor {
+        self.quick.repeat.as_ref().unwrap_or(&self.repeat_editor)
+    }
+    fn repeat_form_mut(&mut self) -> &mut RepeatEditor {
+        self.quick.repeat.as_mut().unwrap_or(&mut self.repeat_editor)
+    }
+}
+
+pub(super) fn quick_chip<S: Host>(s: &S, p: &Pal) -> El {
+    let label = quick_add::rule(s).map(cadence);
+    let active = s.quick().repeat.is_some();
+    super::task_fields::active_chip(p, active)
+        .key("quick-add-repeat")
+        .role("button")
+        .label(format!("Repeat: {}", label.as_deref().unwrap_or("Does not repeat")))
+        .expanded(active)
+        .focusable(true)
+        .min_w(0.0)
+        .max_w(140.0)
+        .cursor(Cursor::Pointer)
+        .help("Repeat (⌘⇧R)")
+        .child(icon(&icons::REPEAT, 15.0).color(p.muted))
+        .children(label.map(|label| text(label).font(ty::SMALL).color(p.text).min_w(0.0).single_line().truncate()))
+        .on_press_tx(|s: &mut S, tx| s.open_field(super::task_fields::Picker::Repeat, tx))
+}
+
+pub(super) fn quick_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
+    let (body, popups) = quick_editor(s, p);
+    Dialog::new("quick-repeat-dialog", "⟳ Repeat")
+        .open(true)
+        .fit()
+        .width(510.0)
+        .on_close(|s: &mut State| s.quick.close_picker())
+        .child(body)
+        .build(&p.kit, layer);
+    layer.extend(popups);
+}
+
+pub fn quick_editor<S: Host>(s: &S, p: &Pal) -> (El, Vec<El>) {
+    let title = s.draft().title;
+    let title = if title.is_empty() { "New to-do".into() } else { title };
+    let (body, popups) = editor(
+        s,
+        p,
+        title,
+        quick_add::rule(s).is_some(),
+        quick_add::save_repeat::<S>,
+        quick_add::stop_repeat::<S>,
+        quick_add::escape::<S>,
+    );
+    let body = body.key("repeat-editor").focusable(true).on_key(|s: &mut S, ev, tx| {
+        if ev.key == Key::Enter && (tx.focused() == Some("repeat-editor") || ev.mods.cmd) {
+            quick_add::save_repeat(s, tx);
+            true
+        } else {
+            false
+        }
+    });
+    (body, popups)
+}
+
+fn editor<S: RepeatHost>(
+    s: &S,
+    p: &Pal,
+    title: String,
+    can_stop: bool,
+    save: fn(&mut S, &mut Tx),
+    stop: fn(&mut S, &mut Tx),
+    close: fn(&mut S, &mut Tx),
+) -> (El, Vec<El>) {
+    let form = s.repeat_form();
     let mut popups = Vec::new();
     let frequency = select(
         "repeat-frequency",
@@ -60,14 +167,17 @@ pub fn editor_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
         s,
         160.0,
     )
-    .on_choose(|s: &mut State, value, _| {
+    .on_choose(|s: &mut S, value, tx| {
         if let Some(frequency) = FREQUENCIES.into_iter().find(|frequency| unit(*frequency) == value) {
-            s.repeat_editor.frequency = frequency;
+            s.repeat_form_mut().frequency = frequency;
         }
-        s.repeat_editor.choice = None;
+        if s.repeat_form().series.is_none() {
+            tx.focus_when_shown("repeat-editor", true);
+        }
+        s.repeat_form_mut().choice = None;
     })
     .build(&field_kit(p), &mut popups);
-    let interval = field("repeat-every", &form.every, "Interval", p, |s| &mut s.repeat_editor.every);
+    let interval = field::<S>("repeat-every", &form.every, "Interval", p, |s| &mut s.repeat_form_mut().every);
     let interval =
         row().w_full().gap(10.0).center_y().child(boxed(interval, p).w(78.0).h(FIELD_H)).child(fill(frequency));
     let pin = select(
@@ -83,24 +193,24 @@ pub fn editor_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
         s,
         250.0,
     )
-    .on_choose(|s: &mut State, value, _| {
-        s.repeat_editor.pin = match value {
+    .on_choose(|s: &mut S, value, _| {
+        s.repeat_form_mut().pin = match value {
             "Top" => RepeatPin::Top,
             "Bottom" => RepeatPin::Bottom,
             _ => RepeatPin::None,
         };
-        s.repeat_editor.choice = None;
+        s.repeat_form_mut().choice = None;
     })
     .build(&field_kit(p), &mut popups);
     let start = date_picker::field(
-        field("repeat-start", &form.starts, "Start date", p, |s| &mut s.repeat_editor.starts),
+        field::<S>("repeat-start", &form.starts, "Start date", p, |s| &mut s.repeat_form_mut().starts),
         "repeat-start-picker",
         "Choose start date",
-        parse_day(&form.starts.text, s.today()),
+        parse_day(&form.starts.text, s.date_today()),
         None,
         s,
         p,
-        State::pick_repeat_start,
+        |s, day| s.repeat_form_mut().starts = TextEdit::new(date_label(day)),
         &mut popups,
     );
     let end = select(
@@ -112,9 +222,9 @@ pub fn editor_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
         s,
         250.0,
     )
-    .on_choose(|s: &mut State, value, _| {
-        s.repeat_editor.ends_on_date = value == "On date";
-        s.repeat_editor.choice = None;
+    .on_choose(|s: &mut S, value, _| {
+        s.repeat_form_mut().ends_on_date = value == "On date";
+        s.repeat_form_mut().choice = None;
     })
     .build(&field_kit(p), &mut popups);
     let mut body = col()
@@ -122,7 +232,7 @@ pub fn editor_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
         .gap(12.0)
         .px(20.0)
         .pb(20.0)
-        .child(text(task.title.clone()).font(ty::BODY_MEDIUM).color(p.muted).wrap())
+        .child(text(title).font(ty::BODY_MEDIUM).color(p.muted).wrap())
         .child(setting("Every", interval, p));
     match form.frequency {
         Frequency::Week => body = body.child(weekdays(s, p)),
@@ -136,29 +246,30 @@ pub fn editor_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
     ));
     if form.ends_on_date {
         let date = date_picker::field(
-            field("repeat-end", &form.ends, "End date", p, |s| &mut s.repeat_editor.ends),
+            field::<S>("repeat-end", &form.ends, "End date", p, |s| &mut s.repeat_form_mut().ends),
             "repeat-end-picker",
             "Choose end date",
-            parse_day(&form.ends.text, s.today()),
+            parse_day(&form.ends.text, s.date_today()),
             None,
             s,
             p,
-            State::pick_repeat_end,
+            |s, day| s.repeat_form_mut().ends = TextEdit::new(date_label(day)),
             &mut popups,
         );
         body = body.child(setting("End date", date, p));
     }
-    let timezone = field("repeat-timezone", &form.time_zone, "Timezone", p, |s| &mut s.repeat_editor.time_zone);
+    let timezone =
+        field::<S>("repeat-timezone", &form.time_zone, "Timezone", p, |s| &mut s.repeat_form_mut().time_zone);
     body = body.child(setting("Timezone", boxed(timezone, p).h(FIELD_H), p));
     if let Some(message) = form.error {
         body = body.child(text(message).key("repeat-error").color(p.accent).font(ty::SMALL).wrap());
     }
     let mut actions = row().w_full().center_y().gap(8.0).mt(8.0);
-    if task.repeat.is_some() {
+    if can_stop {
         actions = actions.child(
             Button::new("Stop repeating")
                 .variant(ButtonVariant::GhostMuted)
-                .on_press(|s: &mut State| s.stop_repeating())
+                .on_press_tx(stop)
                 .build(&p.kit)
                 .key("repeat-stop"),
         );
@@ -166,36 +277,14 @@ pub fn editor_layer(s: &State, p: &Pal, layer: &mut Vec<El>) {
     actions = actions
         .child(spacer())
         .child(
-            Button::new("Cancel")
-                .variant(ButtonVariant::Ghost)
-                .on_press(|s: &mut State| s.close_repeat_editor())
-                .build(&p.kit)
-                .key("repeat-cancel"),
+            Button::new("Cancel").variant(ButtonVariant::Ghost).on_press_tx(close).build(&p.kit).key("repeat-cancel"),
         )
-        .child(
-            Button::new("Save")
-                .variant(ButtonVariant::Contrast)
-                .on_press(|s: &mut State| s.save_repeat_editor())
-                .build(&p.kit)
-                .key("repeat-save"),
-        );
-    dialog(
-        "repeat-editor",
-        "Repeat task",
-        body.child(actions),
-        |s| {
-            if s.date_picker.take().is_none() {
-                s.close_repeat_editor();
-            }
-        },
-        p,
-        layer,
-    );
-    layer.extend(popups);
+        .child(Button::new("Save").variant(ButtonVariant::Contrast).on_press_tx(save).build(&p.kit).key("repeat-save"));
+    (body.child(actions), popups)
 }
 
-fn weekdays(s: &State, p: &Pal) -> El {
-    let selected = s.repeat_editor.shown_weekdays(s.today());
+fn weekdays<S: RepeatHost>(s: &S, p: &Pal) -> El {
+    let selected = s.repeat_form().shown_weekdays(s.date_today());
     let mut days = row().gap(5.0);
     for (day, short, full) in [
         (Weekday::Mon, "Mo", "Monday"),
@@ -222,14 +311,18 @@ fn weekdays(s: &State, p: &Pal) -> El {
                 .hover(p.hover)
                 .cursor(Cursor::Pointer)
                 .child(text(short).font(ty::SMALL_MEDIUM).color(if checked { p.text } else { p.muted }))
-                .on_press(move |s: &mut State| s.toggle_repeat_weekday(day)),
+                .on_press(move |s: &mut S| {
+                    let shown = s.repeat_form().shown_weekdays(s.date_today());
+                    let form = s.repeat_form_mut();
+                    form.weekdays = repeat::toggle_weekday(form.weekdays, shown, day);
+                }),
         );
     }
     setting("On", days, p)
 }
 
-fn month_day(s: &State, p: &Pal, popups: &mut Vec<El>) -> El {
-    let form = &s.repeat_editor;
+fn month_day<S: RepeatHost>(s: &S, p: &Pal, popups: &mut Vec<El>) -> El {
+    let form = s.repeat_form();
     let month_day = select(
         "repeat-month-day",
         "Monthly date",
@@ -239,16 +332,17 @@ fn month_day(s: &State, p: &Pal, popups: &mut Vec<El>) -> El {
         s,
         184.0,
     )
-    .on_choose(|s: &mut State, value, _| {
-        s.repeat_editor.last_day = value == "Last day";
-        s.repeat_editor.choice = None;
+    .on_choose(|s: &mut S, value, _| {
+        s.repeat_form_mut().last_day = value == "Last day";
+        s.repeat_form_mut().choice = None;
     })
     .build(&field_kit(p), popups);
     let mut controls = row().w_full().gap(10.0).center_y().child(fill(month_day));
     if !form.last_day {
-        let default = parse_day(&form.starts.text, s.today()).unwrap_or(s.today()).day().to_string();
-        let input = field("repeat-month-day-number", &form.month_day, &default, p, |s| &mut s.repeat_editor.month_day)
-            .label("Day of the month");
+        let default = parse_day(&form.starts.text, s.date_today()).unwrap_or(s.date_today()).day().to_string();
+        let input =
+            field::<S>("repeat-month-day-number", &form.month_day, &default, p, |s| &mut s.repeat_form_mut().month_day)
+                .label("Day of the month");
         controls = controls.child(boxed(input, p).w(72.0).h(FIELD_H));
     }
     setting("On", controls, p)
@@ -315,8 +409,8 @@ fn dialog(key: &'static str, title: &'static str, body: El, close: fn(&mut State
     Dialog::new(key, title).open(true).fit().width(510.0).on_close(close).child(body).build(&p.kit, layer);
 }
 
-fn field(key: &str, edit: &TextEdit, label: &str, p: &Pal, bind: fn(&mut State) -> &mut TextEdit) -> El {
-    plain_field(key, edit, label, p, bind).on_submit(|_: &mut State, tx: &mut Tx| tx.blur())
+fn field<S: 'static>(key: &str, edit: &TextEdit, label: &str, p: &Pal, bind: fn(&mut S) -> &mut TextEdit) -> El {
+    plain_field(key, edit, label, p, bind).on_submit(|_: &mut S, tx: &mut Tx| tx.blur())
 }
 
 /// Height of every control in the dialog, matching the date field.
@@ -351,13 +445,13 @@ fn field_kit(p: &Pal) -> Kit {
     kit
 }
 
-fn select(
+fn select<S: RepeatHost>(
     key: &str,
     label: &str,
     choice: RepeatChoice,
     options: &[&str],
     current: &str,
-    s: &State,
+    s: &S,
     width: f32,
 ) -> Select {
     Select::new(key, options)
@@ -365,10 +459,10 @@ fn select(
         .width(width)
         .label(label)
         .current(Some(current))
-        .open(s.repeat_editor.choice == Some(choice))
-        .on_toggle(move |s: &mut State| {
-            s.date_picker = None;
-            s.repeat_editor.choice = (s.repeat_editor.choice != Some(choice)).then_some(choice);
+        .open(s.repeat_form().choice == Some(choice))
+        .on_toggle(move |s: &mut S| {
+            *s.date_picker_mut() = None;
+            s.repeat_form_mut().choice = (s.repeat_form().choice != Some(choice)).then_some(choice);
         })
-        .on_close(|s: &mut State| s.repeat_editor.choice = None)
+        .on_close(|s: &mut S| s.repeat_form_mut().choice = None)
 }

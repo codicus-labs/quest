@@ -1,13 +1,11 @@
+use super::State;
 use chrono::{DateTime, NaiveDate, Utc};
 use quest_domain::{Command, DateField, EntityId, Position, Snapshot, Task, TaskDates, TaskList};
 use quest_view::{
-    calendar, quick_add,
+    calendar,
     undo::{self, TaskEdit, UndoEvent},
 };
 use rune::Tx;
-
-use super::quest_picker::PickFor;
-use super::{Overlay, State, View};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Calendar {
@@ -114,17 +112,16 @@ impl State {
             tx.wake_after(crate::clock::wake_for(self.now, until));
             self.snap.task(*id).is_some_and(|task| task.completed_at == Some(*at))
         });
-        let picker = self.task_calendar.is_some_and(|c| c.task.is_none())
-            || self.quest_picker.as_ref().is_some_and(|q| q.target == PickFor::QuickAdd);
+        let picker = self.quick.picker_open();
         let has_focus = tx.focused().is_some_and(|key| key.starts_with("quick-add"));
         if has_focus && self.task_modal.is_some() {
             self.close_task_modal();
             tx.animated();
             changed = true;
         }
-        if !has_focus && !picker && self.quick_add.text.trim().is_empty() {
+        if !has_focus && !picker && self.quick.title.text.trim().is_empty() {
             let was_open = self.plan_quick_day.take().is_some();
-            if was_open || self.quick_fields.is_some() || self.quick_note.is_some() {
+            if was_open || self.quick.has_fields() || self.quick.note.is_some() {
                 self.reset_quick_add();
                 changed = true;
             }
@@ -133,44 +130,15 @@ impl State {
     }
 
     pub fn reset_quick_add(&mut self) {
-        self.quick_add.clear();
-        self.quick_note = None;
-        self.quick_fields = None;
-        self.quick_choice = 0;
+        self.quick = Default::default();
     }
 
-    pub fn quick_defaults(&self) -> quick_add::Fields {
-        let mut fields = quick_add::Fields::for_view(self.view, self.today());
-        if self.view == View::Plan {
-            fields.dates.planned_on = self.plan_quick_day;
-        }
-        fields
-    }
-
-    pub fn quick_base(&self) -> quick_add::Fields {
-        self.quick_fields.unwrap_or_else(|| self.quick_defaults())
-    }
-
-    pub fn quick_draft(&self) -> quick_add::Draft {
-        quick_add::parse(
-            &self.quick_add.text,
-            self.quick_base(),
-            self.today(),
-            &quest_view::quest_picker::recent_quests(&self.snap, self.now),
-        )
-    }
-
-    pub fn save_quick_add(&mut self) {
+    pub fn save_quick_add(&mut self, commands: &[Command]) {
         if self.auth.locks_edits() {
             self.notice = Some("Signing out; the task wasn’t added.".into());
             return;
         }
-        let description = self.quick_note.as_ref().map_or("", |note| note.text.as_str());
-        let commands = self.quick_draft().commands(EntityId::new(), Position::Bottom, description);
-        if commands.is_empty() {
-            return;
-        }
-        if let Err(error) = self.store.dispatch_all(&commands) {
+        if let Err(error) = self.store.dispatch_all_in(self.snap.workspace, commands) {
             self.notice = Some(format!("Couldn’t add task: {error}."));
             return;
         }
@@ -179,28 +147,26 @@ impl State {
         self.reset_quick_add();
     }
 
-    pub fn field_dates(&self, task: Option<EntityId>) -> Option<TaskDates> {
-        match task {
-            None => Some(self.quick_draft().fields.dates),
-            Some(task) => self.plan_task(task).map(|t| t.dates()),
-        }
+    pub fn field_dates(&self, task: EntityId) -> Option<TaskDates> {
+        self.plan_task(task).map(|t| t.dates())
     }
 
-    pub fn open_calendar(&mut self, task: Option<EntityId>, field: DateField, tx: &mut Tx) {
+    pub fn open_calendar(&mut self, task: EntityId, field: DateField, tx: &mut Tx) {
         let Some(dates) = self.field_dates(task) else { return };
+        self.quick.close_picker();
         self.quest_picker = None;
-        self.task_calendar =
-            Some(Calendar { task, field, cursor: calendar::initial(dates, field, self.today()), review: false });
-        if task.is_none() {
-            self.quick_fields = Some(self.quick_base());
-        }
+        self.task_calendar = Some(Calendar {
+            task: Some(task),
+            field,
+            cursor: calendar::initial(dates, field, self.today()),
+            review: false,
+        });
         tx.focus_when_shown("task-calendar", true);
     }
 
     pub fn close_calendar(&mut self, tx: &mut Tx) {
         if let Some(calendar) = self.task_calendar.take() {
-            let anchor = if calendar.task.is_none() { "quick-add".into() } else { calendar.anchor() };
-            tx.focus_when_shown(anchor, tx.focus_visible());
+            tx.focus_when_shown(calendar.anchor(), tx.focus_visible());
         }
     }
 
@@ -210,13 +176,8 @@ impl State {
             return;
         }
         self.close_calendar(tx);
-        let Some(id) = calendar.task else {
-            let mut fields = self.commit_quick_tokens();
-            fields.dates = quest_view::calendar::set_date(fields.dates, calendar.field, day);
-            self.quick_fields = Some(fields);
-            return;
-        };
-        if self.field_dates(Some(id)).is_none_or(|dates| dates.get(calendar.field) == day) {
+        let Some(id) = calendar.task else { return };
+        if self.field_dates(id).is_none_or(|dates| dates.get(calendar.field) == day) {
             return;
         }
         let at = self.clock.now();
@@ -224,19 +185,5 @@ impl State {
             DateField::Plan => Command::MoveTask { id, planned_on: day, position: Position::Bottom, at },
             DateField::Due => Command::SetTaskDue { id, due_on: day, today: self.today(), at },
         });
-    }
-
-    pub fn commit_quick_tokens(&mut self) -> quick_add::Fields {
-        let draft = self.quick_draft();
-        if draft.title != self.quick_add.text.trim() {
-            self.quick_add = rune::TextEdit::new(draft.title);
-        }
-        draft.fields
-    }
-
-    pub fn quick_hosted(&self) -> bool {
-        self.overlay == Overlay::None
-            && (matches!(self.view, View::Today | View::Inbox | View::Quest(_))
-                || self.view == View::Plan && self.plan_quick_day.is_some())
     }
 }

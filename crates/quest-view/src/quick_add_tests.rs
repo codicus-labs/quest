@@ -47,6 +47,48 @@ fn known_quest_tokens_strip_and_keep_recent_order_for_prefix_matches() {
 }
 
 #[test]
+fn a_recurring_draft_creates_the_task_note_and_rule_in_one_batch() {
+    use quest_domain::{FieldStore, Frequency, HlcClock, NodeId, RepeatPin, Weekdays, plan_all};
+
+    let id = EntityId::new();
+    let now = today().and_hms_opt(9, 0, 0).unwrap().and_utc();
+    let rule = RepeatRule {
+        every: 1,
+        frequency: Frequency::Week,
+        starts: today(),
+        ends: None,
+        time_zone: chrono_tz::UTC,
+        pin: RepeatPin::None,
+        weekdays: Weekdays::default(),
+        month_day: None,
+    };
+    let draft = parse("Write a sketch", Fields::default(), today(), &[]);
+    let workspace = EntityId::DEFAULT_WORKSPACE;
+    let store = FieldStore::default();
+    let clock = HlcClock::new(NodeId(1));
+    let commands = draft.clone().commands_with_repeat(id, Position::Bottom, "## Idea", Some(rule), now);
+    let batch = plan_all(&commands, &store, workspace, &clock, 1).unwrap();
+    let snapshot = Snapshot::from_store(&batch.store, workspace);
+    let task = snapshot.task(id).unwrap();
+    assert_eq!(task.description, "## Idea");
+    assert_eq!(task.repeat.unwrap().rule, rule);
+    assert_eq!(task.planned_on, Some(today()));
+
+    let invalid = RepeatRule { every: 0, ..rule };
+    let commands = draft.commands_with_repeat(id, Position::Bottom, "", Some(invalid), now);
+    assert!(matches!(
+        plan_all(&commands, &store, workspace, &clock, 1),
+        Err(quest_domain::CommandError::InvalidRepeatRule)
+    ));
+    assert!(Snapshot::from_store(&store, workspace).task(id).is_none());
+    assert!(
+        parse("", Fields::default(), today(), &[])
+            .commands_with_repeat(id, Position::Bottom, "", Some(rule), now)
+            .is_empty()
+    );
+}
+
+#[test]
 fn landing_uses_today_then_plan_then_quest_and_keeps_future_deadline_only_in_inbox() {
     use quest_domain::{FieldStore, HlcClock, NodeId, QuestColor, plan};
     let quest = EntityId::new();

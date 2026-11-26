@@ -60,7 +60,7 @@ const RIGHT: [Group; 3] = [
             (&["F"], "Focus"),
             (&["N"], "New task"),
             (&["L", "P", "D"], "Quest / plan / deadline"),
-            (&["⌘", "⇧", "L/P/D"], "Quick-add fields"),
+            (&["⌘", "⇧", "L/P/D/R"], "Quick-add fields"),
             (&["⌘", "⇧", "N"], "Quick-add Markdown note"),
             (&["R", "⌘⇧R"], "Edit repeat"),
             (&["W"], "Next week"),

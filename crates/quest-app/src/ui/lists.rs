@@ -85,12 +85,10 @@ pub fn shown_tasks(s: &State) -> Vec<EntityId> {
 
 pub fn view(s: &State, p: &Pal) -> El {
     let (header, add, empty) = match s.view {
-        View::Today => (today_header(s, p), Some(super::task_fields::quick_add(s, p, "Add to Today")), "All clear"),
-        View::Inbox => (
-            header(&icons::INBOX, p.icon_inbox, "Inbox", None, p),
-            Some(super::task_fields::quick_add(s, p, "Add to Inbox")),
-            "Inbox zero",
-        ),
+        View::Today => (today_header(s, p), super::quick_add::inline(s, p), "All clear"),
+        View::Inbox => {
+            (header(&icons::INBOX, p.icon_inbox, "Inbox", None, p), super::quick_add::inline(s, p), "Inbox zero")
+        }
         _ => (header(&icons::LOGBOOK, p.icon_logbook, "Logbook", None, p), None, "Nothing done yet"),
     };
     let shows = Shows { quest: true, plan_ahead: s.view != View::Today };

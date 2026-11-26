@@ -43,7 +43,6 @@ pub enum Shortcut {
     Organize,
     BookOrganizing,
     Pick(Picker),
-    QuickPick(Picker),
     Task(TaskKey),
 }
 
@@ -70,13 +69,9 @@ pub fn shortcut(ev: &KeyEvent) -> Option<Shortcut> {
         && ev.mods.shift
         && !ev.mods.alt
         && !ev.mods.ctrl
+        && letter.eq_ignore_ascii_case(&'r')
     {
-        if letter.eq_ignore_ascii_case(&'r') {
-            return Some(Shortcut::Repeat);
-        }
-        if let Some(picker) = Picker::from_letter(letter) {
-            return Some(Shortcut::QuickPick(picker));
-        }
+        return Some(Shortcut::Repeat);
     }
     match &ev.key {
         Key::Command('k') => Some(Shortcut::TogglePalette),
@@ -129,6 +124,9 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         && let crate::clock::Clock::Fixed(at) = s.clock
     {
         s.clock = crate::clock::Clock::Fixed(at + chrono::TimeDelta::minutes(2));
+        return true;
+    }
+    if !s.auth.locks_edits() && crate::ui::quick_add::inline_key(s, ev, tx) {
         return true;
     }
     let Some(shortcut) = shortcut(ev) else { return false };
@@ -237,9 +235,8 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Shortcut::DeleteTask => return delete_task(s, tx),
         Shortcut::Pick(picker) => {
             let Some(task) = s.shortcut_task() else { return false };
-            task_fields::open(s, Some(task), picker, tx);
+            task_fields::open(s, task, picker, tx);
         }
-        Shortcut::QuickPick(picker) => quick_picker(s, picker, tx),
         Shortcut::Task(key) => {
             let target = if s.view == View::Focus && key != TaskKey::Open {
                 s.snap.running_entry().and_then(|e| e.task_id)
@@ -251,12 +248,6 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
     }
     true
-}
-
-pub fn quick_picker(s: &mut State, picker: Picker, tx: &mut Tx) {
-    if s.quick_hosted() {
-        task_fields::open(s, None, picker, tx);
-    }
 }
 
 pub fn repeat(s: &mut State, tx: &mut Tx) -> bool {

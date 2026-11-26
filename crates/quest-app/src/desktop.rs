@@ -1,4 +1,6 @@
 mod panel;
+#[cfg(test)]
+pub(crate) use panel::test_panel;
 mod widget;
 
 use std::path::{Path, PathBuf};
@@ -79,6 +81,7 @@ impl MainWindows {
         mut app: App<State>,
         store: Arc<Store>,
         clock: Clock,
+        repeat_zone: chrono_tz::Tz,
         displays: &[Display],
         writer: PreferenceWriter,
     ) -> (App<State>, Self, impl Fn() + Send + Sync + 'static) {
@@ -91,7 +94,7 @@ impl MainWindows {
             profile: 0,
         }));
         let main = app.handle();
-        let (panel_spec, feedback_spec) = panel::windows(shared.clone(), clock, main.clone());
+        let (panel_spec, feedback_spec) = panel::windows(shared.clone(), clock, repeat_zone, main.clone());
         app.window(feedback_spec);
         let (panel, _) = app.window(panel_spec);
         let (widget, _) = app.window(widget::window(shared.clone(), clock, main.clone(), displays, writer));

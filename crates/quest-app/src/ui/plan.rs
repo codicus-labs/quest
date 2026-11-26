@@ -5,7 +5,7 @@ use rune::{Cursor, El, Tx, col, icon, row, spacer, text};
 
 use super::{
     drag::{self, Zone},
-    lists, parts, task_fields,
+    lists, parts,
     task_row::{self, Shows},
 };
 use crate::dnd::ListId;
@@ -119,7 +119,7 @@ fn section(s: &State, day: &Day<'_>, p: &Pal) -> El {
             .py(3.0)
             .border_sides([0.0, 0.0, 1.0, 0.0], p.border)
             .child(header)
-            .children((s.plan_quick_day == Some(date)).then(|| task_fields::quick_add(s, p, "New to-do…")))
+            .children(if s.plan_quick_day == Some(date) { super::quick_add::inline(s, p) } else { None })
             .child(rows)
             .children(groups.map(|group| lists::group_rows(s, group, SHOWS, p)))
             .children(day.due.iter().map(|task| {

@@ -135,6 +135,10 @@ const SCENES: &[Scene] = &[
     ("task-deadline-calendar-light", |s| light(s, task_deadline_calendar)),
     ("quick-add-calendar", quick_add_calendar),
     ("quick-add-calendar-light", |s| light(s, quick_add_calendar)),
+    ("quick-add-deadline", quick_add_deadline),
+    ("quick-add-deadline-light", |s| light(s, quick_add_deadline)),
+    ("quick-add-repeat", quick_add_repeat),
+    ("quick-add-repeat-light", |s| light(s, quick_add_repeat)),
     ("task-done-toast", task_done_toast),
     ("task-done-toast-light", |s| light(s, task_done_toast)),
     ("task-modal", |s| {
@@ -192,7 +196,7 @@ const SCENES: &[Scene] = &[
     }),
     ("home-quests", |s| {
         more_quests(s);
-        s.toggle_quest_picker(state::quest_picker::PickFor::QuickAdd);
+        ui::quick_add::Host::open_field(s, ui::task_fields::Picker::Quest, &mut rune::Tx::default());
     }),
     ("quest-picker-empty", |s| task_modal_quests(s, "zzz")),
     ("today", today_selected),
@@ -346,7 +350,7 @@ fn task_quest_picker(s: &mut State) {
 fn task_date_calendar(s: &mut State, field: quest_domain::DateField) {
     task_detail(s);
     if let Some(id) = s.task_modal.as_ref().map(|form| form.task) {
-        s.open_calendar(Some(id), field, &mut rune::Tx::default());
+        s.open_calendar(id, field, &mut rune::Tx::default());
     }
 }
 
@@ -359,8 +363,23 @@ fn task_deadline_calendar(s: &mut State) {
 }
 
 fn quick_add_calendar(s: &mut State) {
-    s.quick_add = rune::TextEdit::new("Sketch the cover");
-    s.open_calendar(None, quest_domain::DateField::Plan, &mut rune::Tx::default());
+    quick_scene(s, ui::task_fields::Picker::Date(quest_domain::DateField::Plan));
+}
+
+fn quick_add_deadline(s: &mut State) {
+    quick_scene(s, ui::task_fields::Picker::Date(quest_domain::DateField::Due));
+}
+
+fn quick_add_repeat(s: &mut State) {
+    quick_scene(s, ui::task_fields::Picker::Repeat);
+    if let Some(editor) = &mut s.quick.repeat {
+        editor.frequency = quest_domain::Frequency::Week;
+    }
+}
+
+fn quick_scene(s: &mut State, picker: ui::task_fields::Picker) {
+    s.quick.title = rune::TextEdit::new("Sketch the cover");
+    ui::quick_add::Host::open_field(s, picker, &mut rune::Tx::default());
 }
 
 fn task_done_toast(s: &mut State) {
@@ -544,7 +563,8 @@ fn main() {
     let register_waker = waker.clone();
     rune::run_windows(move |displays| {
         let wake = app.handle();
-        let (app, windows, wake_all) = desktop::MainWindows::install(app, store.clone(), clock, displays, preferences);
+        let (app, windows, wake_all) =
+            desktop::MainWindows::install(app, store.clone(), clock, repeat_zone, displays, preferences);
         let _ = register_waker.set(Box::new(wake_all));
         let app = app.init(move || {
             let mut state = State::new(store, profiles, clock);

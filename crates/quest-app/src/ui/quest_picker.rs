@@ -13,8 +13,6 @@ pub trait QuestHost: Sized + 'static {
     fn picker(&self) -> Option<&QuestPicker>;
     fn picker_mut(&mut self) -> &mut Option<QuestPicker>;
     fn picker_search(&mut self) -> &mut rune::TextEdit;
-    fn picker_hosted(&self, target: &PickFor) -> bool;
-    fn toggle_picker(&mut self, target: PickFor);
     fn picker_rows(&self) -> Vec<PickRow>;
     fn picked(&self, target: &PickFor) -> Option<Pick>;
     fn choose_quest(&mut self, pick: Pick);
@@ -40,28 +38,30 @@ pub trait QuestHost: Sized + 'static {
 
 impl QuestHost for State {
     fn picker(&self) -> Option<&QuestPicker> {
-        self.quest_picker.as_ref()
+        self.quick.quest.as_ref().or(self.quest_picker.as_ref())
     }
     fn picker_mut(&mut self) -> &mut Option<QuestPicker> {
-        &mut self.quest_picker
+        if self.quick.quest.is_some() { &mut self.quick.quest } else { &mut self.quest_picker }
     }
     fn picker_search(&mut self) -> &mut rune::TextEdit {
-        self.quest_picker_search()
-    }
-    fn picker_hosted(&self, target: &PickFor) -> bool {
-        hosted(self, target)
-    }
-    fn toggle_picker(&mut self, target: PickFor) {
-        self.toggle_quest_picker(target);
+        if self.quick.quest.is_some() {
+            self.quick.quest.as_mut().map_or(&mut self.quick.closed_search, |picker| &mut picker.search)
+        } else {
+            self.quest_picker_search()
+        }
     }
     fn picker_rows(&self) -> Vec<PickRow> {
-        self.quest_picker_rows()
+        if self.quick.quest.is_some() { super::quick_add::quest_rows(self) } else { self.quest_picker_rows() }
     }
     fn picked(&self, target: &PickFor) -> Option<Pick> {
         self.current_pick(target)
     }
     fn choose_quest(&mut self, pick: Pick) {
-        State::choose_quest(self, pick);
+        if self.quick.quest.is_some() {
+            super::quick_add::choose_quest(self, pick);
+        } else {
+            State::choose_quest(self, pick);
+        }
     }
 }
 
@@ -117,7 +117,7 @@ pub(super) fn fit(chip: [f32; 4], bounds: [f32; 4]) -> Fit {
 }
 
 /// Makes `chip` the picker's trigger for `target`: a button named `label` that opens and closes it.
-pub fn trigger<S: QuestHost>(chip: El, target: PickFor, label: impl Into<String>, s: &S, p: &Pal) -> El {
+pub fn trigger(chip: El, target: PickFor, label: impl Into<String>, s: &State, p: &Pal) -> El {
     let open = s.picker().is_some_and(|picker| picker.target == target);
     chip.key(target.trigger_key())
         .role("combobox")
@@ -126,8 +126,8 @@ pub fn trigger<S: QuestHost>(chip: El, target: PickFor, label: impl Into<String>
         .focusable(true)
         .cursor(Cursor::Pointer)
         .hover(p.hover)
-        .on_press_tx(move |s: &mut S, tx: &mut Tx| {
-            s.toggle_picker(target.clone());
+        .on_press_tx(move |s: &mut State, tx: &mut Tx| {
+            s.toggle_quest_picker(target.clone());
             if s.picker().is_some() {
                 tx.focus_when_shown("quest-picker-search", false);
             }
@@ -136,9 +136,9 @@ pub fn trigger<S: QuestHost>(chip: El, target: PickFor, label: impl Into<String>
 
 /// The open picker, if its chip shows, kept inside the dialog it opens in (where both were laid
 /// out the frame before).
-pub fn layer<S: QuestHost>(s: &S, p: &Pal, cx: &Cx<S>, layer: &mut Vec<El>) {
+pub fn layer(s: &State, p: &Pal, cx: &Cx<State>, layer: &mut Vec<El>) {
     let Some(picker) = s.picker() else { return };
-    if !s.picker_hosted(&picker.target) {
+    if !hosted(s, &picker.target) {
         return;
     }
     let anchor = picker.target.trigger_key();
@@ -180,7 +180,7 @@ fn surface<S: QuestHost>(s: &S, picker: &QuestPicker, p: &Pal, fit: &Fit) -> El 
         .px(12.0)
         .gap(8.0)
         .center_y()
-        .child(icon(&icons::SEARCH, 14.0).color(p.muted))
+        .child(super::task_fields::picker_heading("● Quest", p))
         .child(search);
     let list = if rows.is_empty() {
         col()
@@ -295,7 +295,7 @@ fn hosted(s: &State, target: &PickFor) -> bool {
         PickFor::TaskModal => s.task_modal.is_some() && s.overlay == Overlay::None,
         PickFor::LogWork => s.overlay == Overlay::LogWork && s.log_work.task.is_none(),
         PickFor::CaptureTask(_) => s.overlay == Overlay::Capture && matches!(s.capture.step, CaptureStep::Review(_)),
-        PickFor::QuickAdd => s.quick_hosted(),
+        PickFor::QuickAdd => s.overlay == Overlay::None,
         // A session started elsewhere may change the task the chip belongs to.
         PickFor::Focus(task) => {
             s.view == View::Focus

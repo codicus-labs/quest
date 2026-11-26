@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use chrono::{NaiveDate, Weekday};
+use chrono::NaiveDate;
 use quest_domain::{Command, EntityId, Frequency, MonthDay, RepeatPin, RepeatRule, Task, Weekdays};
 use quest_store::SyncStatus;
 use quest_view::repeat::{self, RepeatForm};
@@ -57,6 +57,41 @@ impl Default for RepeatEditor {
 }
 
 impl RepeatEditor {
+    pub fn initial_rule(planned_on: Option<NaiveDate>, today: NaiveDate, zone: chrono_tz::Tz) -> RepeatRule {
+        RepeatRule {
+            every: 1,
+            frequency: Frequency::Day,
+            starts: planned_on.unwrap_or(today).max(today),
+            ends: None,
+            time_zone: zone,
+            pin: RepeatPin::None,
+            weekdays: Weekdays::default(),
+            month_day: None,
+        }
+    }
+
+    pub fn from_rule(rule: RepeatRule) -> Self {
+        Self {
+            series: None,
+            return_to: Overlay::None,
+            every: TextEdit::new(rule.every.to_string()),
+            frequency: rule.frequency,
+            pin: rule.pin,
+            weekdays: rule.weekdays,
+            last_day: rule.month_day == Some(MonthDay::Last),
+            month_day: TextEdit::new(match rule.month_day {
+                Some(MonthDay::Day(day)) => day.to_string(),
+                _ => String::new(),
+            }),
+            starts: TextEdit::new(date_label(rule.starts)),
+            ends_on_date: rule.ends.is_some(),
+            ends: TextEdit::new(rule.ends.map(date_label).unwrap_or_default()),
+            time_zone: TextEdit::new(rule.time_zone.to_string()),
+            choice: None,
+            error: None,
+        }
+    }
+
     fn form(&self) -> RepeatForm<'_> {
         RepeatForm {
             every: &self.every.text,
@@ -76,7 +111,7 @@ impl RepeatEditor {
         self.form().shown_weekdays(today)
     }
 
-    fn rule(&self, today: NaiveDate) -> Result<RepeatRule, &'static str> {
+    pub fn rule(&self, today: NaiveDate) -> Result<RepeatRule, &'static str> {
         self.form().rule(today)
     }
 }
@@ -129,35 +164,14 @@ impl State {
     pub fn open_repeat_editor(&mut self, task: EntityId) {
         let Some(task) = self.plan_task(task) else { return };
         let series = self.series_of(&task);
-        let rule = series.repeat.map(|schedule| schedule.rule).unwrap_or(RepeatRule {
-            every: 1,
-            frequency: Frequency::Day,
-            starts: task.planned_on.unwrap_or_else(|| self.today()).max(self.today()),
-            ends: None,
-            time_zone: self.repeat_zone,
-            pin: RepeatPin::None,
-            weekdays: Weekdays::default(),
-            month_day: None,
-        });
-        self.repeat_editor = RepeatEditor {
-            series: Some(series.id),
-            return_to: self.overlay,
-            every: TextEdit::new(rule.every.to_string()),
-            frequency: rule.frequency,
-            pin: rule.pin,
-            weekdays: rule.weekdays,
-            last_day: rule.month_day == Some(MonthDay::Last),
-            month_day: TextEdit::new(match rule.month_day {
-                Some(MonthDay::Day(day)) => day.to_string(),
-                _ => String::new(),
-            }),
-            starts: TextEdit::new(date_label(rule.starts)),
-            ends_on_date: rule.ends.is_some(),
-            ends: TextEdit::new(rule.ends.map(date_label).unwrap_or_default()),
-            time_zone: TextEdit::new(rule.time_zone.to_string()),
-            choice: None,
-            error: None,
-        };
+        let rule = series
+            .repeat
+            .map(|schedule| schedule.rule)
+            .unwrap_or_else(|| RepeatEditor::initial_rule(task.planned_on, self.today(), self.repeat_zone));
+        let series_id = series.id;
+        self.quick.close_picker();
+        self.repeat_editor =
+            RepeatEditor { series: Some(series_id), return_to: self.overlay, ..RepeatEditor::from_rule(rule) };
         self.menu = None;
         self.date_picker = None;
         self.overlay = Overlay::RepeatEditor;
@@ -171,17 +185,15 @@ impl State {
         self.repeat_editor = RepeatEditor::default();
     }
 
-    pub fn toggle_repeat_weekday(&mut self, day: Weekday) {
+    #[cfg(test)]
+    pub fn toggle_repeat_weekday(&mut self, day: chrono::Weekday) {
         let shown = self.repeat_editor.shown_weekdays(self.today());
         self.repeat_editor.weekdays = repeat::toggle_weekday(self.repeat_editor.weekdays, shown, day);
     }
 
+    #[cfg(test)]
     pub fn pick_repeat_start(&mut self, day: NaiveDate) {
         self.repeat_editor.starts = TextEdit::new(date_label(day));
-    }
-
-    pub fn pick_repeat_end(&mut self, day: NaiveDate) {
-        self.repeat_editor.ends = TextEdit::new(date_label(day));
     }
 
     pub fn save_repeat_editor(&mut self) {

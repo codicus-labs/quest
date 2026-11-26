@@ -25,6 +25,7 @@ mod quest_detail;
 mod quest_editor;
 pub(crate) mod quest_picker;
 mod quests;
+pub(crate) mod quick_add;
 pub(crate) mod recurrence;
 pub(crate) mod review;
 mod shortcuts;
@@ -107,6 +108,7 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
         Overlay::Workspaces => workspaces::manage_layer(s, p, &mut layer),
         Overlay::EntryEditor => entry_editor::layer(s, p, &mut layer),
     }
+    quick_add::inline_layer(s, p, &mut layer);
     task_fields::layer(s, p, cx, &mut layer);
     quest_picker::layer(s, p, cx, &mut layer);
     quest_detail::color_layer(s, p, &mut layer);

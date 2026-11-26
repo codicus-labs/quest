@@ -1,5 +1,5 @@
 use chrono::{DateTime, Datelike, Days, NaiveDate, Utc};
-use quest_domain::{Command, DateField, EntityId, Position, Quest, Snapshot, TaskDates};
+use quest_domain::{Command, DateField, EntityId, Position, Quest, RepeatRule, Snapshot, TaskDates};
 
 use crate::{calendar::set_date, nav::View, quest_picker::recent_quests};
 
@@ -30,6 +30,23 @@ impl Draft {
         let mut commands = vec![create];
         if !description.trim().is_empty() {
             commands.push(Command::SetTaskDescription { id, description: description.to_owned() });
+        }
+        commands
+    }
+
+    pub fn commands_with_repeat(
+        self,
+        id: EntityId,
+        position: Position,
+        description: &str,
+        rule: Option<RepeatRule>,
+        now: DateTime<Utc>,
+    ) -> Vec<Command> {
+        let mut commands = self.commands(id, position, description);
+        if !commands.is_empty()
+            && let Some(rule) = rule
+        {
+            commands.push(Command::SetTaskRepeat { id, rule: Some(rule), now });
         }
         commands
     }

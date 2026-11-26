@@ -7,18 +7,13 @@ use rune::{App, Key, KeyEvent, MenuItem, Mods, Tx};
 use crate::keys;
 use crate::state::{Overlay, State, View};
 use crate::ui::chrome::open_palette;
-use crate::ui::task_fields::{Picker, QuickHost};
 
 fn quick_field(s: &mut State, tx: &mut Tx, letter: char) {
     let ev = KeyEvent { key: Key::Command(letter), mods: Mods { cmd: true, shift: true, ..Mods::default() } };
-    if crate::desktop::forward_panel_key(s, ev) {
+    if crate::desktop::forward_panel_key(s, ev.clone()) {
         return;
     }
-    if let Some(picker) = Picker::from_letter(letter) {
-        keys::quick_picker(s, picker, tx);
-    } else if s.quick_hosted() {
-        QuickHost::open_note(s, tx);
-    }
+    keys::on_key(s, &ev, tx);
 }
 
 fn review_week(s: &mut State, tx: &mut Tx, key: &str, offset: i32) {
@@ -109,13 +104,7 @@ pub fn install(app: App<State>) -> App<State> {
             },
             None,
         ))
-        .menu_item(item(
-            "Edit Task Repeat…",
-            |s, tx| {
-                keys::repeat(s, tx);
-            },
-            Some("cmd+shift+r"),
-        ))
+        .menu_item(item("Edit Task Repeat…", |s, tx| quick_field(s, tx, 'r'), Some("cmd+shift+r")))
         .menu_item(item(
             "Delete Task",
             |s, tx| {

@@ -71,12 +71,12 @@ fn field(key: &str, edit: &TextEdit, placeholder: &str, p: &Pal, bind: fn(&mut S
 }
 
 /// A dialog's single-line text field, without handlers.
-pub(super) fn plain_field(
+pub(super) fn plain_field<S: 'static>(
     key: &str,
     edit: &TextEdit,
     placeholder: &str,
     p: &Pal,
-    bind: fn(&mut State) -> &mut TextEdit,
+    bind: fn(&mut S) -> &mut TextEdit,
 ) -> El {
     text_input(edit, ty::TASK)
         .key(key.to_owned())

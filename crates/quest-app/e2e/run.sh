@@ -407,6 +407,23 @@ else
   fail "r7 panel task with note not found after restart"
 fi
 
+for stage in editor repeat-set saved; do
+  run anna "$root/r8-panel-$stage" r8-panel-repeat "r8-panel-$stage" --window quick-add --now "$r7_time" --at "mark:$stage" \
+    || fail "r8 panel $stage"
+done
+check r8-panel-editor "r8 Cmd+Shift+R opens the shared Repeat editor" focused repeat-editor
+check r8-panel-repeat-set "r8 Enter applies the weekly rule to the draft" shows "Every week"
+check r8-panel-repeat-set "r8 applying the rule restores title focus" focused quick-add
+check r8-panel-saved "r8 Enter creates the recurring task" key quick-add-feedback
+run anna "$root/r8-panel-saved" r2c-inspect r8-repeat-seed --now "$r7_time" --scene home
+task_id=$(tree "$out/r8-repeat-seed.json" id "R8 weekly sketch" 2>/dev/null)
+if [ -n "$task_id" ]; then
+  run anna "$root/r8-panel-saved" r8-open-repeat r8-repeat-open --now "$r7_time" --scene home
+  check r8-repeat-open "r8 the weekly rule survived restart" shows "Every week"
+else
+  fail "r8 weekly task not found after restart"
+fi
+
 echo "$summary"
 echo "PNGs: $out"
 if [ "$failures" -gt 0 ]; then

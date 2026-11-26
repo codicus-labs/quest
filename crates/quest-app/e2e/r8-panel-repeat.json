@@ -1,0 +1,12 @@
+[
+  {"t":0.1,"shortcut":"ctrl+alt+space"},
+  {"t":0.3,"type":"ime","commit":"R8 weekly sketch"},
+  {"t":0.5,"type":"key","name":"r","cmd":true,"shift":true},
+  {"t":0.85,"type":"mark","name":"editor"},
+  {"t":1.0,"type":"tap","key":"repeat-frequency-trigger"},
+  {"t":1.35,"type":"tap","key":"option1"},
+  {"t":1.65,"type":"key","name":"Enter"},
+  {"t":1.85,"type":"mark","name":"repeat-set"},
+  {"t":2.05,"type":"key","name":"Enter"},
+  {"t":2.3,"type":"mark","name":"saved"}
+]

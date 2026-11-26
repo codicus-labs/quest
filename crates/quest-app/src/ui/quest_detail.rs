@@ -22,9 +22,9 @@ pub fn view(s: &State, id: EntityId, p: &Pal) -> El {
         let gone = text("This quest is gone. It may be in the archive.").font(ty::BODY).color(p.faint);
         return lists::page(s, "quest-detail", gone, None, el());
     };
-    let add = super::task_fields::quick_add(s, p, &format!("Add to {}", quest.title));
+    let add = super::quick_add::inline(s, p);
     let shows = Shows { quest: false, plan_ahead: true };
-    lists::page(s, "quest-detail", heading(s, quest, p), Some(add), lists::rows(s, shows, "No tasks yet", p))
+    lists::page(s, "quest-detail", heading(s, quest, p), add, lists::rows(s, shows, "No tasks yet", p))
 }
 
 fn heading(s: &State, quest: &Quest, p: &Pal) -> El {
